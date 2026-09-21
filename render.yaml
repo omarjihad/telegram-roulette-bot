@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: bounty-rush-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: DELIVERY_API_ID
+        sync: false
+      - key: DELIVERY_API_HASH
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: BOT_USERNAME
+        value: MfRuLiTbot
+      - key: MINI_APP_SHORT_NAME
+        value: MFR
+      - key: GAMEPLAY_ENABLED
+        value: "true"
+      - key: BOT_POLLING_ENABLED
+        value: "true"
+      - key: BACKGROUND_JOBS_ENABLED
+        value: "true"

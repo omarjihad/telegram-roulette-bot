@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Bounty Rush • Roulette"
+description = "بوت تيليگرام وميني آب للروليت والجوائز، مع مخزون فعلي وتصميم مستوحى من One Piece Bounty Rush."
+version = "1.0.0"
+id = "artifacts/bounty-roulette"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22930
+
+[services.development]
+run = "pnpm --filter @workspace/bounty-roulette run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bounty-roulette", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/bounty-roulette/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22930"
+BASE_PATH = "/"

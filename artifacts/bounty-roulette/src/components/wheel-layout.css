@@ -1,0 +1,39 @@
+/*
+ * Geometry-only reel overrides. Kept separate from theme.css so the reel has one predictable
+ * LTR coordinate system even while the application remains RTL for Arabic copy.
+ */
+.reel-wrap {
+  direction: ltr;
+  width: 100%;
+}
+
+.reel-viewport {
+  box-sizing: border-box;
+}
+
+.reel-strip {
+  direction: ltr;
+  will-change: transform;
+  contain: layout paint;
+}
+
+.reel-card {
+  direction: rtl;
+}
+
+.reel-wrap .reel-pointer-top {
+  border: 0 !important;
+  border-left: 9px solid transparent !important;
+  border-right: 9px solid transparent !important;
+  border-top: 14px solid var(--accent);
+  border-bottom: 0 !important;
+}
+
+.reel-wrap .reel-pointer-bottom {
+  border: 0 !important;
+  border-left: 9px solid transparent !important;
+  border-right: 9px solid transparent !important;
+  border-top: 0 !important;
+  border-bottom: 14px solid var(--accent) !important;
+  filter: drop-shadow(0 -4px 8px rgba(243, 198, 35, 0.6));
+}
