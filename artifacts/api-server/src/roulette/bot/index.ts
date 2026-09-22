@@ -33,6 +33,16 @@ export function createBot(enablePolling = false): TelegramBot {
   setBotInstance(bot);
   attachBotInstance(bot);
 
+  // Keep the chat menu button pointing at the current deployment. Without this it keeps
+  // whatever URL was set earlier (e.g. an old, now-suspended host). Note: the Mini App
+  // registered in @BotFather (t.me/<bot>/<short name>) can only be changed in BotFather.
+  if (enablePolling && env.MINI_APP_URL) {
+    bot
+      .setChatMenuButton({ menu_button: { type: 'web_app', text: 'فتح البوت', web_app: { url: env.MINI_APP_URL } } })
+      .then(() => logger.info({ url: env.MINI_APP_URL }, 'chat menu button synced'))
+      .catch((err) => logger.warn({ err }, 'failed to sync chat menu button'));
+  }
+
   logger.info({ polling: enablePolling }, 'Telegram client initialized');
   return bot;
 }
