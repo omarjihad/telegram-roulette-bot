@@ -81,6 +81,15 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
       }
     }
 
+    // The captcha is enforced here as well, not only by the Mini App UI, so nothing can
+    // be used (and no referral can be counted) before it is solved.
+    if (process.env.NODE_ENV !== 'test' && role === null && !user.captchaPassed) {
+      const captchaOpen = ['/me', '/forced-sub/status', '/captcha/request', '/captcha/submit'];
+      if (!captchaOpen.includes(req.path)) {
+        throw new AppError('Captcha required', 403, 'CAPTCHA_REQUIRED');
+      }
+    }
+
     req.dbUser = user;
     req.telegramId = user.telegramId;
     req.adminRole = role;

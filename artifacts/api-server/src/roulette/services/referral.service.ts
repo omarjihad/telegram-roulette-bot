@@ -10,6 +10,8 @@ import { logger } from '../config/logger';
 import { getSettings } from '../models/Settings';
 import { env } from '../config/env';
 import { nanoid } from 'nanoid';
+import { checkAllForcedChats } from './forcedSub.service';
+import { getBotInstance } from '../bot/instance';
 
 /**
  * Registers a referral relationship when a brand-new user starts the bot via a prize's
@@ -36,14 +38,10 @@ export async function registerReferralIfNew(params: {
 > {
   const { newUser, task, isBrandNewUser, demoMode = false } = params;
 
-  if (demoMode) {
-    if (task.status !== 'pending' || task.expiresAt.getTime() < Date.now()) return 'task_not_active';
-    const referrer = await User.findOne({ telegramId: task.referrerTelegramId });
-    if (!referrer) return 'referrer_not_found';
-    await creditReferralToTask(task._id as mongoose.Types.ObjectId);
-    return 'demo_registered';
-  }
-  if (!isBrandNewUser) return 'not_new';
+  // Demo mode only relaxes the "brand-new user" rule so the flow can be tested with
+  // existing accounts. It never credits the task directly: the referral is still recorded
+  // as pending and only counts after forced-sub + captcha via tryQualifyReferral().
+  if (!isBrandNewUser && !demoMode) return 'not_new';
   if (task.referrerTelegramId === newUser.telegramId) return 'self_referral';
   if (task.status !== 'pending' || task.expiresAt.getTime() < Date.now()) return 'task_not_active';
 
@@ -63,6 +61,12 @@ export async function registerReferralIfNew(params: {
   });
 
   newUser.referredBy = referrer._id as mongoose.Types.ObjectId;
+  if (!isBrandNewUser) {
+    // An existing (demo) account may have passed the captcha long ago; make it solve a new
+    // one so the referral is only counted after the invitee goes through the gates again.
+    newUser.captchaPassed = false;
+    newUser.captchaPassedAt = undefined;
+  }
   await newUser.save();
 
   await createNotification({
@@ -80,7 +84,7 @@ export async function registerReferralIfNew(params: {
     prizeName: wonPrize?.prizeNameSnapshot ?? 'غير معروف',
   }).catch((err) => logger.warn({ err }, 'failed to notify admins of new referral'));
 
-  return 'registered';
+  return isBrandNewUser ? 'registered' : 'demo_registered';
 }
 
 /**
@@ -96,7 +100,21 @@ export async function tryQualifyReferral(inviteeUserId: mongoose.Types.ObjectId)
   const invitee = await User.findById(inviteeUserId);
   if (!invitee) return;
 
-  if (!invitee.forcedSubOk || !invitee.captchaPassed) return;
+  if (!invitee.forcedSubOk || !invitee.captchaPassed || !invitee.captchaPassedAt) return;
+  // The captcha must have been solved after the invitee arrived through the link, not
+  // carried over from an earlier session.
+  if (invitee.captchaPassedAt.getTime() < referral.createdAt.getTime()) return;
+
+  // Never trust the cached flag alone: confirm live membership with Telegram right before
+  // the referral counts.
+  if (process.env.NODE_ENV !== 'test') {
+    const { allOk } = await checkAllForcedChats(getBotInstance(), invitee.telegramId);
+    if (!allOk) {
+      invitee.forcedSubOk = false;
+      await invitee.save();
+      return;
+    }
+  }
 
   referral.status = 'qualified';
   referral.qualifiedAt = new Date();
