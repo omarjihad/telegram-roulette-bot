@@ -21,6 +21,9 @@ export interface IUserPrize extends Document {
   lastExpiryNotifiedAt?: Date | null;
   spinId?: Types.ObjectId | null;
   referralId?: Types.ObjectId | null;
+  // Set once the reserved stock has been returned to the bot (expired/rejected), so it is
+  // never returned twice.
+  stockReleasedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +47,7 @@ const userPrizeSchema = new Schema<IUserPrize>(
     lastExpiryNotifiedAt: { type: Date, default: null },
     spinId: { type: Schema.Types.ObjectId, ref: 'RouletteSpin', default: null },
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', default: null },
+    stockReleasedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

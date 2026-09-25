@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { releasePrizeReservation } from './prizeReservation.service';
 import { UserPrize } from '../models/UserPrize';
 import { User } from '../models/User';
 import { WithdrawalRequest } from '../models/WithdrawalRequest';
@@ -7,7 +8,7 @@ import { Referral } from '../models/Referral';
 import { RouletteSpin } from '../models/RouletteSpin';
 import { AppError } from '../utils/AppError';
 import { createNotification, notifyAdminsNewWithdrawal, notifyDeliveryAccountNewWithdrawal } from './notification.service';
-import { getClaimTaskForUserPrize } from './claimTask.service';
+import { expireClaimTaskForUserPrize, getClaimTaskForUserPrize } from './claimTask.service';
 import { writeAudit } from '../models/AuditLog';
 import { env } from '../config/env';
 import { getDeliveryAccountStatus, getDeliveryContactLink, hasVerifiedDeliveryContact } from './deliveryAccount.service';
@@ -49,8 +50,15 @@ export async function requestClaim(telegramId: number, userPrizeId: string) {
     throw new AppError('This prize has expired', 410, 'EXPIRED');
   }
   if (userPrize.expiresAt && userPrize.expiresAt.getTime() < Date.now()) {
-    userPrize.status = 'expired';
-    await userPrize.save();
+    const expired = await UserPrize.findOneAndUpdate(
+      { _id: userPrize._id, status: 'active' },
+      { $set: { status: 'expired' } },
+      { new: true }
+    );
+    if (expired) {
+      await releasePrizeReservation(expired);
+      await expireClaimTaskForUserPrize(expired._id as mongoose.Types.ObjectId);
+    }
     throw new AppError('This prize has expired', 410, 'EXPIRED');
   }
 
@@ -309,25 +317,8 @@ export async function rejectWithdrawal(
     userPrize.status = 'rejected';
     await userPrize.save();
 
-    if (userPrize.prize) {
-      const prize = await Prize.findById(userPrize.prize);
-      if (prize) {
-        const spin = userPrize.spinId ? await RouletteSpin.findById(userPrize.spinId).select('mode isGiftGuaranteed') : null;
-        if (!spin?.isGiftGuaranteed) {
-          const mode = spin?.mode === 'daily' ? 'daily' : spin?.mode === 'points' ? 'points' : null;
-          const stockField = mode === 'daily' ? 'dailyStock' : mode === 'points' ? 'pointsStock' : 'stock';
-          const unlimitedField = mode === 'daily' ? 'dailyIsUnlimited' : mode === 'points' ? 'pointsIsUnlimited' : 'isUnlimited';
-          const pendingField = mode === 'daily' ? 'dailyPendingCount' : mode === 'points' ? 'pointsPendingCount' : 'pendingCount';
-          const current = prize as unknown as Record<string, number | boolean | null | undefined>;
-          const isUnlimited = Boolean(current[unlimitedField] ?? current.isUnlimited);
-          const update: Record<string, Record<string, number>> = {
-            $inc: { [pendingField]: -1 },
-          };
-          if (!isUnlimited) update.$inc[stockField] = 1;
-          await Prize.updateOne({ _id: prize._id }, update);
-        }
-      }
-    }
+    // A rejected prize never reaches the user, so its reserved stock goes back to the bot.
+    await releasePrizeReservation(userPrize);
   }
 
   await writeAudit({

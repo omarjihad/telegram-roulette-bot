@@ -1,6 +1,5 @@
 import cron from 'node-cron';
 import { UserPrize } from '../models/UserPrize';
-import { Prize } from '../models/Prize';
 import { getSettings } from '../models/Settings';
 import { createNotification } from '../services/notification.service';
 import { expireClaimTaskForUserPrize } from '../services/claimTask.service';
@@ -11,7 +10,7 @@ import { Task } from '../models/Task';
 import { UserTask } from '../models/UserTask';
 import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
-import { RouletteSpin } from '../models/RouletteSpin';
+import { releasePrizeReservation } from '../services/prizeReservation.service';
 
 /**
  * Runs every 5 minutes. Because it re-derives everything from `expiresAt` timestamps stored
@@ -77,33 +76,49 @@ async function processProfileTaskVerification() {
 async function processExpirations() {
   const now = new Date();
   const expiring = await UserPrize.find({
-    status: { $in: ['active'] },
+    status: 'active',
     expiresAt: { $ne: null, $lte: now },
   });
 
-  for (const item of expiring) {
-    item.status = 'expired';
-    await item.save();
+  let processed = 0;
+  for (const candidate of expiring) {
+    try {
+      // Flip the status atomically so a claim landing at the same moment can't also act on it.
+      const item = await UserPrize.findOneAndUpdate(
+        { _id: candidate._id, status: 'active' },
+        { $set: { status: 'expired' } },
+        { new: true }
+      );
+      if (!item) continue;
+      processed += 1;
 
-    if (item.source === 'wheel' && item.prize) {
-      const spin = item.spinId ? await RouletteSpin.findById(item.spinId).select('isGiftGuaranteed') : null;
-      if (!spin?.isGiftGuaranteed) {
-        await Prize.updateOne({ _id: item.prize }, { $inc: { pendingCount: -1 } });
-      }
+      // The winner didn't meet the conditions in time: the prize leaves their inventory
+      // and goes back to the bot's stock so someone else can win it.
+      await releasePrizeReservation(item);
       await expireClaimTaskForUserPrize(item._id as mongoose.Types.ObjectId);
-    }
 
-    await writeAudit({
-      actorId: 0,
-      actorUsername: 'system',
-      action: 'prize.expired',
-      target: String(item.telegramId),
-      metadata: { prizeName: item.prizeNameSnapshot, userPrizeId: item._id },
-    });
+      await createNotification({
+        userId: item.user as mongoose.Types.ObjectId,
+        telegramId: item.telegramId,
+        type: 'prize_expiring',
+        title: '⌛ انتهى وقت الجائزة',
+        body: `انتهى وقت جائزتك [${item.prizeNameSnapshot}] لأن شروط الاستلام ما اكتملت، ورجعت لمخزون البوت.`,
+      }).catch((err) => logger.warn({ err }, 'failed to notify user about expired prize'));
+
+      await writeAudit({
+        actorId: 0,
+        actorUsername: 'system',
+        action: 'prize.expired',
+        target: String(item.telegramId),
+        metadata: { prizeName: item.prizeNameSnapshot, userPrizeId: item._id, stockReturned: true },
+      });
+    } catch (err) {
+      logger.error({ err, userPrizeId: candidate._id }, 'failed to expire user prize');
+    }
   }
 
-  if (expiring.length > 0) {
-    logger.info({ count: expiring.length }, 'expired user prizes processed');
+  if (processed > 0) {
+    logger.info({ count: processed }, 'expired user prizes processed');
   }
 }
 
