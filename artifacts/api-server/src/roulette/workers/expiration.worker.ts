@@ -10,7 +10,7 @@ import { Task } from '../models/Task';
 import { UserTask } from '../models/UserTask';
 import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
-import { releasePrizeReservation } from '../services/prizeReservation.service';
+import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
  * Runs every 5 minutes. Because it re-derives everything from `expiresAt` timestamps stored
@@ -18,6 +18,13 @@ import { releasePrizeReservation } from '../services/prizeReservation.service';
  * a scheduled reminder — the next tick simply re-evaluates the current state of the world.
  */
 export function startExpirationWorker() {
+  // Give back the stock of prizes that expired before expiry started returning stock.
+  restoreStockForPreviouslyExpiredPrizes()
+    .then(({ checked, restored }) => {
+      if (checked > 0) logger.info({ checked, restored }, 'restored stock for previously expired prizes');
+    })
+    .catch((err) => logger.error({ err }, 'failed to restore stock for previously expired prizes'));
+
   cron.schedule('*/5 * * * *', async () => {
     try {
       await processExpirations();

@@ -20,7 +20,10 @@ function fieldsForMode(mode: 'daily' | 'points' | null): StockFields {
  * Guarded by `stockReleasedAt` so the same UserPrize can never return stock twice (e.g. the
  * expiry worker and a claim attempt racing on the same item).
  */
-export async function releasePrizeReservation(userPrize: Pick<IUserPrize, 'prize' | 'spinId' | 'source'> & { _id: unknown }) {
+export async function releasePrizeReservation(
+  userPrize: Pick<IUserPrize, 'prize' | 'spinId' | 'source'> & { _id: unknown },
+  options: { legacyExpiry?: boolean } = {}
+) {
   if (!userPrize.prize) return false;
   if (userPrize.source === 'store') return false; // store purchases never reserve wheel stock
 
@@ -44,9 +47,31 @@ export async function releasePrizeReservation(userPrize: Pick<IUserPrize, 'prize
 
   const inc: Record<string, number> = {};
   if (!isUnlimited) inc[fields.stock] = 1;
-  if (Number(data[fields.pending] ?? 0) > 0) inc[fields.pending] = -1;
+  // The old expiry code already decremented the base `pendingCount` (but never returned
+  // stock), so a legacy item on the base fields must not be decremented a second time.
+  const pendingAlreadyReleased = options.legacyExpiry && mode === null;
+  if (!pendingAlreadyReleased && Number(data[fields.pending] ?? 0) > 0) inc[fields.pending] = -1;
   if (Object.keys(inc).length === 0) return true;
 
   await Prize.updateOne({ _id: prize._id as mongoose.Types.ObjectId }, { $inc: inc });
   return true;
+}
+
+/**
+ * One-time repair for prizes that expired before stock was returned on expiry. Every
+ * expired prize without `stockReleasedAt` gets its unit returned exactly once; the marker
+ * makes later runs a no-op, so this is safe to call on every startup.
+ */
+export async function restoreStockForPreviouslyExpiredPrizes() {
+  const items = await UserPrize.find({
+    status: 'expired',
+    source: { $ne: 'store' },
+    stockReleasedAt: null,
+  }).select('_id prize spinId source');
+
+  let restored = 0;
+  for (const item of items) {
+    if (await releasePrizeReservation(item, { legacyExpiry: true })) restored += 1;
+  }
+  return { checked: items.length, restored };
 }
