@@ -1046,3 +1046,235 @@ select option {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(17, 29, 51, 0.98));
 }
 
+
+/* ───────────── Visual polish ───────────── */
+
+:root {
+  --gold-gradient: linear-gradient(135deg, #ffe27a 0%, #f3c623 45%, #ff9f1c 100%);
+  --glass-bg: rgba(15, 23, 42, 0.78);
+  --card-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.app-shell {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(243, 198, 35, 0.14), transparent 60%),
+    radial-gradient(80% 50% at 110% 40%, rgba(124, 58, 237, 0.12), transparent 65%),
+    radial-gradient(80% 50% at -10% 80%, rgba(38, 198, 218, 0.08), transparent 65%),
+    var(--bg-deep);
+  background-attachment: fixed;
+}
+
+.card {
+  background: linear-gradient(160deg, rgba(36, 50, 74, 0.96), rgba(24, 34, 54, 0.96));
+  border-color: rgba(243, 198, 35, 0.35);
+  box-shadow: var(--card-shadow);
+}
+
+.page-title {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 0 2px 12px rgba(243, 198, 35, 0.25);
+}
+
+.page-enter {
+  animation: page-enter 0.28s ease-out both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--gold-gradient);
+  color: #1a1204;
+  box-shadow: 0 6px 18px rgba(243, 198, 35, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.btn-primary:disabled {
+  box-shadow: none;
+}
+
+/* Home link cards: every variant gets a dark background (the daily card had none and
+   rendered as a white button with unreadable text). */
+.home-link-card {
+  background: linear-gradient(100deg, rgba(30, 41, 59, 0.98), rgba(38, 48, 70, 0.94));
+  box-shadow: var(--card-shadow);
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.home-link-card:hover {
+  border-color: rgba(243, 198, 35, 0.6);
+}
+
+.home-link-daily {
+  background: linear-gradient(100deg, rgba(30, 41, 59, 0.98), rgba(86, 38, 22, 0.92));
+  border-color: rgba(255, 152, 0, 0.55);
+}
+
+.home-link-daily .home-link-icon {
+  animation: flame 1.6s ease-in-out infinite;
+}
+
+@keyframes flame {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.12) rotate(-4deg); }
+}
+
+.home-spin-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), 0 0 26px rgba(243, 198, 35, 0.16);
+}
+
+.home-spin-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.12) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: shine 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shine {
+  0%, 60% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.home-spin-art {
+  animation: float 3.2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Bottom navigation: frosted bar with a highlighted active tab */
+.bottom-nav {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(243, 198, 35, 0.18);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.nav-item {
+  position: relative;
+  min-width: 60px;
+}
+
+.nav-item.active {
+  background: rgba(243, 198, 35, 0.12);
+}
+
+.nav-item.active .nav-icon {
+  filter: drop-shadow(0 0 6px rgba(243, 198, 35, 0.6));
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 22px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--gold-gradient);
+  transform: translateX(-50%);
+}
+
+/* Inventory */
+.inventory-card-active {
+  border-color: rgba(243, 198, 35, 0.55);
+}
+
+.inventory-prize-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 35%, rgba(243, 198, 35, 0.22), rgba(243, 198, 35, 0.04));
+  border: 1px solid rgba(243, 198, 35, 0.3);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.task-progress-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.task-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gold-gradient);
+  box-shadow: 0 0 10px rgba(243, 198, 35, 0.5);
+  transition: width 0.5s ease;
+}
+
+.task-progress-count {
+  min-width: 36px;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent);
+  text-align: center;
+}
+
+.expiry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  color: #ffb74d;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.expiry-chip-urgent {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+.expiry-chip-over {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .home-link-daily .home-link-icon,
+  .home-spin-card::after,
+  .home-spin-art,
+  .expiry-chip-urgent {
+    animation: none;
+  }
+}

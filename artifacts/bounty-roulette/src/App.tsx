@@ -114,6 +114,7 @@ export default function App() {
             </button>
           </div>
         )}
+        <div className="page-enter" key={tab}>
         {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void claimDailyLogin(true)} />}
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
         {tab === 'tasks' && <TasksPage />}
@@ -122,6 +123,7 @@ export default function App() {
         {tab === 'store' && (
           <StorePage spinCredits={me.user.spinCredits} onBack={() => setTab('home')} refreshMe={loadMe} />
         )}
+        </div>
       </div>
       <BottomNav active={tab} onChange={setTab} />
     </div>

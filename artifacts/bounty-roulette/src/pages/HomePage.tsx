@@ -73,7 +73,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </button>
 
-      <button className="home-link-card" onClick={onDailyLogin}>
+      <button className="home-link-card home-link-daily" onClick={onDailyLogin}>
         <span className="home-link-icon">🔥</span>
         <span className="home-link-copy">
           <strong>تسجيل الدخول اليومي</strong>

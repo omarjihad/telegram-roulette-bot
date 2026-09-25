@@ -10,8 +10,9 @@ import { DeliveryContactGate } from '../components/DeliveryContactGate';
 function ExpiryLabel({ expiresAt }: { expiresAt: string | null }) {
   const { label, isReady } = useCountdown(expiresAt);
   if (!expiresAt) return null;
-  if (isReady) return <span style={{ color: 'var(--danger)', fontSize: 12 }}>انتهت الصلاحية</span>;
-  return <span style={{ color: 'var(--accent-2)', fontSize: 12 }}>⏳ {label}</span>;
+  if (isReady) return <span className="expiry-chip expiry-chip-over">⌛ انتهت الصلاحية</span>;
+  const urgent = new Date(expiresAt).getTime() - Date.now() < 3 * 60 * 60 * 1000;
+  return <span className={`expiry-chip ${urgent ? 'expiry-chip-urgent' : ''}`}>⏳ {label}</span>;
 }
 
 function TaskProgress({ task, onCopy, onShare, sharing }: {
@@ -32,8 +33,18 @@ function TaskProgress({ task, onCopy, onShare, sharing }: {
   }
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 8 }}>
-        🎯 ادعُ {task.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة عشان تكدر تستلمها — {task.creditedCount}/{task.requiredCount}
+      <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.6 }}>
+        🎯 ادعُ {task.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة عشان تكدر تستلمها.
+        إذا ما كملت قبل ما يخلص الوقت، الجائزة ترجع لمخزون البوت.
+      </div>
+      <div className="task-progress" aria-label={`${task.creditedCount} من ${task.requiredCount}`}>
+        <div className="task-progress-track">
+          <div
+            className="task-progress-fill"
+            style={{ width: `${Math.min(100, (task.creditedCount / Math.max(1, task.requiredCount)) * 100)}%` }}
+          />
+        </div>
+        <span className="task-progress-count">{task.creditedCount}/{task.requiredCount}</span>
       </div>
       {task.link && (
         <>
@@ -147,7 +158,7 @@ export function InventoryPage() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>🎒 المخزون</h2>
+      <h2 className="page-title">🎒 المخزون</h2>
 
       {items.length === 0 && (
         <EmptyState icon="🎒" title="حقيبتك فارغة حالياً" subtitle="روح للفرة المجانية ودور عشان تربح جوائز" />
@@ -156,17 +167,18 @@ export function InventoryPage() {
       {items.map((item) => {
         const canClaim = item.status === 'active' && (!item.task || item.task.status === 'completed');
         return (
-          <div className="card" key={item.id}>
+          <div className={`card inventory-card ${item.status === 'active' ? 'inventory-card-active' : ''}`} key={item.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 {item.imageUrl ? (
                   <img
                     src={item.imageUrl}
                     alt=""
-                    style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                    className="inventory-prize-icon"
+                    style={{ objectFit: 'cover' }}
                   />
                 ) : (
-                  <div style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>{item.icon}</div>
+                  <div className="inventory-prize-icon">{item.icon}</div>
                 )}
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{item.prizeName}</div>
