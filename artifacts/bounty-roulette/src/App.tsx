@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTelegramWebApp, getTelegramWebApp } from './hooks/useTelegramWebApp';
 import { api } from './services/api';
-import { DailyLoginResponse, MeResponse } from './types';
+import { DailyLoginResponse, DailyLoginStatusResponse, MeResponse } from './types';
 import { LoadingScreen } from './components/Common';
 import { CaptchaGate } from './components/CaptchaGate';
 import { ForcedSubGate } from './components/ForcedSubGate';
@@ -25,12 +25,19 @@ export default function App() {
   const [tab, setTab] = useState<TabKey>('home');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [dailyLogin, setDailyLogin] = useState<DailyLoginResponse['result'] | null>(null);
+  const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);
 
-  const claimDailyLogin = useCallback(async (showAlreadyClaimed = false) => {
+  // Opening the app only reads the daily state; the reward is collected when the user
+  // presses the collect button in the modal.
+  const openDailyLogin = useCallback(async (onlyIfClaimable = false) => {
+    const res = await api.get<DailyLoginStatusResponse>('/daily-login');
+    if (!onlyIfClaimable || res.status.canClaim) setDailyLogin(res.status);
+  }, []);
+
+  const collectDailyLogin = useCallback(async () => {
     const daily = await api.post<DailyLoginResponse>('/daily-login');
-    if (!daily.result.alreadyClaimed || showAlreadyClaimed) setDailyLogin(daily.result);
     setMe((current) => current ? { ...current, user: { ...current.user, spinPoints: daily.result.spinPoints, spinCredits: daily.result.spinCredits } } : current);
+    return daily.result;
   }, []);
 
   const loadMe = useCallback(async () => {
@@ -47,7 +54,7 @@ export default function App() {
       else {
         setStage('ready');
         try {
-          await claimDailyLogin(false);
+          await openDailyLogin(true);
         } catch {
           // Daily reward availability must never block the app itself.
         }
@@ -60,7 +67,7 @@ export default function App() {
       }
       setStage('error');
     }
-  }, [claimDailyLogin]);
+  }, [openDailyLogin]);
 
   useEffect(() => {
     if (tgReady) loadMe();
@@ -102,7 +109,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="app-content">
-        {dailyLogin && <DailyLoginModal data={dailyLogin} onClose={() => setDailyLogin(null)} />}
+        {dailyLogin && <DailyLoginModal status={dailyLogin} onCollect={collectDailyLogin} onClose={() => setDailyLogin(null)} />}
         {me.isAdmin && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
             <button
@@ -115,7 +122,7 @@ export default function App() {
           </div>
         )}
         <div className="page-enter" key={tab}>
-        {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void claimDailyLogin(true)} />}
+        {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void openDailyLogin(false).catch(() => {})} />}
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
         {tab === 'tasks' && <TasksPage />}
         {tab === 'inventory' && <InventoryPage />}

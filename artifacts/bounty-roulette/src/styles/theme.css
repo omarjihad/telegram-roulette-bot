@@ -1278,3 +1278,44 @@ select option {
     animation: none;
   }
 }
+
+/* Daily login */
+.daily-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.daily-day {
+  padding: 9px 4px;
+  border-radius: 12px;
+  text-align: center;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.daily-day-claimed {
+  background: rgba(40, 180, 110, 0.16);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+.daily-day-active {
+  border: 2px solid var(--accent);
+}
+
+.daily-day-ready {
+  background: rgba(243, 198, 35, 0.14);
+  box-shadow: 0 0 16px rgba(243, 198, 35, 0.35);
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+.daily-collect {
+  width: 100%;
+  font-size: 17px;
+  padding: 15px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-day-ready { animation: none; }
+}

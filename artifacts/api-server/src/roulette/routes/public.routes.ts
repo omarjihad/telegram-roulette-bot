@@ -8,7 +8,7 @@ import { listMyInventory, claimPrize, shareCard } from '../controllers/inventory
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getStoreProducts, postStorePurchase } from '../controllers/store.controller';
-import { postDailyLogin } from '../controllers/dailyLogin.controller';
+import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
 
@@ -29,6 +29,7 @@ router.get('/wheel/prizes', getWheelPrizes);
 router.get('/wheel/recent-wins', getRecentDailyWins);
 router.post('/wheel/spin', spinLimiter, spin);
 router.post('/points-wheel/spin', spinLimiter, spinWithPoints);
+router.get('/daily-login', getDailyLogin);
 router.post('/daily-login', postDailyLogin);
 router.get('/tasks', getMyTasks);
 router.post('/tasks/:id/claim', postClaimTask);

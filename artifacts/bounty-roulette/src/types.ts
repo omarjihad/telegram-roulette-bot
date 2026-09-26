@@ -168,3 +168,16 @@ export interface DailyLoginResponse {
     };
   };
 }
+
+export interface DailyLoginStatusResponse {
+  ok: true;
+  status: {
+    canClaim: boolean;
+    streakReset: boolean;
+    streakDay: number;
+    claimedDays: number[];
+    nextClaimAt: string;
+    resetAt: string | null;
+    reward: DailyLoginResponse['result']['reward'];
+  };
+}

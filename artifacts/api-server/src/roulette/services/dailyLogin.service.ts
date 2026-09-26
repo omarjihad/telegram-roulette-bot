@@ -35,7 +35,65 @@ function rewardView(day: number, reward: ReturnType<typeof getDailyReward>, priz
 }
 
 /**
- * Claims one daily reward on the first app entry after its 24-hour window. Missing a full
+ * Which streak day the next claim lands on. Missing a full 24-hour window after the claim
+ * window opened (48h since the last claim) resets the cycle to day one.
+ */
+export function computeNextDay(
+  user: { dailyLastClaimAt?: Date | null; dailyStreakDay?: number },
+  now: Date
+): { nextDay: number; missedWindow: boolean } {
+  const lastClaim = user.dailyLastClaimAt?.getTime() ?? 0;
+  const elapsed = lastClaim ? now.getTime() - lastClaim : Number.POSITIVE_INFINITY;
+  const missedWindow = Boolean(lastClaim) && elapsed >= DAY_MS * 2;
+  const streak = user.dailyStreakDay || 0;
+  const nextDay = missedWindow || !lastClaim || streak >= 7 ? 1 : streak + 1;
+  return { nextDay, missedWindow };
+}
+
+/**
+ * Read-only view of the daily login state. Opening the app never claims anything: the user
+ * has to press "collect", which calls claimDailyLogin().
+ */
+export async function getDailyLoginStatus(telegramId: number) {
+  const user = await User.findOne({ telegramId });
+  if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+
+  const now = new Date();
+  const lastClaim = user.dailyLastClaimAt?.getTime() ?? 0;
+  const canClaim = !lastClaim || now.getTime() - lastClaim >= DAY_MS;
+
+  if (!canClaim) {
+    const currentDay = user.dailyStreakDay || 1;
+    const currentReward = getDailyReward(currentDay);
+    const prize = currentReward.type === 'prize' && currentReward.prizeKey ? await Prize.findOne({ key: currentReward.prizeKey }) : null;
+    return {
+      canClaim: false,
+      streakReset: false,
+      streakDay: currentDay,
+      claimedDays: user.dailyClaimedDays ?? [],
+      nextClaimAt: new Date(lastClaim + DAY_MS),
+      resetAt: new Date(lastClaim + DAY_MS * 2),
+      reward: rewardView(currentDay, currentReward, prize ?? undefined),
+    };
+  }
+
+  const { nextDay, missedWindow } = computeNextDay(user, now);
+  const nextReward = getDailyReward(nextDay);
+  const prize = nextReward.type === 'prize' && nextReward.prizeKey ? await Prize.findOne({ key: nextReward.prizeKey }) : null;
+  return {
+    canClaim: true,
+    streakReset: missedWindow,
+    streakDay: nextDay,
+    // Days already collected in the current cycle (empty when this claim starts a new one).
+    claimedDays: nextDay === 1 ? [] : user.dailyClaimedDays ?? [],
+    nextClaimAt: now,
+    resetAt: lastClaim ? new Date(lastClaim + DAY_MS * 2) : null,
+    reward: rewardView(nextDay, nextReward, prize ?? undefined),
+  };
+}
+
+/**
+ * Claims one daily reward when the user presses collect after its 24-hour window. Missing a full
  * window resets the cycle to day one without awarding the skipped day.
  */
 export async function claimDailyLogin(telegramId: number) {
@@ -70,8 +128,7 @@ export async function claimDailyLogin(telegramId: number) {
         return;
       }
 
-      const missedWindow = lastClaim && elapsed >= DAY_MS * 2;
-      const nextDay = missedWindow || !lastClaim || user.dailyStreakDay >= 7 ? 1 : (user.dailyStreakDay || 0) + 1;
+      const { nextDay, missedWindow } = computeNextDay(user, now);
       const reward = getDailyReward(nextDay);
       let prizeDoc: mongoose.HydratedDocument<IPrize> | null = null;
 
