@@ -10,6 +10,7 @@ import { getSettings } from '../models/Settings';
 import { getAdminRole } from '../services/admin.service';
 import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo.service';
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
+import { parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 
 export function buildMiniAppKeyboard(label = '🚀 فتح البوت'): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
@@ -53,6 +54,12 @@ export function registerStartHandler(bot: TelegramBot) {
       if (generalReferralToken) {
         const outcome = await registerGeneralReferralIfNew({ newUser: user, referralToken: generalReferralToken, isBrandNewUser: isNew });
         logger.info({ outcome, generalReferralToken, newUserId: user.telegramId }, 'general referral registration attempt');
+      }
+
+      const contestToken = parseContestToken(startParam);
+      if (contestToken) {
+        const outcome = await registerContestReferralIfNew({ newUser: user, token: contestToken, isBrandNewUser: isNew });
+        logger.info({ outcome, contestToken, newUserId: user.telegramId }, 'invite race registration attempt');
       }
 
       if (taskToken) {

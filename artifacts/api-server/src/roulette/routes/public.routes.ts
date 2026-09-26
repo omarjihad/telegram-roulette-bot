@@ -8,6 +8,7 @@ import { listMyInventory, claimPrize, shareCard } from '../controllers/inventory
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getStoreProducts, postStorePurchase } from '../controllers/store.controller';
+import { getContest, postJoinContest } from '../controllers/contest.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
@@ -40,6 +41,9 @@ router.post('/inventory/share-card', shareCard);
 
 router.get('/referrals', getMyReferrals);
 router.post('/referrals/milestone/claim', postClaimReferralMilestone);
+
+router.get('/contest', getContest);
+router.post('/contest/join', postJoinContest);
 
 router.get('/notifications', listMyNotifications);
 router.post('/notifications/read', markRead);

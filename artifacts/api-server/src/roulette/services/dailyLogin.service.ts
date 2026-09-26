@@ -133,16 +133,12 @@ export async function claimDailyLogin(telegramId: number) {
       let prizeDoc: mongoose.HydratedDocument<IPrize> | null = null;
 
       if (reward.type === 'prize' && reward.prizeKey) {
+        // Daily streak prizes are always given: they don't depend on (or take from) the
+        // wheel's stock, so an out-of-stock or hidden prize never blocks the reward.
         prizeDoc = await Prize.findOne({ key: reward.prizeKey }).session(session);
-        if (!prizeDoc || !prizeDoc.isActive) {
+        if (!prizeDoc) {
           throw new AppError('Daily reward is not available yet', 409, 'DAILY_REWARD_UNAVAILABLE');
         }
-        const reserved = await Prize.updateOne(
-          prizeDoc.isUnlimited ? { _id: prizeDoc._id } : { _id: prizeDoc._id, stock: { $gt: 0 } },
-          prizeDoc.isUnlimited ? { $inc: { pendingCount: 1 } } : { $inc: { stock: -1, pendingCount: 1 } },
-          { session }
-        );
-        if (reserved.modifiedCount !== 1) throw new AppError('Daily reward is out of stock', 409, 'DAILY_REWARD_UNAVAILABLE');
       }
 
       const claimedDays = missedWindow || nextDay === 1 ? [1] : [...(user.dailyClaimedDays ?? []), nextDay];
@@ -164,6 +160,8 @@ export async function claimDailyLogin(telegramId: number) {
               wonAt: now,
               expiresAt: null,
               status: 'active',
+              // Nothing was reserved from stock, so there is never anything to give back.
+              stockReleasedAt: now,
             },
           ],
           { session }

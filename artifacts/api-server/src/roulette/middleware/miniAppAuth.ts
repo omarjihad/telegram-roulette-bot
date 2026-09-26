@@ -10,6 +10,7 @@ import { logger } from '../config/logger';
 import { grantDemoAccess, hasDemoAccess, parseDemoToken } from '../services/demo.service';
 import { checkAllForcedChats } from '../services/forcedSub.service';
 import { getBotInstance } from '../bot/instance';
+import { parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 
 /**
  * Every Mini App API request must carry the raw Telegram initData string in the
@@ -67,6 +68,11 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
         isBrandNewUser: isNew,
       });
       logger.info({ outcome, generalReferralToken, newUserId: user.telegramId }, 'general referral registration attempt');
+    }
+    const contestToken = parseContestToken(parsed.startParam);
+    if (contestToken && isNew) {
+      const outcome = await registerContestReferralIfNew({ newUser: user, token: contestToken, isBrandNewUser: isNew });
+      logger.info({ outcome, contestToken, newUserId: user.telegramId }, 'invite race registration attempt');
     }
     if (taskToken && (isNew || settings.demoModeEnabled)) {
       const task = await getClaimTaskByToken(taskToken);

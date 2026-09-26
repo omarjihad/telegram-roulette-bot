@@ -181,3 +181,23 @@ export interface DailyLoginStatusResponse {
     reward: DailyLoginResponse['result']['reward'];
   };
 }
+
+export interface ContestResponse {
+  ok: true;
+  joined: boolean;
+  link: string | null;
+  myScore: number;
+  myRank: number | null;
+  myPending: number;
+  participants: number;
+  leaderboard: Array<{ rank: number; name: string; photoUrl: string | null; score: number; isMe: boolean }>;
+  prize: {
+    name: string;
+    number: string;
+    nftUrl: string;
+    imageUrl: string;
+    attributes: Array<{ label: string; value: string; rarity: string }>;
+    valueUsd: string;
+  };
+  rules: string[];
+}

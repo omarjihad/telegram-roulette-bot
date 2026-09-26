@@ -4,6 +4,7 @@ import { checkAllForcedChats } from '../services/forcedSub.service';
 import { checkCooldown } from '../services/roulette.service';
 import { getBotInstance } from '../bot/instance';
 import { tryQualifyReferral } from '../services/referral.service';
+import { tryCountContestReferral } from '../services/contest.service';
 import { prizeImageUrl } from '../services/prize.service';
 import mongoose from 'mongoose';
 
@@ -48,6 +49,7 @@ export const getForcedSubStatus = asyncHandler(async (req: Request, res: Respons
     req.dbUser!.forcedSubOk = true;
     await req.dbUser!.save();
     await tryQualifyReferral(req.dbUser!._id as mongoose.Types.ObjectId);
+    await tryCountContestReferral(req.dbUser!._id as mongoose.Types.ObjectId);
   }
 
   res.json({ ok: true, allOk, missing });

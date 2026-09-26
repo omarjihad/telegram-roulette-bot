@@ -13,6 +13,7 @@ import { InventoryPage } from './pages/InventoryPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { AdminPage } from './pages/AdminPage';
 import { StorePage } from './pages/StorePage';
+import { ContestPage } from './pages/ContestPage';
 import { ShowcasePage } from './pages/ShowcasePage';
 import { DailyLoginModal } from './components/DailyLoginModal';
 
@@ -125,6 +126,7 @@ export default function App() {
         {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void openDailyLogin(false).catch(() => {})} />}
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
         {tab === 'tasks' && <TasksPage />}
+        {tab === 'contest' && <ContestPage />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && <HistoryPage />}
         {tab === 'store' && (

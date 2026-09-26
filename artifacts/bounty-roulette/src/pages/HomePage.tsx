@@ -73,6 +73,16 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </button>
 
+      <button className="home-contest-card" onClick={() => onNavigate('contest')}>
+        <img src="/nft-santa-hat.jpg" alt="" className="home-contest-art" />
+        <span className="home-contest-copy">
+          <span className="home-section-label">🏆 سباق الدعوات</span>
+          <strong>اربح Santa Hat NFT</strong>
+          <span>تصدّر قائمة الدعوات واربح الهدية</span>
+        </span>
+        <span className="home-link-arrow">←</span>
+      </button>
+
       <button className="home-link-card home-link-daily" onClick={onDailyLogin}>
         <span className="home-link-icon">🔥</span>
         <span className="home-link-copy">

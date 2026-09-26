@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createCaptchaChallenge, verifyCaptchaAnswer } from '../services/captcha.service';
 import { tryQualifyReferral } from '../services/referral.service';
+import { tryCountContestReferral } from '../services/contest.service';
 import { AppError } from '../utils/AppError';
 import mongoose from 'mongoose';
 
@@ -28,6 +29,7 @@ export const submitCaptcha = asyncHandler(async (req: Request, res: Response) =>
   await user.save();
 
   await tryQualifyReferral(user._id as mongoose.Types.ObjectId);
+  await tryCountContestReferral(user._id as mongoose.Types.ObjectId);
 
   res.json({ ok: true });
 });
