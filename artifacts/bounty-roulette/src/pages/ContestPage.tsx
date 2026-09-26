@@ -24,9 +24,12 @@ function openProfile(link: string | null) {
 function RaceStatus({ data }: { data: ContestResponse }) {
   const { label: raw } = useCountdown(data.endsAt);
   const [hh, mm, ss] = raw.split(':');
-  const days = Math.floor(Number(hh) / 24);
-  const hours = String(Number(hh) % 24).padStart(2, '0');
-  const label = days > 0 ? `${days} يوم · ${hours}:${mm}:${ss}` : raw;
+  const units = [
+    { value: String(Math.floor(Number(hh) / 24)), label: 'يوم' },
+    { value: String(Number(hh) % 24).padStart(2, '0'), label: 'ساعة' },
+    { value: mm, label: 'دقيقة' },
+    { value: ss, label: 'ثانية' },
+  ];
   if (data.winner) {
     return (
       <div className="race-status race-status-ended">
@@ -50,7 +53,15 @@ function RaceStatus({ data }: { data: ContestResponse }) {
   return (
     <div className="race-status">
       <div className="race-status-title">⏱️ ينتهي السباق بعد</div>
-      <div className="race-countdown">{label}</div>
+      {/* One box per unit, so Arabic labels and numbers never get reordered by RTL. */}
+      <div className="race-countdown">
+        {units.map((unit) => (
+          <div className="race-unit" key={unit.label}>
+            <strong>{unit.value}</strong>
+            <span>{unit.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

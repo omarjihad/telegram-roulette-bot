@@ -34,6 +34,8 @@ export interface MeResponse {
   };
   isAdmin: boolean;
   adminRole: 'owner' | 'developer' | null;
+  // The invite race is hidden everywhere while this is false.
+  contestEnabled?: boolean;
 }
 
 export interface ForcedSubMissing {

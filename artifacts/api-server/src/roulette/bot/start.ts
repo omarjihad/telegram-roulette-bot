@@ -10,7 +10,7 @@ import { getSettings } from '../models/Settings';
 import { getAdminRole } from '../services/admin.service';
 import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo.service';
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
-import { parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
+import { isContestEnabled, parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 
 export function buildMiniAppKeyboard(label = '🚀 فتح البوت', tab?: string): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
@@ -115,7 +115,7 @@ export function registerStartHandler(bot: TelegramBot) {
       }
 
       // The race section link (?start=race) and race invite links open straight on the race tab.
-      if (startParam === 'race' || contestToken) {
+      if ((startParam === 'race' || contestToken) && (await isContestEnabled())) {
         await bot.sendMessage(
           msg.chat.id,
           '🏆 سباق الدعوات\n\nادعُ أصدقاءك، تصدّر القائمة، واربح هدية Santa Hat NFT 🎁\n\n👇 اضغط الزر وادخل السباق',

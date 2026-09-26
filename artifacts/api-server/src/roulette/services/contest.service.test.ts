@@ -116,6 +116,8 @@ describe('race end date and winner', () => {
     expect(isContestClosed({ contestRound: 1, contestEndsAt: new Date('2026-10-01T00:00:00Z'), contestWinner: null }, now)).toBe(true);
     const winner = { telegramId: 1, name: 'x', score: 3, round: 1, announcedAt: now };
     expect(isContestClosed({ contestRound: 1, contestEndsAt: null, contestWinner: winner }, now)).toBe(true);
+    // A stopped race counts nothing.
+    expect(isContestClosed({ contestEnabled: false, contestRound: 1, contestEndsAt: null, contestWinner: null }, now)).toBe(true);
     // A winner from the previous round doesn't close the new one.
     expect(isContestClosed({ contestRound: 2, contestEndsAt: null, contestWinner: winner }, now)).toBe(false);
   });

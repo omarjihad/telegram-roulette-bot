@@ -5,6 +5,7 @@ import { writeAudit } from '../models/AuditLog';
 import {
   announceContestWinner,
   getContestAdminState,
+  setContestEnabled,
   setContestEndsAt,
   startNewContestRound,
 } from '../services/contest.service';
@@ -46,5 +47,13 @@ export const adminAnnounceContestWinner = asyncHandler(async (req: Request, res:
 export const adminStartContestRound = asyncHandler(async (req: Request, res: Response) => {
   const round = await startNewContestRound(parseEndsAt((req.body as { endsAt?: unknown }).endsAt));
   await audit(req, 'contest.new_round', { round });
+  res.json({ ok: true, contest: await getContestAdminState() });
+});
+
+export const adminSetContestEnabled = asyncHandler(async (req: Request, res: Response) => {
+  const enabled = (req.body as { enabled?: unknown }).enabled;
+  if (typeof enabled !== 'boolean') throw new AppError('enabled must be true or false', 422, 'VALIDATION_ERROR');
+  await setContestEnabled(enabled);
+  await audit(req, enabled ? 'contest.enable' : 'contest.disable');
   res.json({ ok: true, contest: await getContestAdminState() });
 });

@@ -247,6 +247,7 @@ interface GiftLinkRow {
 }
 
 interface RaceAdminState {
+  enabled: boolean;
   round: number;
   endsAt: string | null;
   closed: boolean;
@@ -305,6 +306,29 @@ function RaceAdminTab() {
 
   return (
     <div>
+      <div className="card" style={{ borderColor: state.enabled ? undefined : 'var(--danger)' }}>
+        <h3 className="card-title">{state.enabled ? '🟢 السباق مفعّل' : '⛔ السباق متوقف'}</h3>
+        <p className="card-sub">
+          {state.enabled
+            ? 'إيقاف السباق يخفيه من البوت بالكامل (التبويب، كارت الرئيسية، الروابط) ويوقف حساب الدعوات. النقاط والروابط تبقى محفوظة.'
+            : 'السباق مخفي عن الكل والدعوات ما تنحسب. فعّله حتى يرجع يظهر ويكمل من نفس النقاط.'}
+        </p>
+        <button
+          className={state.enabled ? 'btn btn-secondary' : 'btn btn-primary'}
+          style={state.enabled ? { background: 'rgba(229, 57, 53, 0.2)', border: '1px solid var(--danger)', color: 'var(--danger)' } : undefined}
+          disabled={busy}
+          onClick={() =>
+            void run(
+              '/admin/contest/enabled',
+              { enabled: !state.enabled },
+              state.enabled ? 'إيقاف السباق وإخفاؤه من البوت؟' : undefined
+            )
+          }
+        >
+          {state.enabled ? '⛔ إيقاف السباق' : '✅ تفعيل السباق'}
+        </button>
+      </div>
+
       <div className="card">
         <h3 className="card-title">🏆 سباق الدعوات — الجولة {state.round}</h3>
         <p className="card-sub">

@@ -13,10 +13,10 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'history', label: 'السجل', icon: <ScrollText size={22} /> },
 ];
 
-export function BottomNav({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
+export function BottomNav({ active, onChange, hideContest = false }: { active: TabKey; onChange: (t: TabKey) => void; hideContest?: boolean }) {
   return (
     <nav className="bottom-nav">
-      {TABS.map((tab) => (
+      {TABS.filter((tab) => !(hideContest && tab.key === 'contest')).map((tab) => (
         <button
           key={tab.key}
           className={`nav-item ${active === tab.key ? 'active' : ''}`}

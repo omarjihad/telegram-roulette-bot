@@ -61,6 +61,7 @@ import { adminDeductUserPoints } from '../controllers/adminPoints.controller';
 import {
   adminAnnounceContestWinner,
   adminGetContest,
+  adminSetContestEnabled,
   adminSetContestEndsAt,
   adminStartContestRound,
 } from '../controllers/adminContest.controller';
@@ -140,6 +141,7 @@ router.post('/points/deduct', adminDeductUserPoints);
 
 // Invite race
 router.get('/contest', adminGetContest);
+router.post('/contest/enabled', adminSetContestEnabled);
 router.post('/contest/ends-at', adminSetContestEndsAt);
 router.post('/contest/announce', adminAnnounceContestWinner);
 router.post('/contest/new-round', adminStartContestRound);

@@ -27,6 +27,8 @@ export interface ISettings extends Document {
   shareImageMimeType: string | null;
   hasShareImage: boolean;
   // Invite race: when counting stops, which round is live, and the announced winner.
+  // Invite race on/off. Off hides it everywhere in the bot and pauses all counting; data is kept.
+  contestEnabled: boolean;
   contestEndsAt: Date | null;
   contestRound: number;
   contestWinner: { telegramId: number; name: string; score: number; round: number; announcedAt: Date } | null;
@@ -53,6 +55,7 @@ const settingsSchema = new Schema<ISettings>(
     shareImageData: { type: Buffer, default: null, select: false },
     shareImageMimeType: { type: String, default: null },
     hasShareImage: { type: Boolean, default: false },
+    contestEnabled: { type: Boolean, default: true },
     contestEndsAt: { type: Date, default: null },
     contestRound: { type: Number, default: 1 },
     contestWinner: {

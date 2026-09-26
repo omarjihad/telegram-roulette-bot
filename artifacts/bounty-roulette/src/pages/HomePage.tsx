@@ -73,6 +73,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </button>
 
+      {me.contestEnabled !== false && (
       <button className="home-contest-card" onClick={() => onNavigate('contest')}>
         <img src="/nft-santa-hat.jpg" alt="" className="home-contest-art" />
         <span className="home-contest-copy">
@@ -82,6 +83,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </span>
         <span className="home-link-arrow">←</span>
       </button>
+      )}
 
       <button className="home-link-card home-link-daily" onClick={onDailyLogin}>
         <span className="home-link-icon">🔥</span>

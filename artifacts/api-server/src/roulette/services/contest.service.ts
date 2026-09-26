@@ -61,7 +61,12 @@ function roundFilter(round: number) {
 }
 
 /** Counting stops once the end date passes or the winner of this round is announced. */
-export function isContestClosed(settings: Pick<ISettings, 'contestEndsAt' | 'contestWinner' | 'contestRound'>, now = new Date()) {
+export function isContestClosed(
+  settings: Pick<ISettings, 'contestEndsAt' | 'contestWinner' | 'contestRound'> & { contestEnabled?: boolean },
+  now = new Date()
+) {
+  // A stopped race counts nothing (no +1, no -1) until it's turned back on.
+  if (settings.contestEnabled === false) return true;
   const round = settings.contestRound ?? 1;
   if (settings.contestWinner && settings.contestWinner.round === round) return true;
   return Boolean(settings.contestEndsAt && settings.contestEndsAt.getTime() <= now.getTime());
@@ -77,6 +82,8 @@ function displayName(user: { username?: string; firstName?: string }) {
 
 /** Called after the user read the intro and pressed "continue": gives them their link. */
 export async function joinContest(user: HydratedDocument<IUser>) {
+  const settings = await getSettings();
+  if (settings.contestEnabled === false) throw new AppError('سباق الدعوات متوقف حالياً', 404, 'CONTEST_DISABLED');
   if (!user.contestToken) user.contestToken = nanoid(12);
   if (!user.contestJoinedAt) user.contestJoinedAt = new Date();
   await user.save();
@@ -203,6 +210,7 @@ async function buildLeaderboard(rows: Array<{ _id: mongoose.Types.ObjectId; scor
 
 export async function getContestOverview(user: HydratedDocument<IUser>) {
   const settings = await getSettings();
+  if (settings.contestEnabled === false) throw new AppError('سباق الدعوات متوقف حالياً', 404, 'CONTEST_DISABLED');
   const round = settings.contestRound ?? 1;
   const rows = await rankRound(round);
   const myIndex = rows.findIndex((r) => String(r._id) === String(user._id));
@@ -232,6 +240,7 @@ export async function getContestAdminState() {
   const round = settings.contestRound ?? 1;
   const rows = await rankRound(round);
   return {
+    enabled: settings.contestEnabled !== false,
     round,
     endsAt: settings.contestEndsAt,
     closed: isContestClosed(settings),
@@ -301,6 +310,17 @@ export async function announceContestWinner() {
 
   logger.info({ round, winner: person.telegramId, score: first.score }, 'invite race winner announced');
   return settings.contestWinner;
+}
+
+/** Stops (hides) or re-enables the whole race. Scores and links are kept. */
+export async function setContestEnabled(enabled: boolean) {
+  const settings = await getSettings();
+  settings.contestEnabled = enabled;
+  await settings.save();
+}
+
+export async function isContestEnabled() {
+  return (await getSettings()).contestEnabled !== false;
 }
 
 /** Starts a fresh round: scores start from zero, everyone keeps their personal link. */

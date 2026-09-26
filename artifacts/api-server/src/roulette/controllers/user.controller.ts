@@ -4,7 +4,7 @@ import { checkAllForcedChats } from '../services/forcedSub.service';
 import { checkCooldown } from '../services/roulette.service';
 import { getBotInstance } from '../bot/instance';
 import { tryQualifyReferral } from '../services/referral.service';
-import { tryCountContestReferral } from '../services/contest.service';
+import { isContestEnabled, tryCountContestReferral } from '../services/contest.service';
 import { prizeImageUrl } from '../services/prize.service';
 import mongoose from 'mongoose';
 
@@ -36,6 +36,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
       spinCredits: user.spinCredits ?? 0,
     },
     wheel: { ready, nextSpinAt, lastSpin },
+    contestEnabled: await isContestEnabled(),
     isAdmin: req.adminRole !== null,
     adminRole: req.adminRole,
   });

@@ -84,6 +84,11 @@ export default function App() {
     if (tgReady) loadMe();
   }, [tgReady, loadMe]);
 
+  // A stopped race is hidden: links or taps that land on its tab fall back to home.
+  useEffect(() => {
+    if (me && me.contestEnabled === false && tab === 'contest') setTab('home');
+  }, [me, tab]);
+
   if (stage === 'loading' || !tgReady) return <LoadingScreen label="جاري التحضير..." />;
 
   if (stage === 'showcase') {
@@ -114,6 +119,7 @@ export default function App() {
   }
 
   if (!me) return <LoadingScreen />;
+  const contestOn = me.contestEnabled !== false;
 
   if (showAdmin) return <AdminPage onClose={() => setShowAdmin(false)} />;
 
@@ -136,7 +142,7 @@ export default function App() {
         {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void openDailyLogin(false).catch(() => {})} />}
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
         {tab === 'tasks' && <TasksPage />}
-        {tab === 'contest' && <ContestPage />}
+        {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && <HistoryPage />}
         {tab === 'store' && (
@@ -144,7 +150,7 @@ export default function App() {
         )}
         </div>
       </div>
-      <BottomNav active={tab} onChange={setTab} />
+      <BottomNav active={tab} onChange={setTab} hideContest={!contestOn} />
     </div>
   );
 }

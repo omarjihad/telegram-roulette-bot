@@ -1558,7 +1558,18 @@ select option {
   font-size: 14px;
 }
 .race-status-title { font-size: 13px; font-weight: 800; color: var(--text-dim); margin-bottom: 4px; }
-.race-countdown { font-size: 24px; font-weight: 950; color: #67e8f9; font-variant-numeric: tabular-nums; direction: ltr; }
+.race-countdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+.race-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: rgba(38, 198, 218, 0.12);
+  border: 1px solid rgba(38, 198, 218, 0.3);
+}
+.race-unit strong { font-size: 24px; font-weight: 950; color: #67e8f9; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.race-unit span { font-size: 11px; color: var(--text-dim); font-weight: 700; }
 .race-status-ended { background: rgba(243, 198, 35, 0.12); border-color: rgba(243, 198, 35, 0.55); font-weight: 800; }
 .race-status-ended .race-status-title { color: var(--accent); font-size: 16px; }
 
