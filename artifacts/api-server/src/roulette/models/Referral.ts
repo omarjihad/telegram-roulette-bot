@@ -16,6 +16,9 @@ export interface IReferral extends Document {
   // Set once at creation and never changed — this is what makes it impossible for the
   // same invited friend to count toward two different prizes at once.
   creditedTaskId?: Types.ObjectId | null;
+  // Why a referral was cancelled after the fact (e.g. the invitee blocked the bot).
+  revokedReason?: string | null;
+  revokedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +35,8 @@ const referralSchema = new Schema<IReferral>(
     qualifiedAt: { type: Date, default: null },
     rewardGranted: { type: Boolean, default: false },
     creditedTaskId: { type: Schema.Types.ObjectId, ref: 'ClaimTask', default: null, index: true },
+    revokedReason: { type: String, default: null },
+    revokedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

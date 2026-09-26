@@ -10,6 +10,7 @@ import { Task } from '../models/Task';
 import { UserTask } from '../models/UserTask';
 import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
+import { processSpinReadyReminders } from './spinReady.worker';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -32,6 +33,11 @@ export function startExpirationWorker() {
       await processProfileTaskVerification();
     } catch (err) {
       logger.error({ err }, 'expiration worker tick failed');
+    }
+    try {
+      await processSpinReadyReminders();
+    } catch (err) {
+      logger.error({ err }, 'spin-ready reminders failed');
     }
   });
   logger.info('⏰ Expiration worker scheduled (every 5 minutes)');

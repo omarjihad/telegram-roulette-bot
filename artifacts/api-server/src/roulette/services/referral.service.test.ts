@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   findUser: vi.fn(),
   findUserById: vi.fn(),
   findReferral: vi.fn(),
+  revokeReferral: vi.fn(),
+  uncreditTask: vi.fn(),
   createReferral: vi.fn(),
   findPrize: vi.fn(),
   createNotification: vi.fn(),
@@ -15,17 +17,17 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../models/User', () => ({ User: { findOne: mocks.findUser, findById: mocks.findUserById } }));
 vi.mock('../models/Referral', () => ({
-  Referral: { findOne: mocks.findReferral, create: mocks.createReferral },
+  Referral: { findOne: mocks.findReferral, create: mocks.createReferral, findOneAndUpdate: mocks.revokeReferral },
 }));
 vi.mock('../models/UserPrize', () => ({ UserPrize: { findById: mocks.findPrize } }));
 vi.mock('./notification.service', () => ({
   createNotification: mocks.createNotification,
   notifyAdminsNewReferral: mocks.notifyAdmin,
 }));
-vi.mock('./claimTask.service', () => ({ creditReferralToTask: mocks.creditTask }));
-vi.mock('../config/logger', () => ({ logger: { warn: mocks.loggerWarn } }));
+vi.mock('./claimTask.service', () => ({ creditReferralToTask: mocks.creditTask, uncreditReferralFromTask: mocks.uncreditTask }));
+vi.mock('../config/logger', () => ({ logger: { warn: mocks.loggerWarn, info: vi.fn() } }));
 
-import { registerReferralIfNew, tryQualifyReferral } from './referral.service';
+import { registerReferralIfNew, revokeReferralForBlockedInvitee, tryQualifyReferral } from './referral.service';
 
 const referrer = {
   _id: new mongoose.Types.ObjectId(),
@@ -168,5 +170,47 @@ describe('referrals only count after forced-sub + captcha', () => {
     await tryQualifyReferral(new mongoose.Types.ObjectId());
     expect(referral.status).toBe('qualified');
     expect(mocks.creditTask).toHaveBeenCalledWith(referral.creditedTaskId);
+  });
+});
+
+describe('invitee blocks the bot', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findUser.mockReturnValue({ select: vi.fn().mockResolvedValue({ username: 'friend' }) });
+  });
+
+  it('removes a qualified referral from its task and tells the inviter', async () => {
+    const taskId = new mongoose.Types.ObjectId();
+    mocks.revokeReferral.mockResolvedValue({
+      _id: new mongoose.Types.ObjectId(),
+      status: 'qualified',
+      creditedTaskId: taskId,
+      referrer: referrer._id,
+      referrerTelegramId: referrer.telegramId,
+    });
+    mocks.uncreditTask.mockResolvedValue(3);
+
+    expect(await revokeReferralForBlockedInvitee(401)).toEqual({ wasQualified: true, remaining: 3 });
+    expect(mocks.revokeReferral).toHaveBeenCalledWith(
+      { inviteeTelegramId: 401, status: { $in: ['pending', 'qualified'] } },
+      expect.objectContaining({ $set: expect.objectContaining({ status: 'rejected', revokedReason: 'blocked_bot' }) }),
+      { new: false }
+    );
+    expect(mocks.uncreditTask).toHaveBeenCalledWith(taskId);
+    expect(mocks.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ telegramId: referrer.telegramId, body: expect.stringContaining('حظر البوت') })
+    );
+  });
+
+  it('cancels a pending referral without touching any task', async () => {
+    mocks.revokeReferral.mockResolvedValue({ _id: new mongoose.Types.ObjectId(), status: 'pending', creditedTaskId: new mongoose.Types.ObjectId(), referrer: referrer._id, referrerTelegramId: 100 });
+    expect(await revokeReferralForBlockedInvitee(402)).toEqual({ wasQualified: false, remaining: null });
+    expect(mocks.uncreditTask).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a user who was never invited', async () => {
+    mocks.revokeReferral.mockResolvedValue(null);
+    expect(await revokeReferralForBlockedInvitee(403)).toBeNull();
+    expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 });

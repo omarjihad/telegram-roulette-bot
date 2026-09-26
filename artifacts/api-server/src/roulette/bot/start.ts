@@ -11,11 +11,11 @@ import { getAdminRole } from '../services/admin.service';
 import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo.service';
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
 
-function buildMiniAppKeyboard(): TelegramBot.SendMessageOptions {
+export function buildMiniAppKeyboard(label = '🚀 فتح البوت'): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
   return {
     reply_markup: {
-      inline_keyboard: [[{ text: '🚀 فتح البوت', web_app: { url: env.MINI_APP_URL } }]],
+      inline_keyboard: [[{ text: label, web_app: { url: env.MINI_APP_URL } }]],
     },
   };
 }
@@ -96,7 +96,10 @@ export function registerStartHandler(bot: TelegramBot) {
       if (giftToken) {
         try {
           const gift = await redeemGiftLink(giftToken, user.telegramId);
-          await bot.sendMessage(msg.chat.id, `${gift.message}\n\nاضغط الزر حتى تفتح البوت وتشوف الهدية بحسابك 🎁`, buildMiniAppKeyboard());
+          const text = 'isSpin' in gift && gift.isSpin
+            ? gift.message
+            : `${gift.message}\n\nاضغط الزر حتى تفتح البوت وتشوف الهدية بحسابك 🎁`;
+          await bot.sendMessage(msg.chat.id, text, buildMiniAppKeyboard('isSpin' in gift && gift.isSpin ? '🎡 أدر العجلة الآن' : undefined));
         } catch (err) {
           await bot.sendMessage(msg.chat.id, err instanceof Error ? `⚠️ ${err.message}` : '⚠️ رابط الهدية غير صالح.');
         }

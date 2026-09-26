@@ -4,7 +4,7 @@ import { Referral } from '../models/Referral';
 import { UserPrize } from '../models/UserPrize';
 import { IClaimTask } from '../models/ClaimTask';
 import { createNotification, notifyAdminsNewReferral } from './notification.service';
-import { creditReferralToTask } from './claimTask.service';
+import { creditReferralToTask, uncreditReferralFromTask } from './claimTask.service';
 import { listClaimTasksForUser } from './claimTask.service';
 import { logger } from '../config/logger';
 import { getSettings } from '../models/Settings';
@@ -135,6 +135,38 @@ export async function tryQualifyReferral(inviteeUserId: mongoose.Types.ObjectId)
   } else {
     logger.warn({ referralId: referral._id }, 'qualified referral with no claim task attached');
   }
+}
+
+/**
+ * An invited user who blocks the bot loses their referral for good: it is marked rejected,
+ * taken off the prize task it counted toward, and the inviter is told why.
+ */
+export async function revokeReferralForBlockedInvitee(inviteeTelegramId: number) {
+  const referral = await Referral.findOneAndUpdate(
+    { inviteeTelegramId, status: { $in: ['pending', 'qualified'] } },
+    { $set: { status: 'rejected', revokedReason: 'blocked_bot', revokedAt: new Date() } },
+    { new: false }
+  );
+  if (!referral) return null;
+
+  let remaining: number | null = null;
+  if (referral.status === 'qualified' && referral.creditedTaskId) {
+    remaining = await uncreditReferralFromTask(referral.creditedTaskId as mongoose.Types.ObjectId);
+  }
+
+  const invitee = await User.findOne({ telegramId: inviteeTelegramId }).select('username firstName');
+  const name = invitee?.username ? '@' + invitee.username : invitee?.firstName || 'المستخدم';
+  await createNotification({
+    userId: referral.referrer,
+    telegramId: referral.referrerTelegramId,
+    type: 'referral_progress',
+    title: '🚫 انحذفت دعوة',
+    body:
+      `${name} حظر البوت، فراحت دعوته وما تنحسب إلك.` +
+      (remaining !== null ? `\nباقي عليك ${remaining} دعوة مؤهلة لهذه الجائزة.` : ''),
+  });
+  logger.info({ inviteeTelegramId, referralId: referral._id, wasQualified: referral.status === 'qualified' }, 'referral revoked: invitee blocked the bot');
+  return { wasQualified: referral.status === 'qualified', remaining };
 }
 
 export async function getReferralStats(telegramId: number) {

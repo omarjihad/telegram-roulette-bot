@@ -66,6 +66,8 @@ export function getNextSpinAt(user: Pick<IUser, 'lastSpinAt'>, cooldownHours: nu
 
 export async function checkCooldown(user: HydratedDocument<IUser>): Promise<{ ready: boolean; nextSpinAt: Date }> {
   const settings = await getSettings();
+  // A gifted daily spin can be used right away, even while the free spin is on cooldown.
+  if ((user.bonusDailySpins ?? 0) > 0) return { ready: true, nextSpinAt: new Date() };
   const nextSpinAt = getNextSpinAt(user, settings.spinCooldownHours);
   return { ready: Date.now() >= nextSpinAt.getTime(), nextSpinAt };
 }
@@ -138,27 +140,33 @@ export async function performSpin(telegramId: number, mode: 'daily' | 'points' =
       if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
       if (user.isBanned) throw new AppError('User is banned', 403, 'BANNED');
 
+      let nextDailySpinAt = now;
       if (mode === 'daily') {
-        const bonusClaim = await User.updateOne(
-          { _id: user._id, bonusDailySpins: { $gt: 0 } },
-          { $set: { lastSpinAt: now }, $inc: { bonusDailySpins: -1 } },
-          { session }
-        );
-        if (bonusClaim.modifiedCount === 1) {
-          // A gifted daily spin bypasses the normal cooldown and consumes exactly one gift.
-        } else {
-          const cooldownClaim = await User.updateOne(
+        // The normal free spin is used first. A gifted spin is only used while the free
+        // spin is on cooldown, and it never resets that cooldown.
+        const cooldownClaim = await User.updateOne(
           {
             _id: user._id,
             $or: [{ lastSpinAt: null }, { lastSpinAt: { $lte: cooldownCutoff } }],
           },
           { $set: { lastSpinAt: now } },
           { session }
+        );
+        let remainingBonus = user.bonusDailySpins ?? 0;
+        let normalNextAt = new Date(now.getTime() + settings.spinCooldownHours * 60 * 60 * 1000);
+        if (cooldownClaim.modifiedCount !== 1) {
+          const bonusClaim = await User.updateOne(
+            { _id: user._id, bonusDailySpins: { $gt: 0 } },
+            { $inc: { bonusDailySpins: -1 } },
+            { session }
           );
-          if (cooldownClaim.modifiedCount !== 1) {
+          if (bonusClaim.modifiedCount !== 1) {
             throw new AppError('Spin not ready yet', 429, 'SPIN_COOLDOWN');
           }
+          remainingBonus -= 1;
+          normalNextAt = getNextSpinAt(user, settings.spinCooldownHours);
         }
+        nextDailySpinAt = remainingBonus > 0 ? now : normalNextAt;
       } else {
         const pointsClaim = await User.updateOne(
           { _id: user._id, spinPoints: { $gte: 5 } },
@@ -225,7 +233,7 @@ export async function performSpin(telegramId: number, mode: 'daily' | 'points' =
         committed = {
           result: {
             won: false,
-            nextSpinAt: mode === 'daily' ? new Date(now.getTime() + settings.spinCooldownHours * 60 * 60 * 1000) : now,
+            nextSpinAt: nextDailySpinAt,
           },
         };
         return;
@@ -307,7 +315,7 @@ export async function performSpin(telegramId: number, mode: 'daily' | 'points' =
           prizeImageUrl: prizeImageUrl(candidate.key, candidate.hasImage),
           userPrizeId: (userPrize._id as mongoose.Types.ObjectId).toString(),
           expiresAt,
-          nextSpinAt: mode === 'daily' ? new Date(now.getTime() + settings.spinCooldownHours * 60 * 60 * 1000) : now,
+          nextSpinAt: nextDailySpinAt,
         },
         notification: {
           userId: user._id as mongoose.Types.ObjectId,

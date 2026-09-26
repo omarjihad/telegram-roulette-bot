@@ -228,8 +228,8 @@ export function TasksPage() {
                   </div>
                 </div>
               </div>
-              <span className={`status-badge ${r.status === 'qualified' ? 'status-approved' : 'status-pending'}`}>
-                {r.status === 'qualified' ? 'مؤهلة ✅' : 'قيد الانتظار ⏳'}
+              <span className={`status-badge ${r.status === 'qualified' ? 'status-approved' : r.status === 'rejected' ? 'status-rejected' : 'status-pending'}`}>
+                {r.status === 'qualified' ? 'مؤهلة ✅' : r.status === 'rejected' ? 'ملغاة 🚫' : 'قيد الانتظار ⏳'}
               </span>
             </div>
           ))}

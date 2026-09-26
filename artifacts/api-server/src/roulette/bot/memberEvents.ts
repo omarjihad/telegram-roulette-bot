@@ -1,6 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../config/logger';
 import { notifyAdminsBlockStatus } from '../services/notification.service';
+import { revokeReferralForBlockedInvitee } from '../services/referral.service';
+import { User } from '../models/User';
 
 /**
  * Telegram sends a `my_chat_member` update whenever a user starts/stops/blocks the bot in
@@ -24,8 +26,12 @@ export function registerMemberEventHandlers(bot: TelegramBot) {
       };
 
       if (newStatus === 'kicked') {
+        await User.updateOne({ telegramId: person.telegramId }, { $set: { botBlocked: true } });
         await notifyAdminsBlockStatus(person, true);
+        // Blocking the bot is against the referral rules: the invite no longer counts.
+        await revokeReferralForBlockedInvitee(person.telegramId);
       } else if (newStatus === 'member' && prevStatus === 'kicked') {
+        await User.updateOne({ telegramId: person.telegramId }, { $set: { botBlocked: false } });
         await notifyAdminsBlockStatus(person, false);
       }
     } catch (err) {

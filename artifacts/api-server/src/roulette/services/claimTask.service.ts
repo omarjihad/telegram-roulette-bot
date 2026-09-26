@@ -1,7 +1,7 @@
 import mongoose, { ClientSession, HydratedDocument } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { ClaimTask, IClaimTask } from '../models/ClaimTask';
-import { IUserPrize } from '../models/UserPrize';
+import { IUserPrize, UserPrize } from '../models/UserPrize';
 import { getSettings } from '../models/Settings';
 import { env } from '../config/env';
 import { createNotification } from './notification.service';
@@ -110,6 +110,27 @@ export async function creditReferralToTask(taskId: mongoose.Types.ObjectId) {
   }
 
   logger.info({ taskId: task._id, credited: task.creditedCount, required: task.requiredCount }, 'claim task credited');
+}
+
+/**
+ * Takes one qualified referral back off a task (the invitee blocked the bot). A completed
+ * task drops back to pending as long as its prize hasn't been claimed yet; once the winner
+ * has requested the withdrawal the task is left alone.
+ * Returns how many referrals are still missing, or null when nothing changed.
+ */
+export async function uncreditReferralFromTask(taskId: mongoose.Types.ObjectId): Promise<number | null> {
+  const task = await ClaimTask.findById(taskId);
+  if (!task || task.status === 'expired' || task.creditedCount <= 0) return null;
+
+  if (task.status === 'completed') {
+    const prize = await UserPrize.findById(task.userPrize).select('status');
+    if (!prize || prize.status !== 'active') return null;
+    task.status = 'pending';
+    task.completedAt = null;
+  }
+  task.creditedCount -= 1;
+  await task.save();
+  return Math.max(0, task.requiredCount - task.creditedCount);
 }
 
 /** Marks a task expired (called from the expiration worker alongside its UserPrize). */

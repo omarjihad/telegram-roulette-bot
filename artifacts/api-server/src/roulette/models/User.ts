@@ -19,6 +19,10 @@ export interface IUser extends Document {
   referredBy?: Types.ObjectId | null; // User who referred this user (only ever set once)
   referredByCampaign?: Types.ObjectId | null; // Which reward campaign this referral belongs to
   lastSpinAt?: Date | null;
+  // When the "your free spin is back" message was last sent (compared against lastSpinAt).
+  spinReadyNotifiedAt?: Date | null;
+  // True while the user has the bot blocked; no reminders are sent then.
+  botBlocked?: boolean;
   totalSpins: number;
   // What the user's most recent spin actually resulted in. Purely informational (never used
   // to decide anything) — its only job is letting the client show "آخر نتيجة: ..." when the
@@ -70,6 +74,8 @@ const userSchema = new Schema<IUser>(
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     referredByCampaign: { type: Schema.Types.ObjectId, ref: 'ReferralCampaign', default: null },
     lastSpinAt: { type: Date, default: null },
+    spinReadyNotifiedAt: { type: Date, default: null },
+    botBlocked: { type: Boolean, default: false },
     totalSpins: { type: Number, default: 0 },
     lastSpinWon: { type: Boolean, default: null },
     lastSpinPrizeName: { type: String, default: null },

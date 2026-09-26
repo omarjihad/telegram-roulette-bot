@@ -125,7 +125,7 @@ export async function redeemGiftLink(token: string, telegramId: number) {
     }
     if (claimed.rewardType === 'daily_spin') {
       await User.updateOne({ _id: user._id }, { $inc: { bonusDailySpins: 1 } });
-       return { message: '🎁 مبروك! استلمت فرة يومية إضافية.\nافتح البوت وروح للعجلة حتى تستخدمها.' };
+       return { message: '🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', isSpin: true };
     }
 
     if (!claimed.prize) throw new AppError('Gift prize is missing', 500, 'GIFT_INVALID');
@@ -136,9 +136,8 @@ export async function redeemGiftLink(token: string, telegramId: number) {
         { _id: user._id },
         { $inc: { bonusDailySpins: 1 }, $push: { guaranteedDailyPrizes: prize._id } },
       );
-      return {
-        message: `🎁 مبروك! استلمت فرة يومية مضمونة على جائزة: ${prize.name}.\nافتح العجلة، والفة القادمة راح تطلع لك هذه الجائزة حتى لو مخزونها صفر.`,
-      };
+      // The prize stays a surprise: the message only announces the extra daily spin.
+      return { message: '🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', isSpin: true };
     }
 
     if (!prize.isUnlimited) {
