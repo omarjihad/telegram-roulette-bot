@@ -19,11 +19,21 @@ import { DailyLoginModal } from './components/DailyLoginModal';
 
 type Stage = 'loading' | 'forced_sub' | 'captcha' | 'ready' | 'error' | 'showcase';
 
+// The race section link (startapp=race), race invite links (startapp=race_<token>) and the
+// bot's "enter the race" button (?tab=race) all open the app straight on the race tab.
+function initialTab(): TabKey {
+  const tg = getTelegramWebApp() as { initDataUnsafe?: { start_param?: string } } | null;
+  const startParam = tg?.initDataUnsafe?.start_param ?? '';
+  const urlTab = new URLSearchParams(window.location.search).get('tab');
+  if (startParam === 'race' || startParam.startsWith('race_') || urlTab === 'race') return 'contest';
+  return 'home';
+}
+
 export default function App() {
   const { ready: tgReady } = useTelegramWebApp();
   const [stage, setStage] = useState<Stage>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
-  const [tab, setTab] = useState<TabKey>('home');
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);

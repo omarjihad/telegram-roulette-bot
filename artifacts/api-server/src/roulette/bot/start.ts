@@ -12,11 +12,12 @@ import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
 import { parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 
-export function buildMiniAppKeyboard(label = '🚀 فتح البوت'): TelegramBot.SendMessageOptions {
+export function buildMiniAppKeyboard(label = '🚀 فتح البوت', tab?: string): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
+  const url = tab ? `${env.MINI_APP_URL.replace(/\/$/, '')}/?tab=${tab}` : env.MINI_APP_URL;
   return {
     reply_markup: {
-      inline_keyboard: [[{ text: label, web_app: { url: env.MINI_APP_URL } }]],
+      inline_keyboard: [[{ text: label, web_app: { url } }]],
     },
   };
 }
@@ -110,6 +111,16 @@ export function registerStartHandler(bot: TelegramBot) {
         } catch (err) {
           await bot.sendMessage(msg.chat.id, err instanceof Error ? `⚠️ ${err.message}` : '⚠️ رابط الهدية غير صالح.');
         }
+        return;
+      }
+
+      // The race section link (?start=race) and race invite links open straight on the race tab.
+      if (startParam === 'race' || contestToken) {
+        await bot.sendMessage(
+          msg.chat.id,
+          '🏆 سباق الدعوات\n\nادعُ أصدقاءك، تصدّر القائمة، واربح هدية Santa Hat NFT 🎁\n\n👇 اضغط الزر وادخل السباق',
+          buildMiniAppKeyboard('🏆 ادخل السباق', 'race')
+        );
         return;
       }
 

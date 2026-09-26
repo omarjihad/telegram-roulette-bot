@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   countEntries: vi.fn(),
   removeEntry: vi.fn(),
   notify: vi.fn(),
+  settings: vi.fn(),
+  aggregate: vi.fn(),
 }));
 
 vi.mock('../models/User', () => ({ User: { findOne: mocks.findUser, findById: mocks.findUserById } }));
@@ -22,14 +24,18 @@ vi.mock('../models/ContestReferral', () => ({
     updateOne: mocks.updateEntry,
     countDocuments: mocks.countEntries,
     findOneAndUpdate: mocks.removeEntry,
+    aggregate: mocks.aggregate,
   },
 }));
 vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
 vi.mock('./forcedSub.service', () => ({ checkAllForcedChats: vi.fn() }));
 vi.mock('../bot/instance', () => ({ getBotInstance: vi.fn() }));
+vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
 import {
+  announceContestWinner,
+  isContestClosed,
   parseContestToken,
   registerContestReferralIfNew,
   removeContestReferralForBlockedInvitee,
@@ -44,6 +50,7 @@ describe('invite race', () => {
     vi.clearAllMocks();
     mocks.notify.mockResolvedValue(undefined);
     mocks.countEntries.mockResolvedValue(5);
+    mocks.settings.mockResolvedValue({ contestRound: 1, contestEndsAt: null, contestWinner: null, save: vi.fn() });
   });
 
   it('parses race start params only', () => {
@@ -93,5 +100,57 @@ describe('invite race', () => {
     mocks.removeEntry.mockResolvedValue({ status: 'pending', contestant: contestant._id, contestantTelegramId: 10 });
     expect(await removeContestReferralForBlockedInvitee(23)).toBe(false);
     expect(mocks.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('race end date and winner', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.notify.mockResolvedValue(undefined);
+  });
+
+  it('closes when the end date passes or this round has a winner', () => {
+    const now = new Date('2026-10-01T12:00:00Z');
+    expect(isContestClosed({ contestRound: 1, contestEndsAt: null, contestWinner: null }, now)).toBe(false);
+    expect(isContestClosed({ contestRound: 1, contestEndsAt: new Date('2026-10-02T00:00:00Z'), contestWinner: null }, now)).toBe(false);
+    expect(isContestClosed({ contestRound: 1, contestEndsAt: new Date('2026-10-01T00:00:00Z'), contestWinner: null }, now)).toBe(true);
+    const winner = { telegramId: 1, name: 'x', score: 3, round: 1, announcedAt: now };
+    expect(isContestClosed({ contestRound: 1, contestEndsAt: null, contestWinner: winner }, now)).toBe(true);
+    // A winner from the previous round doesn't close the new one.
+    expect(isContestClosed({ contestRound: 2, contestEndsAt: null, contestWinner: winner }, now)).toBe(false);
+  });
+
+  it('stops registering new entries once the race is closed', async () => {
+    mocks.settings.mockResolvedValue({ contestRound: 1, contestEndsAt: new Date(Date.now() - 1000), contestWinner: null });
+    expect(await registerContestReferralIfNew({ newUser: newUser(30), token: 'tok', isBrandNewUser: true })).toBe('contest_closed');
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('does not count or remove anything after the race closed', async () => {
+    mocks.settings.mockResolvedValue({ contestRound: 1, contestEndsAt: new Date(Date.now() - 1000), contestWinner: null });
+    mocks.findEntry.mockResolvedValue({ _id: new mongoose.Types.ObjectId(), round: 1, createdAt: new Date(0) });
+    expect(await tryCountContestReferral(new mongoose.Types.ObjectId())).toBe(false);
+    expect(await removeContestReferralForBlockedInvitee(31)).toBe(false);
+    expect(mocks.updateEntry).not.toHaveBeenCalled();
+    expect(mocks.removeEntry).not.toHaveBeenCalled();
+  });
+
+  it('announces first place, stores the winner and closes the round', async () => {
+    const settings = { contestRound: 1, contestEndsAt: null as Date | null, contestWinner: null as unknown, save: vi.fn() };
+    mocks.settings.mockResolvedValue(settings);
+    const winnerId = new mongoose.Types.ObjectId();
+    mocks.aggregate.mockResolvedValue([{ _id: winnerId, score: 12, lastAt: new Date() }]);
+    mocks.findUserById.mockReturnValue({ select: vi.fn().mockResolvedValue({ _id: winnerId, telegramId: 77, username: 'champ' }) });
+
+    const winner = await announceContestWinner();
+    expect(winner).toEqual(expect.objectContaining({ telegramId: 77, name: '@champ', score: 12, round: 1 }));
+    expect(settings.contestEndsAt).toBeInstanceOf(Date);
+    expect(settings.save).toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 77, title: expect.stringContaining('فزت') }));
+  });
+
+  it('refuses to announce twice in the same round', async () => {
+    mocks.settings.mockResolvedValue({ contestRound: 1, contestWinner: { round: 1 }, save: vi.fn() });
+    await expect(announceContestWinner()).rejects.toMatchObject({ code: 'ALREADY_ANNOUNCED' });
   });
 });

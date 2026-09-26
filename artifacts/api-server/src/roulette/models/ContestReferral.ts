@@ -14,6 +14,8 @@ export interface IContestReferral extends Document {
   invitee: Types.ObjectId;
   inviteeTelegramId: number;
   status: ContestReferralStatus;
+  // Race round this entry belongs to (entries from before rounds existed are round 1).
+  round?: number;
   countedAt?: Date | null;
   removedAt?: Date | null;
   createdAt: Date;
@@ -28,12 +30,13 @@ const contestReferralSchema = new Schema<IContestReferral>(
     invitee: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     inviteeTelegramId: { type: Number, required: true, unique: true },
     status: { type: String, enum: ['pending', 'counted', 'removed'], default: 'pending', index: true },
+    round: { type: Number, default: 1 },
     countedAt: { type: Date, default: null },
     removedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-contestReferralSchema.index({ status: 1, contestant: 1 });
+contestReferralSchema.index({ status: 1, round: 1, contestant: 1 });
 
 export const ContestReferral = model<IContestReferral>('ContestReferral', contestReferralSchema);

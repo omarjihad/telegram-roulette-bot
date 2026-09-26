@@ -58,6 +58,12 @@ import {
 } from '../controllers/deliveryAccount.controller';
 import { adminListGiftLinks, adminCreateGiftLink, adminRevokeGiftLink } from '../controllers/adminGift.controller';
 import { adminDeductUserPoints } from '../controllers/adminPoints.controller';
+import {
+  adminAnnounceContestWinner,
+  adminGetContest,
+  adminSetContestEndsAt,
+  adminStartContestRound,
+} from '../controllers/adminContest.controller';
 
 const router = Router();
 
@@ -131,5 +137,11 @@ router.get('/gifts', adminListGiftLinks);
 router.post('/gifts', adminCreateGiftLink);
 router.delete('/gifts/:token', adminRevokeGiftLink);
 router.post('/points/deduct', adminDeductUserPoints);
+
+// Invite race
+router.get('/contest', adminGetContest);
+router.post('/contest/ends-at', adminSetContestEndsAt);
+router.post('/contest/announce', adminAnnounceContestWinner);
+router.post('/contest/new-round', adminStartContestRound);
 
 export default router;

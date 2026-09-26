@@ -1492,7 +1492,7 @@ select option {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin: 18px 0 14px;
+  margin: 30px 0 14px;
   padding: 26px 14px 16px;
   border-radius: 20px;
   background: radial-gradient(circle at 50% 0%, rgba(255, 226, 122, 0.28), rgba(243, 198, 35, 0.06) 70%);
@@ -1547,3 +1547,30 @@ select option {
 @media (prefers-reduced-motion: reduce) {
   .contest-hero-icon, .lb-crown, .nft-art::after { animation: none; }
 }
+
+/* Race status banner + clickable leaderboard */
+.race-status {
+  text-align: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(38, 198, 218, 0.1);
+  border: 1px solid rgba(38, 198, 218, 0.45);
+  font-size: 14px;
+}
+.race-status-title { font-size: 13px; font-weight: 800; color: var(--text-dim); margin-bottom: 4px; }
+.race-countdown { font-size: 24px; font-weight: 950; color: #67e8f9; font-variant-numeric: tabular-nums; direction: ltr; }
+.race-status-ended { background: rgba(243, 198, 35, 0.12); border-color: rgba(243, 198, 35, 0.55); font-weight: 800; }
+.race-status-ended .race-status-title { color: var(--accent); font-size: 16px; }
+
+button.lb-leader, button.lb-row {
+  width: 100%;
+  color: var(--text-main);
+  font-family: inherit;
+  text-align: right;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
+
+.admin-race-top { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.admin-race-top > div { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }

@@ -34,7 +34,7 @@ interface Withdrawal {
   status?: string;
 }
 
-type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts';
+type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race';
 
 export function AdminPage({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<AdminTab>('prizes');
@@ -50,7 +50,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', background: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-          {(['prizes', 'withdrawals', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
+          {(['prizes', 'withdrawals', 'race', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
             <button
               key={t}
               className={`pill`}
@@ -81,6 +81,8 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
                 ? 'حساب التسليم'
                 : t === 'gifts'
                 ? 'روابط الهدايا'
+                : t === 'race'
+                ? '🏆 السباق'
                 : 'الإعدادات'}
             </button>
           ))}
@@ -99,6 +101,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         {tab === 'people' && <PeopleLookupTab />}
         {tab === 'delivery' && <DeliveryAccountTab />}
         {tab === 'gifts' && <GiftLinksTab />}
+        {tab === 'race' && <RaceAdminTab />}
       </div>
     </div>
   );
@@ -241,6 +244,144 @@ interface GiftLinkRow {
   link: string | null;
   createdAt: string;
   expiresAt: string | null;
+}
+
+interface RaceAdminState {
+  round: number;
+  endsAt: string | null;
+  closed: boolean;
+  winner: { telegramId: number; name: string; score: number; announcedAt: string } | null;
+  participants: number;
+  joinedCount: number;
+  top: Array<{ rank: number; name: string; score: number }>;
+  sectionLink: string | null;
+  prize: { name: string; number: string };
+}
+
+/** datetime-local wants local time without a zone. */
+function toLocalInput(iso: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function RaceAdminTab() {
+  const [state, setState] = useState<RaceAdminState | null>(null);
+  const [endsAt, setEndsAt] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const res = await api.get<{ ok: true; contest: RaceAdminState }>('/admin/contest');
+    setState(res.contest);
+    setEndsAt(toLocalInput(res.contest.endsAt));
+  }
+
+  useEffect(() => {
+    load().catch(() => undefined);
+  }, []);
+
+  async function run(path: string, body?: unknown, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{ ok: true; contest: RaceAdminState }>(path, body);
+      setState(res.contest);
+      setEndsAt(toLocalInput(res.contest.endsAt));
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'صار خطأ، حاول مرة ثانية.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(text: string) {
+    await navigator.clipboard?.writeText(text);
+    window.alert('تم النسخ');
+  }
+
+  if (!state) return <LoadingScreen />;
+  const endsAtIso = endsAt ? new Date(endsAt).toISOString() : null;
+
+  return (
+    <div>
+      <div className="card">
+        <h3 className="card-title">🏆 سباق الدعوات — الجولة {state.round}</h3>
+        <p className="card-sub">
+          الحالة: {state.winner ? '🏁 تم إعلان الفائز' : state.closed ? '⏳ انتهى الوقت، بانتظار إعلان الفائز' : '🟢 شغال'}
+          {' · '}{state.participants} متسابق عنده دعوات · {state.joinedCount} شخص أخذ رابط
+        </p>
+        {state.winner && (
+          <p style={{ fontWeight: 800 }}>
+            🏆 الفائز: <bdi>{state.winner.name}</bdi> ({state.winner.telegramId}) بـ {state.winner.score} دعوة
+          </p>
+        )}
+        <div className="admin-race-top">
+          {state.top.length === 0 && <p className="card-sub">ماكو دعوات محسوبة بعد.</p>}
+          {state.top.map((row) => (
+            <div key={row.rank}>
+              <span>#{row.rank} <bdi>{row.name}</bdi></span>
+              <strong>{row.score}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">🔗 رابط قسم السباق</h3>
+        <p className="card-sub">انشر هذا الرابط، وأي شخص يضغطه ينفتح عنده قسم السباق مباشرة.</p>
+        <p style={{ direction: 'ltr', wordBreak: 'break-all', fontSize: 13 }}>{state.sectionLink ?? 'حدد BOT_USERNAME بالسيرفر'}</p>
+        {state.sectionLink && (
+          <button className="btn btn-secondary" onClick={() => void copy(state.sectionLink!)}>📋 نسخ الرابط</button>
+        )}
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">⏱️ تاريخ الانتهاء</h3>
+        <p className="card-sub">عند هذا الوقت تتوقف الدعوات تلقائياً وتنقفل النتائج. اتركه فارغ حتى يبقى السباق مفتوح.</p>
+        <input
+          type="datetime-local"
+          value={endsAt}
+          onChange={(e) => setEndsAt(e.target.value)}
+          style={{ width: '100%', padding: 12, borderRadius: 12, border: '1px solid #64748b', marginBottom: 10, fontFamily: 'inherit' }}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" disabled={busy} onClick={() => void run('/admin/contest/ends-at', { endsAt: endsAtIso })}>
+            💾 حفظ التاريخ
+          </button>
+          <button className="btn btn-secondary" disabled={busy} onClick={() => void run('/admin/contest/ends-at', { endsAt: null })}>
+            إزالة
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">📣 إعلان الفائز</h3>
+        <p className="card-sub">
+          ينهي السباق فوراً ويعلن المركز الأول فائزاً بـ {state.prize.name} {state.prize.number}. يوصل للفائز إشعار، ولكل المشاركين رسالة بالنتيجة.
+        </p>
+        <button
+          className="btn btn-primary"
+          disabled={busy || Boolean(state.winner) || state.top.length === 0}
+          onClick={() => void run('/admin/contest/announce', undefined, `إعلان ${state.top[0]?.name ?? ''} فائزاً وإنهاء السباق؟`)}
+        >
+          🏆 إعلان الفائز الآن
+        </button>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">🔄 جولة جديدة</h3>
+        <p className="card-sub">تبدي جولة جديدة من الصفر (النقاط تتصفر، والروابط الخاصة تبقى نفسها). التاريخ أعلاه يصير تاريخ انتهاء الجولة الجديدة.</p>
+        <button
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => void run('/admin/contest/new-round', { endsAt: endsAtIso }, 'بدء جولة جديدة وتصفير المتصدرين؟')}
+        >
+          🔄 بدء جولة جديدة
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function GiftLinksTab() {

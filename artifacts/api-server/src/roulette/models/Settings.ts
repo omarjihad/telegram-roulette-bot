@@ -26,6 +26,10 @@ export interface ISettings extends Document {
   shareImageData: Buffer | null;
   shareImageMimeType: string | null;
   hasShareImage: boolean;
+  // Invite race: when counting stops, which round is live, and the announced winner.
+  contestEndsAt: Date | null;
+  contestRound: number;
+  contestWinner: { telegramId: number; name: string; score: number; round: number; announcedAt: Date } | null;
   updatedAt: Date;
   createdAt: Date;
 }
@@ -49,6 +53,15 @@ const settingsSchema = new Schema<ISettings>(
     shareImageData: { type: Buffer, default: null, select: false },
     shareImageMimeType: { type: String, default: null },
     hasShareImage: { type: Boolean, default: false },
+    contestEndsAt: { type: Date, default: null },
+    contestRound: { type: Number, default: 1 },
+    contestWinner: {
+      type: new Schema(
+        { telegramId: Number, name: String, score: Number, round: Number, announcedAt: Date },
+        { _id: false }
+      ),
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import { ContestResponse } from '../types';
 import { LoadingScreen } from '../components/Common';
 import { useCachedFetch, invalidateCache } from '../hooks/useCachedFetch';
 import { getTelegramWebApp, haptic } from '../hooks/useTelegramWebApp';
+import { useCountdown } from '../hooks/useCountdown';
 
 const READ_SECONDS = 7;
 
@@ -11,6 +12,47 @@ function openLink(url: string) {
   const tg = getTelegramWebApp();
   if (tg?.openTelegramLink) tg.openTelegramLink(url);
   else window.open(url, '_blank');
+}
+
+function openProfile(link: string | null) {
+  if (!link) return;
+  if (link.startsWith('https://t.me/')) openLink(link);
+  // No @username: best effort by numeric ID through Telegram's own URI scheme.
+  else window.location.href = link;
+}
+
+function RaceStatus({ data }: { data: ContestResponse }) {
+  const { label: raw } = useCountdown(data.endsAt);
+  const [hh, mm, ss] = raw.split(':');
+  const days = Math.floor(Number(hh) / 24);
+  const hours = String(Number(hh) % 24).padStart(2, '0');
+  const label = days > 0 ? `${days} يوم · ${hours}:${mm}:${ss}` : raw;
+  if (data.winner) {
+    return (
+      <div className="race-status race-status-ended">
+        <div className="race-status-title">🏁 انتهى السباق</div>
+        <div>
+          🏆 الفائز: <bdi>{data.winner.name}</bdi> بـ {data.winner.score} دعوة
+          {data.winner.isMe ? ' — مبروك إنت الفائز! 🎉' : ''}
+        </div>
+      </div>
+    );
+  }
+  if (data.closed) {
+    return (
+      <div className="race-status race-status-ended">
+        <div className="race-status-title">⏳ انتهى وقت السباق</div>
+        <div>الدعوات توقفت، وراح ينعلن الفائز قريباً.</div>
+      </div>
+    );
+  }
+  if (!data.endsAt) return null;
+  return (
+    <div className="race-status">
+      <div className="race-status-title">⏱️ ينتهي السباق بعد</div>
+      <div className="race-countdown">{label}</div>
+    </div>
+  );
 }
 
 function NftCard({ prize }: { prize: ContestResponse['prize'] }) {
@@ -71,6 +113,8 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
         <h2>سباق الدعوات</h2>
         <p>ادعُ أصدقاءك، تصدّر القائمة، واربح هدية NFT</p>
       </div>
+
+      <RaceStatus data={data} />
 
       <NftCard prize={data.prize} />
 
@@ -133,6 +177,8 @@ function Board({ data }: { data: ContestResponse }) {
         <p>{data.participants} متسابق · المركز الأول فقط يربح</p>
       </div>
 
+      <RaceStatus data={data} />
+
       <NftCard prize={data.prize} />
 
       <div className="card contest-me">
@@ -154,25 +200,26 @@ function Board({ data }: { data: ContestResponse }) {
 
       <div className="card leaderboard">
         <h3 className="card-title">🏅 المتصدرين (أول 25)</h3>
+        <p className="card-sub" style={{ marginTop: 0 }}>اضغط على أي متسابق حتى تفتح حسابه</p>
         {!first ? (
           <p className="card-sub" style={{ textAlign: 'center', padding: '12px 0' }}>ماكو متسابقين بعد، كن أول واحد يتصدر! 🚀</p>
         ) : (
           <>
-            <div className={`lb-leader ${first.isMe ? 'lb-me' : ''}`}>
+            <button className={`lb-leader ${first.isMe ? 'lb-me' : ''}`} onClick={() => openProfile(first.profileLink)}>
               <div className="lb-crown">👑</div>
               <Avatar name={first.name} photoUrl={first.photoUrl} />
               <div className="lb-leader-name"><bdi>{first.name}</bdi>{first.isMe ? ' (أنت)' : ''}</div>
               <div className="lb-leader-score">{first.score} دعوة</div>
-              <div className="lb-leader-tag">🏆 يربح {data.prize.name} حالياً</div>
-            </div>
+              <div className="lb-leader-tag">🏆 {data.winner ? 'فاز بـ' : 'يربح'} {data.prize.name}{data.winner ? '' : ' حالياً'}</div>
+            </button>
             <div className="lb-list">
               {rest.map((row) => (
-                <div key={row.rank} className={`lb-row lb-rank-${row.rank} ${row.isMe ? 'lb-me' : ''}`}>
+                <button key={row.rank} className={`lb-row lb-rank-${row.rank} ${row.isMe ? 'lb-me' : ''}`} onClick={() => openProfile(row.profileLink)}>
                   <span className="lb-rank">{row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}</span>
                   <Avatar name={row.name} photoUrl={row.photoUrl} />
                   <span className="lb-name"><bdi>{row.name}</bdi>{row.isMe ? ' (أنت)' : ''}</span>
                   <span className="lb-score">{row.score}</span>
-                </div>
+                </button>
               ))}
             </div>
           </>

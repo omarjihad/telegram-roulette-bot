@@ -190,7 +190,10 @@ export interface ContestResponse {
   myRank: number | null;
   myPending: number;
   participants: number;
-  leaderboard: Array<{ rank: number; name: string; photoUrl: string | null; score: number; isMe: boolean }>;
+  leaderboard: Array<{ rank: number; name: string; photoUrl: string | null; profileLink: string | null; score: number; isMe: boolean }>;
+  endsAt: string | null;
+  closed: boolean;
+  winner: { name: string; score: number; isMe: boolean } | null;
   prize: {
     name: string;
     number: string;
