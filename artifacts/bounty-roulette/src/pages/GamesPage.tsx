@@ -5,22 +5,15 @@ import { LoadingScreen } from '../components/Common';
 import { SnakeGame } from '../components/SnakeGame';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { useCountdown } from '../hooks/useCountdown';
-import { AdSkippedError, AdUnavailableError, claimAfterAd, showRewardedAd } from '../services/adsgram';
+import { claimAfterAd, showRewardedAd } from '../services/adsgram';
+import { AdTaskCard, adErrorMessage } from '../components/AdTaskCard';
 
 type Result = { reward: number; food: number; died: boolean };
-
-function adError(err: unknown) {
-  if (err instanceof AdUnavailableError) return '📭 لا يوجد إعلان حالياً، حاول بعد قليل.';
-  if (err instanceof AdSkippedError) return '⚠️ يجب مشاهدة الإعلان حتى النهاية للحصول على المكافأة.';
-  if (err instanceof ApiError && err.code === 'AD_NOT_CONFIRMED') return 'لم يتم تأكيد مشاهدة الإعلان، حاول مرة أخرى.';
-  if (err instanceof ApiError) return err.message;
-  return 'حدث خطأ، حاول مرة أخرى.';
-}
 
 function FreeRoundButton({ data, busy, onPlay }: { data: GamesResponse; busy: boolean; onPlay: () => void }) {
   const { label } = useCountdown(data.snake.freeReady ? null : data.snake.freeReadyAt);
   if (data.snake.freeReady) {
-    return <button className="btn btn-primary" disabled={busy} onClick={onPlay}>🎮 العب مجاناً</button>;
+    return <button className="btn btn-primary" disabled={busy} onClick={onPlay}>🎮 العب وابدأ في الربح</button>;
   }
   return <button className="btn btn-secondary" disabled>⏳ الجولة المجانية بعد {label}</button>;
 }
@@ -48,7 +41,7 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
         setRound(await api.post<SnakeRound>('/games/snake/start', { mode }));
       }
     } catch (err) {
-      flash(mode === 'ad' ? adError(err) : err instanceof ApiError ? err.message : 'حدث خطأ، حاول مرة أخرى.');
+      flash(mode === 'ad' ? adErrorMessage(err) : err instanceof ApiError ? err.message : 'حدث خطأ، حاول مرة أخرى.');
       void refetch().catch(() => {});
     } finally {
       setBusy(false);
@@ -68,22 +61,6 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
     void refetch().catch(() => {});
   }
 
-  async function watchAdTask() {
-    if (!data || busy) return;
-    setBusy(true);
-    try {
-      await showRewardedAd(data.blockId);
-      const res = await claimAfterAd<{ ok: true; reward: number }>('/games/ad-task/claim');
-      flash(`✅ ربحت ${res.reward} نقطة!`);
-      refreshMe();
-      void refetch().catch(() => {});
-    } catch (err) {
-      flash(adError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!data && error) return <LoadingScreen label="تعذر التحميل، حاول لاحقاً" />;
   if (!data) return <LoadingScreen />;
 
@@ -95,7 +72,7 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
     );
   }
 
-  const { snake, adTask } = data;
+  const { snake } = data;
   return (
     <div className="games-page">
       <div className="header-row">
@@ -114,19 +91,15 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
           <div className="game-card-icon">🐍</div>
           <div>
             <h3 className="card-title" style={{ margin: 0 }}>لعبة الحية</h3>
-            <p className="card-sub" style={{ margin: 0 }}>كُل التفاح خلال {snake.durationSec} ثانية، وكل تفاحة = {snake.pointsPerFood} نقطة</p>
+            <p className="card-sub" style={{ margin: 0 }}>كُل التفاح واجمع النقاط 🍎</p>
           </div>
         </div>
-        <ul className="game-rules">
-          <li>🎁 الجولة المجانية: حتى {snake.freeMaxFood} تفاحات ({(snake.freeMaxFood * snake.pointsPerFood).toFixed(2)} نقطة).</li>
-          <li>📺 جولة الإعلان: حتى {snake.adMaxFood} تفاحات ({(snake.adMaxFood * snake.pointsPerFood).toFixed(2)} نقطة) لكل إعلان.</li>
-          <li>💥 إذا اصطدمت الحية بنفسها، تخسر كل ما جمعته في الجولة.</li>
-        </ul>
+        <p className="card-sub" style={{ margin: 0 }}>💥 انتبه! إذا اصطدمت الحية بنفسها تخسر كل ما جمعته.</p>
         {data.allowed ? (
           <div className="game-actions">
             <FreeRoundButton data={data} busy={busy} onPlay={() => void startRound('free')} />
             <button className="btn btn-secondary game-ad-btn" disabled={busy} onClick={() => void startRound('ad')}>
-              📺 شاهد إعلان والعب جولة
+              📺 شاهد إعلان والعب
             </button>
           </div>
         ) : (
@@ -134,24 +107,7 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
         )}
       </div>
 
-      <div className={`card game-card ${data.allowed ? '' : 'game-card-locked'}`}>
-        <div className="game-card-head">
-          <div className="game-card-icon">📺</div>
-          <div>
-            <h3 className="card-title" style={{ margin: 0 }}>شاهد إعلان واربح</h3>
-            <p className="card-sub" style={{ margin: 0 }}>
-              كل إعلان = {adTask.reward} نقطة{adTask.adsPerSpin ? ` · كل ${adTask.adsPerSpin} إعلان = فرة على عجلة النقاط` : ''}
-            </p>
-          </div>
-        </div>
-        {data.allowed ? (
-          <button className="btn btn-primary" disabled={busy} onClick={() => void watchAdTask()}>
-            {busy ? 'جارٍ التحميل...' : `📺 شاهد إعلان (+${adTask.reward})`}
-          </button>
-        ) : (
-          <button className="btn btn-secondary" disabled>🔜 قريباً</button>
-        )}
-      </div>
+      <AdTaskCard onEarned={refreshMe} />
 
       {result && (
         <div className="modal-backdrop" onClick={() => setResult(null)}>

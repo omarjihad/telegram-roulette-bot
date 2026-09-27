@@ -1,4 +1,5 @@
 import React from 'react';
+import { ScrollText } from 'lucide-react';
 import { MeResponse } from '../types';
 import { useCountdown } from '../hooks/useCountdown';
 import { TabKey } from '../components/BottomNav';
@@ -36,6 +37,10 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
             <strong>{me.user.username ? `@${me.user.username} · ${me.user.firstName || 'بدون اسم'}` : me.user.firstName || 'صديقنا'}</strong>
             <span className="home-profile-caption">جاهز تجمع جوائز اليوم؟</span>
           </div>
+          <button className="home-history-btn" onClick={() => onNavigate('history')} aria-label="السجل">
+            <ScrollText size={20} />
+            <span>السجل</span>
+          </button>
         </div>
         <div className="home-stats">
           <button className="home-stat home-stat-store" onClick={() => onNavigate('store')} title="فتح المتجر">
@@ -89,8 +94,8 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         <span className="home-games-icon">🐍</span>
         <span className="home-contest-copy">
           <span className="home-section-label">🎮 العب واربح</span>
-          <strong>لعبة الحية + شاهد إعلان</strong>
-          <span>اجمع النقاط باللعب ومشاهدة الإعلانات</span>
+          <strong>لعبة الحية</strong>
+          <span>العب وابدأ في الربح</span>
         </span>
         {me.gamesPublic === false && !me.isAdmin ? <span className="games-soon-pill">قريباً</span> : <span className="home-link-arrow">←</span>}
       </button>

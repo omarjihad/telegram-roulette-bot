@@ -1,8 +1,8 @@
 import React from 'react';
 import { haptic } from '../hooks/useTelegramWebApp';
-import { Home, Target, Aperture, Backpack, ScrollText, Trophy } from 'lucide-react';
+import { Home, Target, Aperture, Backpack, Users, Trophy } from 'lucide-react';
 
-export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games';
+export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games' | 'referrals';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'home', label: 'الرئيسية', icon: <Home size={22} /> },
@@ -10,7 +10,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'wheel', label: 'الدوران', icon: <Aperture size={22} /> },
   { key: 'contest', label: 'السباق', icon: <Trophy size={22} /> },
   { key: 'inventory', label: 'المخزون', icon: <Backpack size={22} /> },
-  { key: 'history', label: 'السجل', icon: <ScrollText size={22} /> },
+  { key: 'referrals', label: 'إحالاتي', icon: <Users size={22} /> },
 ];
 
 export function BottomNav({ active, onChange, hideContest = false }: { active: TabKey; onChange: (t: TabKey) => void; hideContest?: boolean }) {

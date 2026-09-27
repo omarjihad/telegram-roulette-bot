@@ -15,6 +15,7 @@ import { AdminPage } from './pages/AdminPage';
 import { StorePage } from './pages/StorePage';
 import { ContestPage } from './pages/ContestPage';
 import { GamesPage } from './pages/GamesPage';
+import { ReferralsPage } from './pages/ReferralsPage';
 import { ShowcasePage } from './pages/ShowcasePage';
 import { DailyLoginModal } from './components/DailyLoginModal';
 
@@ -142,11 +143,20 @@ export default function App() {
         <div className="page-enter" key={tab}>
         {tab === 'home' && <HomePage me={me} onNavigate={setTab} onDailyLogin={() => void openDailyLogin(false).catch(() => {})} />}
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
-        {tab === 'tasks' && <TasksPage />}
+        {tab === 'tasks' && <TasksPage refreshMe={loadMe} />}
+        {tab === 'referrals' && <ReferralsPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
         {tab === 'inventory' && <InventoryPage />}
-        {tab === 'history' && <HistoryPage />}
+        {tab === 'history' && (
+          <>
+            <div className="header-row" style={{ marginBottom: 12 }}>
+              <span />
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setTab('home')}>رجوع</button>
+            </div>
+            <HistoryPage />
+          </>
+        )}
         {tab === 'store' && (
           <StorePage spinCredits={me.user.spinCredits} onBack={() => setTab('home')} refreshMe={loadMe} />
         )}
