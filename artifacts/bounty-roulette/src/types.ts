@@ -36,6 +36,8 @@ export interface MeResponse {
   adminRole: 'owner' | 'developer' | null;
   // The invite race is hidden everywhere while this is false.
   contestEnabled?: boolean;
+  // Snake game + ad task are open to everyone (otherwise only admins, others see "coming soon").
+  gamesPublic?: boolean;
 }
 
 export interface ForcedSubMissing {
@@ -208,4 +210,30 @@ export interface ContestResponse {
     valueUsd: string;
   };
   rules: string[];
+}
+
+export interface GamesResponse {
+  ok: true;
+  allowed: boolean;
+  comingSoon: boolean;
+  blockId: string;
+  spinPoints: number;
+  snake: {
+    durationSec: number;
+    pointsPerFood: number;
+    freeMaxFood: number;
+    adMaxFood: number;
+    freeReady: boolean;
+    freeReadyAt: string;
+  };
+  adTask: { reward: number; adsPerSpin: number | null };
+}
+
+export interface SnakeRound {
+  ok: true;
+  sessionId: string;
+  mode: 'free' | 'ad';
+  maxFood: number;
+  pointsPerFood: number;
+  durationSec: number;
 }

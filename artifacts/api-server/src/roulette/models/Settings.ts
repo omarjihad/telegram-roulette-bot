@@ -32,6 +32,16 @@ export interface ISettings extends Document {
   contestEndsAt: Date | null;
   // Minimum counted invites (all contestants together) for the round to have a winner.
   contestMinTotalInvites: number;
+  // Games & ads (snake game + "watch an ad" task). While gamesPublic is false only admins
+  // can use them; everyone else sees "coming soon".
+  gamesPublic: boolean;
+  adsgramBlockId: string;
+  adTaskReward: number;
+  snakePointsPerFood: number;
+  snakeFreeMaxFood: number;
+  snakeAdMaxFood: number;
+  snakeDurationSec: number;
+  snakeFreeCooldownHours: number;
   // Set when a round was ended without a winner (too few invites, or ended manually).
   contestNoWinner: { round: number; reason: 'min_not_reached' | 'manual'; totalInvites: number; endedAt: Date } | null;
   contestRound: number;
@@ -62,6 +72,14 @@ const settingsSchema = new Schema<ISettings>(
     contestEnabled: { type: Boolean, default: true },
     contestEndsAt: { type: Date, default: null },
     contestMinTotalInvites: { type: Number, default: 120, min: 0 },
+    gamesPublic: { type: Boolean, default: false },
+    adsgramBlockId: { type: String, default: '50375' },
+    adTaskReward: { type: Number, default: 0.2, min: 0 },
+    snakePointsPerFood: { type: Number, default: 0.03, min: 0 },
+    snakeFreeMaxFood: { type: Number, default: 7, min: 1 },
+    snakeAdMaxFood: { type: Number, default: 4, min: 1 },
+    snakeDurationSec: { type: Number, default: 30, min: 10 },
+    snakeFreeCooldownHours: { type: Number, default: 12, min: 0 },
     contestNoWinner: {
       type: new Schema({ round: Number, reason: String, totalInvites: Number, endedAt: Date }, { _id: false }),
       default: null,

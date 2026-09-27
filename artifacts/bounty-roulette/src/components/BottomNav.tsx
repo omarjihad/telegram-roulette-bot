@@ -2,7 +2,7 @@ import React from 'react';
 import { haptic } from '../hooks/useTelegramWebApp';
 import { Home, Target, Aperture, Backpack, ScrollText, Trophy } from 'lucide-react';
 
-export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store';
+export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'home', label: 'الرئيسية', icon: <Home size={22} /> },

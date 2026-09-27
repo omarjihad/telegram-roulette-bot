@@ -14,6 +14,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { AdminPage } from './pages/AdminPage';
 import { StorePage } from './pages/StorePage';
 import { ContestPage } from './pages/ContestPage';
+import { GamesPage } from './pages/GamesPage';
 import { ShowcasePage } from './pages/ShowcasePage';
 import { DailyLoginModal } from './components/DailyLoginModal';
 
@@ -143,6 +144,7 @@ export default function App() {
         {tab === 'wheel' && <WheelPage me={me} refreshMe={loadMe} />}
         {tab === 'tasks' && <TasksPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
+        {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && <HistoryPage />}
         {tab === 'store' && (

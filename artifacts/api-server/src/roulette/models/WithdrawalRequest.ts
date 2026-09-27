@@ -17,6 +17,8 @@ export interface IWithdrawalRequest extends Document {
   deliveredByTelegramId?: number | null;
   deliveredByUsername?: string | null;
   rejectReason?: string | null;
+  // The "new withdrawal" alerts sent to each admin, so they can be edited once decided.
+  adminMessages?: Array<{ chatId: number; messageId: number }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +39,7 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequest>(
     deliveredByTelegramId: { type: Number, default: null },
     deliveredByUsername: { type: String, default: null },
     rejectReason: { type: String, default: null },
+    adminMessages: { type: [{ chatId: Number, messageId: Number, _id: false }], default: [] },
   },
   { timestamps: true }
 );

@@ -10,7 +10,7 @@ import {
 // Tracks admins who were just asked "why are you rejecting this?" so the next plain-text
 // message they send in that chat gets picked up as the rejection reason instead of being
 // treated as an unrelated message. Keyed by adminChatId.
-const pendingRejections = new Map<number, { withdrawalId: string; promptMessageId: number }>();
+const pendingRejections = new Map<number, { withdrawalId: string; promptMessageId: number; decisionMessageId?: number }>();
 
 function fmtDate(d?: Date | null): string {
   if (!d) return '-';
@@ -109,7 +109,7 @@ export function registerAdminWithdrawalActions(bot: TelegramBot) {
         const prompt = await bot.sendMessage(chatId, '✍️ اكتب سبب الرفض بالرد على هذه الرسالة (أو أرسله كرسالة عادية):', {
           reply_markup: { force_reply: true },
         });
-        pendingRejections.set(chatId, { withdrawalId, promptMessageId: prompt.message_id });
+        pendingRejections.set(chatId, { withdrawalId, promptMessageId: prompt.message_id, decisionMessageId: query.message?.message_id });
         await bot.answerCallbackQuery(query.id);
         return;
       }
@@ -137,7 +137,12 @@ export function registerAdminWithdrawalActions(bot: TelegramBot) {
       if (!role) return;
 
       await rejectWithdrawal(pending.withdrawalId, msg.text.trim(), adminTelegramId, msg.from?.username);
-      await bot.sendMessage(chatId, `❌ تم رفض الطلب.\nالسبب: ${msg.text.trim()}`);
+      if (pending.decisionMessageId) {
+        await bot
+          .editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: pending.decisionMessageId })
+          .catch(() => undefined);
+      }
+      await bot.sendMessage(chatId, `❌ تم رفض الطلب #${pending.withdrawalId}.\nالسبب: ${msg.text.trim()}`);
     } catch (err) {
       logger.error({ err }, 'failed to process withdrawal rejection reason');
       await bot.sendMessage(chatId, '⚠️ صار خطأ أثناء الرفض، حاول مرة ثانية.');

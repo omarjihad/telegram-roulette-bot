@@ -85,6 +85,16 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
       </button>
       )}
 
+      <button className="home-games-card" onClick={() => onNavigate('games')}>
+        <span className="home-games-icon">🐍</span>
+        <span className="home-contest-copy">
+          <span className="home-section-label">🎮 العب واربح</span>
+          <strong>لعبة الحية + شاهد إعلان</strong>
+          <span>اجمع النقاط باللعب ومشاهدة الإعلانات</span>
+        </span>
+        {me.gamesPublic === false && !me.isAdmin ? <span className="games-soon-pill">قريباً</span> : <span className="home-link-arrow">←</span>}
+      </button>
+
       <button className="home-link-card home-link-daily" onClick={onDailyLogin}>
         <span className="home-link-icon">🔥</span>
         <span className="home-link-copy">

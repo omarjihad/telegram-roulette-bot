@@ -34,7 +34,7 @@ interface Withdrawal {
   status?: string;
 }
 
-type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race';
+type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games';
 
 export function AdminPage({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<AdminTab>('prizes');
@@ -50,7 +50,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', background: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-          {(['prizes', 'withdrawals', 'race', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
+          {(['prizes', 'withdrawals', 'race', 'games', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
             <button
               key={t}
               className={`pill`}
@@ -83,6 +83,8 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
                 ? 'روابط الهدايا'
                 : t === 'race'
                 ? '🏆 السباق'
+                : t === 'games'
+                ? '🎮 الألعاب'
                 : 'الإعدادات'}
             </button>
           ))}
@@ -102,6 +104,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         {tab === 'delivery' && <DeliveryAccountTab />}
         {tab === 'gifts' && <GiftLinksTab />}
         {tab === 'race' && <RaceAdminTab />}
+        {tab === 'games' && <GamesAdminTab />}
       </div>
     </div>
   );
@@ -456,6 +459,131 @@ function RaceAdminTab() {
         >
           🔄 بدء جولة جديدة
         </button>
+      </div>
+    </div>
+  );
+}
+
+interface GamesAdminSettings {
+  gamesPublic: boolean;
+  adsgramBlockId: string;
+  adTaskReward: number;
+  snakePointsPerFood: number;
+  snakeFreeMaxFood: number;
+  snakeAdMaxFood: number;
+  snakeDurationSec: number;
+  snakeFreeCooldownHours: number;
+  rewardUrlConfigured: boolean;
+  last24h: { ads: number; rounds: number };
+}
+
+const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: string; step: string }> = [
+  { key: 'adTaskReward', label: '📺 نقاط كل إعلان (مهمة الإعلان)', hint: 'الفرة = 5 نقاط، فـ 0.2 تعني 25 إعلان لكل فرة', step: '0.01' },
+  { key: 'snakePointsPerFood', label: '🍎 نقاط كل تفاحة', hint: 'مثال: 0.03', step: '0.01' },
+  { key: 'snakeFreeMaxFood', label: '🎁 عدد التفاح بالجولة المجانية', hint: 'مثال: 7', step: '1' },
+  { key: 'snakeAdMaxFood', label: '📺 عدد التفاح بجولة الإعلان', hint: 'مثال: 4 أو 5', step: '1' },
+  { key: 'snakeDurationSec', label: '⏱️ مدة الجولة (ثانية)', hint: 'مثال: 30', step: '1' },
+  { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة)', hint: 'مثال: 12', step: '0.5' },
+];
+
+function GamesAdminTab() {
+  const [settings, setSettings] = useState<GamesAdminSettings | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  function apply(next: GamesAdminSettings) {
+    setSettings(next);
+    setForm(Object.fromEntries([...GAME_FIELDS.map((f) => [f.key, String(next[f.key])]), ['adsgramBlockId', next.adsgramBlockId]]));
+  }
+
+  useEffect(() => {
+    api.get<{ ok: true; settings: GamesAdminSettings }>('/admin/games').then((r) => apply(r.settings)).catch(() => undefined);
+  }, []);
+
+  async function save(body: Record<string, unknown>, done?: string) {
+    setBusy(true);
+    try {
+      const res = await api.patch<{ ok: true; settings: GamesAdminSettings }>('/admin/games', body);
+      apply(res.settings);
+      if (done) window.alert(done);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'تعذر الحفظ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!settings) return <LoadingScreen />;
+  const perSpin = Number(form.adTaskReward) > 0 ? Math.ceil(5 / Number(form.adTaskReward)) : null;
+
+  return (
+    <div>
+      <div className="card" style={{ borderColor: settings.gamesPublic ? undefined : 'rgba(56, 189, 248, 0.6)' }}>
+        <h3 className="card-title">{settings.gamesPublic ? '🟢 الألعاب متاحة للجميع' : '🧪 وضع الاختبار'}</h3>
+        <p className="card-sub">
+          {settings.gamesPublic
+            ? 'لعبة الحية ومهمة الإعلان شغالة لكل المستخدمين.'
+            : 'المستخدمين يشوفون "قريباً"، والألعاب تشتغل للمطورين بس حتى تختبرها.'}
+        </p>
+        <button
+          className={settings.gamesPublic ? 'btn btn-secondary' : 'btn btn-primary'}
+          disabled={busy}
+          onClick={() => {
+            if (!settings.gamesPublic && !window.confirm('فتح الألعاب لكل المستخدمين؟')) return;
+            void save({ gamesPublic: !settings.gamesPublic });
+          }}
+        >
+          {settings.gamesPublic ? '🧪 إرجاعها للاختبار (قريباً)' : '🚀 فتحها للجميع'}
+        </button>
+        <p className="card-sub" style={{ marginBottom: 0 }}>
+          آخر 24 ساعة: {settings.last24h.ads} إعلان · {settings.last24h.rounds} جولة
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">⚙️ الإعدادات</h3>
+        {GAME_FIELDS.map((f) => (
+          <label key={f.key} style={{ display: 'block', marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>{f.label}</div>
+            <input
+              type="number"
+              step={f.step}
+              min={0}
+              value={form[f.key] ?? ''}
+              onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+              style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', fontFamily: 'inherit' }}
+            />
+            <div className="card-sub" style={{ margin: '4px 0 0', fontSize: 12 }}>{f.hint}</div>
+          </label>
+        ))}
+        {perSpin && <p className="card-sub">📊 بهذي القيمة: كل {perSpin} إعلان = فرة وحدة على عجلة النقاط.</p>}
+        <button
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => void save(Object.fromEntries(GAME_FIELDS.map((f) => [f.key, Number(form[f.key])])), '✅ تم الحفظ')}
+        >
+          💾 حفظ الإعدادات
+        </button>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">📺 Adsgram</h3>
+        <label style={{ display: 'block', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>رقم البلوك (Block ID)</div>
+          <input
+            value={form.adsgramBlockId ?? ''}
+            onChange={(e) => setForm({ ...form, adsgramBlockId: e.target.value })}
+            style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', direction: 'ltr', fontFamily: 'inherit' }}
+          />
+        </label>
+        <button className="btn btn-secondary" disabled={busy} onClick={() => void save({ adsgramBlockId: form.adsgramBlockId }, '✅ تم الحفظ')}>
+          💾 حفظ رقم البلوك
+        </button>
+        <p className="card-sub" style={{ marginBottom: 0 }}>
+          {settings.rewardUrlConfigured
+            ? '🔒 التحقق من Adsgram مفعّل: النقاط تنعطى بس للإعلانات اللي Adsgram أكدتها.'
+            : '⚠️ التحقق من Adsgram غير مفعّل (ADSGRAM_REWARD_KEY فارغ)، فالنقاط تنعطى حسب التطبيق. مناسب للاختبار بس.'}
+        </p>
       </div>
     </div>
   );

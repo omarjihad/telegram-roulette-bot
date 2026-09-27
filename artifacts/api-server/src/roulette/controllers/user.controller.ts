@@ -7,6 +7,7 @@ import { tryQualifyReferral } from '../services/referral.service';
 import { isContestEnabled, tryCountContestReferral } from '../services/contest.service';
 import { prizeImageUrl } from '../services/prize.service';
 import mongoose from 'mongoose';
+import { getSettings } from '../models/Settings';
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const user = req.dbUser!;
@@ -37,6 +38,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     },
     wheel: { ready, nextSpinAt, lastSpin },
     contestEnabled: await isContestEnabled(),
+    gamesPublic: (await getSettings()).gamesPublic,
     isAdmin: req.adminRole !== null,
     adminRole: req.adminRole,
   });

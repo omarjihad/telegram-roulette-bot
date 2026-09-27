@@ -14,6 +14,7 @@ import { getPrizeImage } from './controllers/roulette.controller';
 import { getShareImage } from './controllers/adminSystem.controller';
 import { getShowcase } from './controllers/showcase.controller';
 import { env } from './config/env';
+import { getAdsgramReward } from './controllers/games.controller';
 
 export function createApp() {
   const app = express();
@@ -51,6 +52,8 @@ export function createApp() {
   // header, so this route (and the settings share-image one below) must stay public.
   app.get('/api/prizes/:key/image', getPrizeImage);
   app.get('/api/settings/share-image', getShareImage);
+  // Adsgram calls this server-to-server (no Telegram initData); guarded by ADSGRAM_REWARD_KEY.
+  app.get('/api/adsgram/reward', getAdsgramReward);
 
   app.use('/api', (_req, res, next) => {
     if (!env.GAMEPLAY_ENABLED || env.OWNER_ID <= 0) {

@@ -1,3 +1,4 @@
+import { WithdrawalRequest, IWithdrawalRequest } from '../models/WithdrawalRequest';
 import { Notification, NotificationType } from '../models/Notification';
 import { Types } from 'mongoose';
 import { listAllAdminTelegramIds } from './admin.service';
@@ -59,25 +60,30 @@ export async function notifyAllAdmins(type: NotificationType, title: string, bod
  * Accept/Reject buttons — admins are never shown Accept/Reject before they've had a chance
  * to check the referrals for fraud.
  */
+function buildWithdrawalAdminText(params: { withdrawalId: string; prizeName: string; username?: string; telegramId: number; requestedAt: Date }) {
+  return (
+    `🎁 طلب سحب جديد\n\n` +
+    `رقم الطلب:\n#${params.withdrawalId}\n\n` +
+    `المنتج:\n${params.prizeName}\n\n` +
+    `الشخص:\n${params.username ? '@' + params.username : '-'}\n\n` +
+    `أيدي الشخص:\n${params.telegramId}\n\n` +
+    `وقت السحب:\n${params.requestedAt.toLocaleString('ar-EG')}`
+  );
+}
+
 export async function notifyAdminsNewWithdrawal(params: {
   withdrawalId: string;
   prizeName: string;
   username?: string;
   telegramId: number;
 }) {
-  const { withdrawalId, prizeName, username, telegramId } = params;
+  const { withdrawalId } = params;
   const adminIds = await listAllAdminTelegramIds();
   if (!botRef) return;
 
-  const text =
-    `🎁 طلب سحب جديد\n\n` +
-    `رقم الطلب:\n#${withdrawalId}\n\n` +
-    `المنتج:\n${prizeName}\n\n` +
-    `الشخص:\n${username ? '@' + username : '-'}\n\n` +
-    `أيدي الشخص:\n${telegramId}\n\n` +
-    `وقت السحب:\n${new Date().toLocaleString('ar-EG')}`;
+  const text = buildWithdrawalAdminText({ ...params, requestedAt: new Date() });
 
-  await Promise.all(
+  const sent = await Promise.all(
     adminIds.map((id) =>
       botRef!
         .sendMessage(id, text, {
@@ -85,9 +91,46 @@ export async function notifyAdminsNewWithdrawal(params: {
             inline_keyboard: [[{ text: '📋 جلب الاحالات', callback_data: `wd_refs_${withdrawalId}` }]],
           },
         })
+        .then((m) => ({ chatId: id, messageId: m.message_id }))
         .catch((err) => {
           logger.warn({ err, id }, 'failed to notify admin of new withdrawal');
+          return null;
         })
+    )
+  );
+  const adminMessages = sent.filter((m): m is { chatId: number; messageId: number } => m !== null);
+  await WithdrawalRequest.updateOne({ _id: withdrawalId }, { $set: { adminMessages } }).catch((err) =>
+    logger.warn({ err, withdrawalId }, 'failed to store admin withdrawal messages')
+  );
+}
+
+/**
+ * Once a request is decided, every admin's copy of the alert is edited to say who decided
+ * it (and why, for a rejection) and loses its buttons, so nobody reviews it again.
+ */
+export async function markWithdrawalDecidedForAdmins(
+  withdrawal: IWithdrawalRequest,
+  decision: { approved: boolean; byUsername?: string | null; byTelegramId: number; reason?: string }
+) {
+  if (!botRef || !withdrawal.adminMessages?.length) return;
+  const by = decision.byUsername ? '@' + decision.byUsername : String(decision.byTelegramId);
+  const status = decision.approved
+    ? `✅ تم قبول الطلب بواسطة ${by}`
+    : `❌ تم رفض الطلب بواسطة ${by}\nالسبب: ${decision.reason ?? '-'}`;
+  const text =
+    buildWithdrawalAdminText({
+      withdrawalId: String(withdrawal._id),
+      prizeName: withdrawal.prizeNameSnapshot,
+      username: withdrawal.username,
+      telegramId: withdrawal.telegramId,
+      requestedAt: withdrawal.requestedAt,
+    }) + `\n\n━━━━━━━━━━\n${status}`;
+
+  await Promise.all(
+    withdrawal.adminMessages.map((m) =>
+      botRef!
+        .editMessageText(text, { chat_id: m.chatId, message_id: m.messageId, reply_markup: { inline_keyboard: [] } })
+        .catch((err) => logger.warn({ err, chatId: m.chatId }, 'failed to update admin withdrawal message'))
     )
   );
 }

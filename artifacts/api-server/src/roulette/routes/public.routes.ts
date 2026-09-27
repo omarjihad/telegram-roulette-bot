@@ -9,6 +9,7 @@ import { getMyReferrals, postClaimReferralMilestone } from '../controllers/refer
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getStoreProducts, postStorePurchase } from '../controllers/store.controller';
 import { getContest, postJoinContest } from '../controllers/contest.controller';
+import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart } from '../controllers/games.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
@@ -41,6 +42,11 @@ router.post('/inventory/share-card', shareCard);
 
 router.get('/referrals', getMyReferrals);
 router.post('/referrals/milestone/claim', postClaimReferralMilestone);
+
+router.get('/games', getGames);
+router.post('/games/ad-task/claim', postAdTaskClaim);
+router.post('/games/snake/start', postSnakeStart);
+router.post('/games/snake/finish', postSnakeFinish);
 
 router.get('/contest', getContest);
 router.post('/contest/join', postJoinContest);

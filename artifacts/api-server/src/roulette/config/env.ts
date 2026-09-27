@@ -43,6 +43,9 @@ const envSchema = z.object({
   MINI_APP_SHORT_NAME: z.string().optional().default(''),
   // Absolute path to the Vite output when the API also serves the Mini App (Render/Docker).
   CLIENT_DIST_DIR: z.string().optional().default(''),
+  // Secret put in Adsgram's Reward URL (?key=...). When set, ad rewards are only paid for
+  // views Adsgram confirmed server-to-server. When empty, the app trusts the client (testing).
+  ADSGRAM_REWARD_KEY: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

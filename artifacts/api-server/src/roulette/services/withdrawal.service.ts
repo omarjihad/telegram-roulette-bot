@@ -7,10 +7,11 @@ import { Prize } from '../models/Prize';
 import { Referral } from '../models/Referral';
 import { RouletteSpin } from '../models/RouletteSpin';
 import { AppError } from '../utils/AppError';
-import { createNotification, notifyAdminsNewWithdrawal, notifyDeliveryAccountNewWithdrawal } from './notification.service';
+import { createNotification, markWithdrawalDecidedForAdmins, notifyAdminsNewWithdrawal, notifyDeliveryAccountNewWithdrawal } from './notification.service';
 import { expireClaimTaskForUserPrize, getClaimTaskForUserPrize } from './claimTask.service';
 import { writeAudit } from '../models/AuditLog';
 import { env } from '../config/env';
+import { logger } from '../config/logger';
 import { getDeliveryAccountStatus, getDeliveryContactLink, hasVerifiedDeliveryContact } from './deliveryAccount.service';
 
 /**
@@ -287,6 +288,11 @@ export async function approveWithdrawal(
     username: updated.username,
     telegramId: updated.telegramId,
   });
+  await markWithdrawalDecidedForAdmins(updated, {
+    approved: true,
+    byUsername: actingAdminUsername,
+    byTelegramId: actingAdminTelegramId,
+  }).catch((err) => logger.warn({ err, withdrawalId }, 'failed to update admin messages after approval'));
 
   return updated;
 }
@@ -334,8 +340,16 @@ export async function rejectWithdrawal(
     telegramId: updated.telegramId,
     type: 'claim_rejected',
     title: '❌ تم رفض طلبك',
-    body: `تم رفض طلبك بواسطة ${actingAdminUsername ? '@' + actingAdminUsername : 'الإدارة'}\n\nالسبب:\n${reason.trim()}`,
+    // Who rejected it is shown to the other admins only, never to the user.
+    body: `تم رفض طلبك.\n\nالسبب:\n${reason.trim()}`,
   });
+
+  await markWithdrawalDecidedForAdmins(updated, {
+    approved: false,
+    byUsername: actingAdminUsername,
+    byTelegramId: actingAdminTelegramId,
+    reason: reason.trim(),
+  }).catch((err) => logger.warn({ err, withdrawalId }, 'failed to update admin messages after rejection'));
 
   return updated;
 }

@@ -67,6 +67,7 @@ import {
   adminSetContestEndsAt,
   adminStartContestRound,
 } from '../controllers/adminContest.controller';
+import { adminGetGames, adminUpdateGames } from '../controllers/games.controller';
 
 const router = Router();
 
@@ -140,6 +141,10 @@ router.get('/gifts', adminListGiftLinks);
 router.post('/gifts', adminCreateGiftLink);
 router.delete('/gifts/:token', adminRevokeGiftLink);
 router.post('/points/deduct', adminDeductUserPoints);
+
+// Games & ads
+router.get('/games', adminGetGames);
+router.patch('/games', adminUpdateGames);
 
 // Invite race
 router.get('/contest', adminGetContest);

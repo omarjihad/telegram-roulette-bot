@@ -26,6 +26,8 @@ export interface IUser extends Document {
   // Invite race: personal link token, and when the user read the intro and joined.
   contestToken?: string | null;
   contestJoinedAt?: Date | null;
+  // Snake game: when the last free round was started (12h cooldown by default).
+  lastFreeGameAt?: Date | null;
   totalSpins: number;
   // What the user's most recent spin actually resulted in. Purely informational (never used
   // to decide anything) — its only job is letting the client show "آخر نتيجة: ..." when the
@@ -81,6 +83,7 @@ const userSchema = new Schema<IUser>(
     botBlocked: { type: Boolean, default: false },
     contestToken: { type: String },
     contestJoinedAt: { type: Date, default: null },
+    lastFreeGameAt: { type: Date, default: null },
     totalSpins: { type: Number, default: 0 },
     lastSpinWon: { type: Boolean, default: null },
     lastSpinPrizeName: { type: String, default: null },
