@@ -196,6 +196,9 @@ export interface ContestResponse {
   endsAt: string | null;
   closed: boolean;
   winner: { name: string; score: number; isMe: boolean } | null;
+  noWinner: { reason: 'min_not_reached' | 'manual'; totalInvites: number } | null;
+  totalInvites: number;
+  minTotalInvites: number;
   prize: {
     name: string;
     number: string;

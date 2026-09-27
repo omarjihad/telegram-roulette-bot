@@ -60,6 +60,8 @@ import { adminListGiftLinks, adminCreateGiftLink, adminRevokeGiftLink } from '..
 import { adminDeductUserPoints } from '../controllers/adminPoints.controller';
 import {
   adminAnnounceContestWinner,
+  adminEndContestWithoutWinner,
+  adminSetContestMinInvites,
   adminGetContest,
   adminSetContestEnabled,
   adminSetContestEndsAt,
@@ -144,6 +146,8 @@ router.get('/contest', adminGetContest);
 router.post('/contest/enabled', adminSetContestEnabled);
 router.post('/contest/ends-at', adminSetContestEndsAt);
 router.post('/contest/announce', adminAnnounceContestWinner);
+router.post('/contest/end-no-winner', adminEndContestWithoutWinner);
+router.post('/contest/min-invites', adminSetContestMinInvites);
 router.post('/contest/new-round', adminStartContestRound);
 
 export default router;

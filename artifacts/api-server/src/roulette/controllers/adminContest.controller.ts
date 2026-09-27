@@ -4,9 +4,11 @@ import { AppError } from '../utils/AppError';
 import { writeAudit } from '../models/AuditLog';
 import {
   announceContestWinner,
+  endContestWithoutWinner,
   getContestAdminState,
   setContestEnabled,
   setContestEndsAt,
+  setContestMinTotalInvites,
   startNewContestRound,
 } from '../services/contest.service';
 
@@ -39,9 +41,9 @@ export const adminSetContestEndsAt = asyncHandler(async (req: Request, res: Resp
 });
 
 export const adminAnnounceContestWinner = asyncHandler(async (req: Request, res: Response) => {
-  const winner = await announceContestWinner();
-  await audit(req, 'contest.announce_winner', { winner });
-  res.json({ ok: true, contest: await getContestAdminState() });
+  const result = await announceContestWinner();
+  await audit(req, 'contest.announce_winner', result);
+  res.json({ ok: true, result, contest: await getContestAdminState() });
 });
 
 export const adminStartContestRound = asyncHandler(async (req: Request, res: Response) => {
@@ -55,5 +57,18 @@ export const adminSetContestEnabled = asyncHandler(async (req: Request, res: Res
   if (typeof enabled !== 'boolean') throw new AppError('enabled must be true or false', 422, 'VALIDATION_ERROR');
   await setContestEnabled(enabled);
   await audit(req, enabled ? 'contest.enable' : 'contest.disable');
+  res.json({ ok: true, contest: await getContestAdminState() });
+});
+
+export const adminEndContestWithoutWinner = asyncHandler(async (req: Request, res: Response) => {
+  await endContestWithoutWinner();
+  await audit(req, 'contest.end_without_winner');
+  res.json({ ok: true, contest: await getContestAdminState() });
+});
+
+export const adminSetContestMinInvites = asyncHandler(async (req: Request, res: Response) => {
+  const value = Number((req.body as { minTotalInvites?: unknown }).minTotalInvites);
+  await setContestMinTotalInvites(value);
+  await audit(req, 'contest.min_total_invites', { value });
   res.json({ ok: true, contest: await getContestAdminState() });
 });

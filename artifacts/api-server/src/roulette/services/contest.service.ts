@@ -26,13 +26,18 @@ export const CONTEST_PRIZE = {
   valueUsd: '~$17',
 };
 
-export const CONTEST_RULES = [
-  'كل شخص يدخل البوت من رابطك لأول مرة ويكمل الاشتراك الإجباري والكابتشا يُحسب لك +1.',
-  'إذا الشخص اللي دعوته حظر البوت تنحذف دعوته وتنقص من نقاطك -1.',
-  'كل شخص يُحسب لشخص واحد بس، وما يُحسب إذا جان مسجّل بالبوت من قبل.',
-  'ممنوع الحسابات الوهمية أو الأرقام المزيفة، وأي دعوة مخالفة تنلغي.',
-  'المركز الأول فقط هو اللي يربح الجائزة.',
-];
+export const DEFAULT_MIN_TOTAL_INVITES = 120;
+
+export function contestRules(minTotalInvites: number) {
+  return [
+    'يُحتسب لك +1 عن كل شخص يدخل البوت لأول مرة من رابطك، ويشترك في القنوات الإجبارية، ويُكمل التحقق (الكابتشا).',
+    'إذا حظر الشخص المدعو البوت، تُحذف دعوته ويُخصم من نقاطك -1.',
+    'يُحتسب كل شخص لمتسابق واحد فقط، ولا يُحتسب من كان مسجلاً في البوت مسبقاً.',
+    'يُمنع استخدام الحسابات الوهمية أو الأرقام المزيفة، وتُلغى أي دعوة مخالفة.',
+    `يجب أن يصل مجموع دعوات جميع المتسابقين إلى ${minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.`,
+    'يفوز بالجائزة صاحب المركز الأول فقط.',
+  ];
+}
 
 export function parseContestToken(startParam?: string | null): string | null {
   if (!startParam) return null;
@@ -62,13 +67,17 @@ function roundFilter(round: number) {
 
 /** Counting stops once the end date passes or the winner of this round is announced. */
 export function isContestClosed(
-  settings: Pick<ISettings, 'contestEndsAt' | 'contestWinner' | 'contestRound'> & { contestEnabled?: boolean },
+  settings: Pick<ISettings, 'contestEndsAt' | 'contestWinner' | 'contestRound'> & {
+    contestEnabled?: boolean;
+    contestNoWinner?: ISettings['contestNoWinner'];
+  },
   now = new Date()
 ) {
   // A stopped race counts nothing (no +1, no -1) until it's turned back on.
   if (settings.contestEnabled === false) return true;
   const round = settings.contestRound ?? 1;
   if (settings.contestWinner && settings.contestWinner.round === round) return true;
+  if (settings.contestNoWinner && settings.contestNoWinner.round === round) return true;
   return Boolean(settings.contestEndsAt && settings.contestEndsAt.getTime() <= now.getTime());
 }
 
@@ -190,6 +199,10 @@ async function rankRound(round: number) {
   ]);
 }
 
+function totalOf(rows: Array<{ score: number }>) {
+  return rows.reduce((sum, row) => sum + row.score, 0);
+}
+
 async function buildLeaderboard(rows: Array<{ _id: mongoose.Types.ObjectId; score: number }>, meId?: unknown) {
   const top = rows.slice(0, LEADERBOARD_SIZE);
   const people = await User.find({ _id: { $in: top.map((r) => r._id) } }).select('username firstName photoUrl telegramId');
@@ -216,6 +229,8 @@ export async function getContestOverview(user: HydratedDocument<IUser>) {
   const myIndex = rows.findIndex((r) => String(r._id) === String(user._id));
   const joined = Boolean(user.contestJoinedAt && user.contestToken);
   const winner = settings.contestWinner && settings.contestWinner.round === round ? settings.contestWinner : null;
+  const noWinner = settings.contestNoWinner && settings.contestNoWinner.round === round ? settings.contestNoWinner : null;
+  const minTotalInvites = settings.contestMinTotalInvites ?? DEFAULT_MIN_TOTAL_INVITES;
 
   return {
     joined,
@@ -228,8 +243,11 @@ export async function getContestOverview(user: HydratedDocument<IUser>) {
     endsAt: settings.contestEndsAt,
     closed: isContestClosed(settings),
     winner: winner ? { name: winner.name, score: winner.score, isMe: winner.telegramId === user.telegramId } : null,
+    noWinner: noWinner ? { reason: noWinner.reason, totalInvites: noWinner.totalInvites } : null,
+    totalInvites: totalOf(rows),
+    minTotalInvites,
     prize: CONTEST_PRIZE,
-    rules: CONTEST_RULES,
+    rules: contestRules(minTotalInvites),
   };
 }
 
@@ -245,6 +263,9 @@ export async function getContestAdminState() {
     endsAt: settings.contestEndsAt,
     closed: isContestClosed(settings),
     winner: settings.contestWinner && settings.contestWinner.round === round ? settings.contestWinner : null,
+    noWinner: settings.contestNoWinner && settings.contestNoWinner.round === round ? settings.contestNoWinner : null,
+    totalInvites: totalOf(rows),
+    minTotalInvites: settings.contestMinTotalInvites ?? DEFAULT_MIN_TOTAL_INVITES,
     participants: rows.length,
     joinedCount: await User.countDocuments({ contestJoinedAt: { $ne: null } }),
     top: await buildLeaderboard(rows.slice(0, 5)),
@@ -275,15 +296,59 @@ async function broadcastWinner(text: string, skipTelegramId: number) {
   }
 }
 
-/** Closes the round and announces #1 as the winner. */
-export async function announceContestWinner() {
-  const settings = await getSettings();
-  const round = settings.contestRound ?? 1;
+function assertRoundOpenForResult(settings: ISettings, round: number) {
   if (settings.contestWinner && settings.contestWinner.round === round) {
     throw new AppError('تم إعلان الفائز لهذه الجولة مسبقاً', 409, 'ALREADY_ANNOUNCED');
   }
-  const [first] = await rankRound(round);
+  if (settings.contestNoWinner && settings.contestNoWinner.round === round) {
+    throw new AppError('انتهت هذه الجولة مسبقاً دون فائز', 409, 'ALREADY_ENDED');
+  }
+}
+
+/** Ends the round with no winner and tells every participant why. */
+async function endRoundWithoutWinner(settings: ISettings, round: number, reason: 'min_not_reached' | 'manual', totalInvites: number) {
+  const now = new Date();
+  settings.contestNoWinner = { round, reason, totalInvites, endedAt: now };
+  if (!settings.contestEndsAt || settings.contestEndsAt.getTime() > now.getTime()) settings.contestEndsAt = now;
+  await settings.save();
+
+  const min = settings.contestMinTotalInvites ?? DEFAULT_MIN_TOTAL_INVITES;
+  const why =
+    reason === 'min_not_reached'
+      ? `لم يصل مجموع الدعوات إلى الحد الأدنى المطلوب: ${totalInvites} من أصل ${min} دعوة.`
+      : 'تم إنهاء السباق من قبل الإدارة.';
+  const text = `🏁 انتهى سباق الدعوات دون فائز\n\n${why}\n\nشكراً لجميع المشاركين، ترقّبوا السباق القادم 👀`;
+  void broadcastWinner(text, 0).catch((err) => logger.warn({ err }, 'race result broadcast failed'));
+  logger.info({ round, reason, totalInvites }, 'invite race ended without a winner');
+}
+
+/** Ends the round on the admin's request, with no winner. */
+export async function endContestWithoutWinner() {
+  const settings = await getSettings();
+  const round = settings.contestRound ?? 1;
+  assertRoundOpenForResult(settings, round);
+  await endRoundWithoutWinner(settings, round, 'manual', totalOf(await rankRound(round)));
+  return { winner: null as null, reason: 'manual' as const };
+}
+
+/**
+ * Closes the round and announces #1 as the winner, but only when all contestants together
+ * reached the minimum number of invites; otherwise the round ends without a winner.
+ */
+export async function announceContestWinner() {
+  const settings = await getSettings();
+  const round = settings.contestRound ?? 1;
+  assertRoundOpenForResult(settings, round);
+  const rows = await rankRound(round);
+  const [first] = rows;
   if (!first) throw new AppError('ماكو أي متسابق عنده دعوات بعد', 409, 'NO_CONTESTANTS');
+
+  const totalInvites = totalOf(rows);
+  const min = settings.contestMinTotalInvites ?? DEFAULT_MIN_TOTAL_INVITES;
+  if (totalInvites < min) {
+    await endRoundWithoutWinner(settings, round, 'min_not_reached', totalInvites);
+    return { winner: null, reason: 'min_not_reached' as const, totalInvites, min };
+  }
 
   const person = await User.findById(first._id).select('telegramId username firstName');
   if (!person) throw new AppError('الفائز غير موجود', 404, 'USER_NOT_FOUND');
@@ -300,16 +365,23 @@ export async function announceContestWinner() {
     telegramId: person.telegramId,
     type: 'referral_reward',
     title: '🏆 مبروك! فزت بسباق الدعوات',
-    body: `أنت المركز الأول بـ ${first.score} دعوة 🔥\nربحت هدية ${prizeTitle} NFT 🎁\n${CONTEST_PRIZE.nftUrl}\n\nتواصل ويّا الإدارة حتى تستلم هديتك.`,
+    body: `أنت المركز الأول بـ ${first.score} دعوة 🔥\nربحت هدية ${prizeTitle} NFT 🎁\n${CONTEST_PRIZE.nftUrl}\n\nتواصل مع الإدارة لاستلام هديتك.`,
   }).catch((err) => logger.warn({ err }, 'failed to notify race winner'));
 
   const text =
     `🏁 انتهى سباق الدعوات!\n\n🏆 الفائز: ${name}\n🔥 عدد الدعوات: ${first.score}\n🎁 الجائزة: ${prizeTitle} NFT\n\n` +
-    'شكراً لكل المشاركين، ترقبوا السباق الجاي 👀';
+    'شكراً لجميع المشاركين، ترقّبوا السباق القادم 👀';
   void broadcastWinner(text, person.telegramId).catch((err) => logger.warn({ err }, 'race winner broadcast failed'));
 
   logger.info({ round, winner: person.telegramId, score: first.score }, 'invite race winner announced');
-  return settings.contestWinner;
+  return { winner: settings.contestWinner, reason: null, totalInvites, min };
+}
+
+export async function setContestMinTotalInvites(value: number) {
+  if (!Number.isInteger(value) || value < 0) throw new AppError('العدد يجب أن يكون رقماً صحيحاً', 422, 'VALIDATION_ERROR');
+  const settings = await getSettings();
+  settings.contestMinTotalInvites = value;
+  await settings.save();
 }
 
 /** Stops (hides) or re-enables the whole race. Scores and links are kept. */
@@ -328,6 +400,7 @@ export async function startNewContestRound(endsAt: Date | null) {
   const settings = await getSettings();
   settings.contestRound = (settings.contestRound ?? 1) + 1;
   settings.contestWinner = null;
+  settings.contestNoWinner = null;
   settings.contestEndsAt = endsAt;
   await settings.save();
   return settings.contestRound;

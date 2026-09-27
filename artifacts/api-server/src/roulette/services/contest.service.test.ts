@@ -35,6 +35,7 @@ vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } })
 
 import {
   announceContestWinner,
+  endContestWithoutWinner,
   isContestClosed,
   parseContestToken,
   registerContestReferralIfNew,
@@ -138,17 +139,47 @@ describe('race end date and winner', () => {
   });
 
   it('announces first place, stores the winner and closes the round', async () => {
-    const settings = { contestRound: 1, contestEndsAt: null as Date | null, contestWinner: null as unknown, save: vi.fn() };
+    const settings = { contestRound: 1, contestMinTotalInvites: 20, contestEndsAt: null as Date | null, contestWinner: null as unknown, save: vi.fn() };
     mocks.settings.mockResolvedValue(settings);
     const winnerId = new mongoose.Types.ObjectId();
-    mocks.aggregate.mockResolvedValue([{ _id: winnerId, score: 12, lastAt: new Date() }]);
+    mocks.aggregate.mockResolvedValue([
+      { _id: winnerId, score: 12, lastAt: new Date() },
+      { _id: new mongoose.Types.ObjectId(), score: 8, lastAt: new Date() },
+    ]);
     mocks.findUserById.mockReturnValue({ select: vi.fn().mockResolvedValue({ _id: winnerId, telegramId: 77, username: 'champ' }) });
 
-    const winner = await announceContestWinner();
+    const { winner } = await announceContestWinner();
     expect(winner).toEqual(expect.objectContaining({ telegramId: 77, name: '@champ', score: 12, round: 1 }));
     expect(settings.contestEndsAt).toBeInstanceOf(Date);
     expect(settings.save).toHaveBeenCalled();
     expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 77, title: expect.stringContaining('فزت') }));
+  });
+
+  it('ends without a winner when total invites are below the minimum (default 120)', async () => {
+    const settings = { contestRound: 1, contestEndsAt: null as Date | null, contestWinner: null as unknown, contestNoWinner: null as unknown, save: vi.fn() };
+    mocks.settings.mockResolvedValue(settings);
+    mocks.aggregate.mockResolvedValue([
+      { _id: new mongoose.Types.ObjectId(), score: 70, lastAt: new Date() },
+      { _id: new mongoose.Types.ObjectId(), score: 49, lastAt: new Date() },
+    ]);
+
+    const result = await announceContestWinner();
+    expect(result).toEqual(expect.objectContaining({ winner: null, reason: 'min_not_reached', totalInvites: 119, min: 120 }));
+    expect(settings.contestWinner).toBeNull();
+    expect(settings.contestNoWinner).toEqual(expect.objectContaining({ round: 1, reason: 'min_not_reached', totalInvites: 119 }));
+    expect(mocks.notify).not.toHaveBeenCalled();
+    expect(isContestClosed(settings as never)).toBe(true);
+  });
+
+  it('can be ended manually without a winner, only once per round', async () => {
+    const settings = { contestRound: 2, contestEndsAt: null as Date | null, contestWinner: null as unknown, contestNoWinner: null as unknown, save: vi.fn() };
+    mocks.settings.mockResolvedValue(settings);
+    mocks.aggregate.mockResolvedValue([{ _id: new mongoose.Types.ObjectId(), score: 300, lastAt: new Date() }]);
+
+    await endContestWithoutWinner();
+    expect(settings.contestNoWinner).toEqual(expect.objectContaining({ round: 2, reason: 'manual', totalInvites: 300 }));
+    await expect(endContestWithoutWinner()).rejects.toMatchObject({ code: 'ALREADY_ENDED' });
+    await expect(announceContestWinner()).rejects.toMatchObject({ code: 'ALREADY_ENDED' });
   });
 
   it('refuses to announce twice in the same round', async () => {

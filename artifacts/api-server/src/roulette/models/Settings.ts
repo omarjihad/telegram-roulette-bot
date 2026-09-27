@@ -30,6 +30,10 @@ export interface ISettings extends Document {
   // Invite race on/off. Off hides it everywhere in the bot and pauses all counting; data is kept.
   contestEnabled: boolean;
   contestEndsAt: Date | null;
+  // Minimum counted invites (all contestants together) for the round to have a winner.
+  contestMinTotalInvites: number;
+  // Set when a round was ended without a winner (too few invites, or ended manually).
+  contestNoWinner: { round: number; reason: 'min_not_reached' | 'manual'; totalInvites: number; endedAt: Date } | null;
   contestRound: number;
   contestWinner: { telegramId: number; name: string; score: number; round: number; announcedAt: Date } | null;
   updatedAt: Date;
@@ -57,6 +61,11 @@ const settingsSchema = new Schema<ISettings>(
     hasShareImage: { type: Boolean, default: false },
     contestEnabled: { type: Boolean, default: true },
     contestEndsAt: { type: Date, default: null },
+    contestMinTotalInvites: { type: Number, default: 120, min: 0 },
+    contestNoWinner: {
+      type: new Schema({ round: Number, reason: String, totalInvites: Number, endedAt: Date }, { _id: false }),
+      default: null,
+    },
     contestRound: { type: Number, default: 1 },
     contestWinner: {
       type: new Schema(

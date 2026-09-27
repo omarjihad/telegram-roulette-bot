@@ -252,6 +252,9 @@ interface RaceAdminState {
   endsAt: string | null;
   closed: boolean;
   winner: { telegramId: number; name: string; score: number; announcedAt: string } | null;
+  noWinner: { reason: 'min_not_reached' | 'manual'; totalInvites: number; endedAt: string } | null;
+  totalInvites: number;
+  minTotalInvites: number;
   participants: number;
   joinedCount: number;
   top: Array<{ rank: number; name: string; score: number }>;
@@ -270,12 +273,18 @@ function toLocalInput(iso: string | null) {
 function RaceAdminTab() {
   const [state, setState] = useState<RaceAdminState | null>(null);
   const [endsAt, setEndsAt] = useState('');
+  const [minInvites, setMinInvites] = useState('');
   const [busy, setBusy] = useState(false);
+
+  function apply(contest: RaceAdminState) {
+    setState(contest);
+    setEndsAt(toLocalInput(contest.endsAt));
+    setMinInvites(String(contest.minTotalInvites));
+  }
 
   async function load() {
     const res = await api.get<{ ok: true; contest: RaceAdminState }>('/admin/contest');
-    setState(res.contest);
-    setEndsAt(toLocalInput(res.contest.endsAt));
+    apply(res.contest);
   }
 
   useEffect(() => {
@@ -286,9 +295,11 @@ function RaceAdminTab() {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true);
     try {
-      const res = await api.post<{ ok: true; contest: RaceAdminState }>(path, body);
-      setState(res.contest);
-      setEndsAt(toLocalInput(res.contest.endsAt));
+      const res = await api.post<{ ok: true; contest: RaceAdminState; result?: { reason: string | null } }>(path, body);
+      apply(res.contest);
+      if (res.result?.reason === 'min_not_reached') {
+        window.alert(`انتهى السباق دون فائز لأن مجموع الدعوات (${res.contest.totalInvites}) أقل من الحد الأدنى (${res.contest.minTotalInvites}).`);
+      }
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'صار خطأ، حاول مرة ثانية.');
     } finally {
@@ -332,9 +343,15 @@ function RaceAdminTab() {
       <div className="card">
         <h3 className="card-title">🏆 سباق الدعوات — الجولة {state.round}</h3>
         <p className="card-sub">
-          الحالة: {state.winner ? '🏁 تم إعلان الفائز' : state.closed ? '⏳ انتهى الوقت، بانتظار إعلان الفائز' : '🟢 شغال'}
+          الحالة: {state.winner ? '🏁 تم إعلان الفائز' : state.noWinner ? '🏁 انتهى دون فائز' : state.closed ? '⏳ انتهى الوقت، بانتظار إعلان النتيجة' : '🟢 شغال'}
+          {' · '}مجموع الدعوات: {state.totalInvites} / {state.minTotalInvites}
           {' · '}{state.participants} متسابق عنده دعوات · {state.joinedCount} شخص أخذ رابط
         </p>
+        {state.noWinner && (
+          <p style={{ fontWeight: 800, color: '#fca5a5' }}>
+            🏁 انتهى دون فائز ({state.noWinner.reason === 'manual' ? 'إنهاء يدوي' : 'ما وصل للحد الأدنى'}) · مجموع الدعوات {state.noWinner.totalInvites}
+          </p>
+        )}
         {state.winner && (
           <p style={{ fontWeight: 800 }}>
             🏆 الفائز: <bdi>{state.winner.name}</bdi> ({state.winner.telegramId}) بـ {state.winner.score} دعوة
@@ -384,12 +401,48 @@ function RaceAdminTab() {
         <p className="card-sub">
           ينهي السباق فوراً ويعلن المركز الأول فائزاً بـ {state.prize.name} {state.prize.number}. يوصل للفائز إشعار، ولكل المشاركين رسالة بالنتيجة.
         </p>
+        <p className="card-sub">
+          {state.totalInvites >= state.minTotalInvites
+            ? '✅ مجموع الدعوات وصل للحد الأدنى.'
+            : `⚠️ مجموع الدعوات ${state.totalInvites} أقل من ${state.minTotalInvites}، فإذا ضغطت إعلان ينتهي السباق دون فائز.`}
+        </p>
         <button
           className="btn btn-primary"
-          disabled={busy || Boolean(state.winner) || state.top.length === 0}
-          onClick={() => void run('/admin/contest/announce', undefined, `إعلان ${state.top[0]?.name ?? ''} فائزاً وإنهاء السباق؟`)}
+          disabled={busy || Boolean(state.winner || state.noWinner) || state.top.length === 0}
+          onClick={() =>
+            void run(
+              '/admin/contest/announce',
+              undefined,
+              state.totalInvites >= state.minTotalInvites
+                ? `إعلان ${state.top[0]?.name ?? ''} فائزاً وإنهاء السباق؟`
+                : 'مجموع الدعوات أقل من الحد الأدنى، فالسباق راح ينتهي دون فائز. متابعة؟'
+            )
+          }
         >
           🏆 إعلان الفائز الآن
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 10, background: 'rgba(229, 57, 53, 0.2)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
+          disabled={busy || Boolean(state.winner || state.noWinner)}
+          onClick={() => void run('/admin/contest/end-no-winner', undefined, 'إنهاء السباق دون فائز؟ يوصل لكل المشاركين إن السباق انتهى بدون فائز.')}
+        >
+          🏁 إنهاء السباق دون فائز
+        </button>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">🎯 الحد الأدنى للدعوات</h3>
+        <p className="card-sub">مجموع دعوات كل المتسابقين لازم يوصل لهذا الرقم حتى يكون أكو فائز. إذا ما وصل، السباق ينتهي دون فائز.</p>
+        <input
+          type="number"
+          min={0}
+          value={minInvites}
+          onChange={(e) => setMinInvites(e.target.value)}
+          style={{ width: '100%', padding: 12, borderRadius: 12, border: '1px solid #64748b', marginBottom: 10, fontFamily: 'inherit' }}
+        />
+        <button className="btn btn-primary" disabled={busy} onClick={() => void run('/admin/contest/min-invites', { minTotalInvites: Number(minInvites) })}>
+          💾 حفظ
         </button>
       </div>
 

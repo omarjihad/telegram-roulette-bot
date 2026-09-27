@@ -36,7 +36,19 @@ function RaceStatus({ data }: { data: ContestResponse }) {
         <div className="race-status-title">🏁 انتهى السباق</div>
         <div>
           🏆 الفائز: <bdi>{data.winner.name}</bdi> بـ {data.winner.score} دعوة
-          {data.winner.isMe ? ' — مبروك إنت الفائز! 🎉' : ''}
+          {data.winner.isMe ? ' — مبروك، أنت الفائز! 🎉' : ''}
+        </div>
+      </div>
+    );
+  }
+  if (data.noWinner) {
+    return (
+      <div className="race-status race-status-nowinner">
+        <div className="race-status-title">🏁 انتهى السباق دون فائز</div>
+        <div>
+          {data.noWinner.reason === 'min_not_reached'
+            ? `لم يصل مجموع الدعوات إلى الحد الأدنى: ${data.noWinner.totalInvites} من أصل ${data.minTotalInvites} دعوة.`
+            : 'تم إنهاء السباق من قبل الإدارة.'}
         </div>
       </div>
     );
@@ -45,7 +57,7 @@ function RaceStatus({ data }: { data: ContestResponse }) {
     return (
       <div className="race-status race-status-ended">
         <div className="race-status-title">⏳ انتهى وقت السباق</div>
-        <div>الدعوات توقفت، وراح ينعلن الفائز قريباً.</div>
+        <div>توقّف احتساب الدعوات، وسيُعلن الفائز قريباً.</div>
       </div>
     );
   }
@@ -61,6 +73,23 @@ function RaceStatus({ data }: { data: ContestResponse }) {
             <span>{unit.label}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TotalProgress({ data }: { data: ContestResponse }) {
+  const pct = Math.min(100, (data.totalInvites / Math.max(1, data.minTotalInvites)) * 100);
+  const reached = data.totalInvites >= data.minTotalInvites;
+  return (
+    <div className="race-total">
+      <div className="race-total-head">
+        <span>🎯 مجموع دعوات المتسابقين</span>
+        <strong>{data.totalInvites} من {data.minTotalInvites}</strong>
+      </div>
+      <div className="task-progress-track race-total-track"><div className="task-progress-fill" style={{ width: `${pct}%` }} /></div>
+      <div className="race-total-note">
+        {reached ? '✅ تم بلوغ الحد الأدنى، وسيفوز صاحب المركز الأول.' : `يجب الوصول إلى ${data.minTotalInvites} دعوة على الأقل ليكون هناك فائز.`}
       </div>
     </div>
   );
@@ -122,20 +151,22 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
       <div className="contest-hero">
         <div className="contest-hero-icon">🏆</div>
         <h2>سباق الدعوات</h2>
-        <p>ادعُ أصدقاءك، تصدّر القائمة، واربح هدية NFT</p>
+        <p>ادعُ أصدقاءك، وتصدّر القائمة، واربح هدية NFT</p>
       </div>
 
       <RaceStatus data={data} />
+      {!data.winner && !data.noWinner && <TotalProgress data={data} />}
 
       <NftCard prize={data.prize} />
 
       <div className="card contest-explain">
-        <h3 className="card-title">شلون يشتغل السباق؟</h3>
+        <h3 className="card-title">كيف يعمل السباق؟</h3>
         <ol className="contest-steps">
-          <li><span>1</span><div><strong>راح ينعطيك رابط خاص بيك</strong>انشره بالقنوات والكروبات ولأصدقائك.</div></li>
-          <li><span>2</span><div><strong>كل شخص يدخل من رابطك = +1</strong>بشرط يكون جديد، ويشترك بالقنوات الإجبارية ويكمل الكابتشا.</div></li>
-          <li><span>3</span><div><strong>إذا حظر البوت = −1</strong>دعوته تنحذف وتنقص من نقاطك.</div></li>
-          <li><span>4</span><div><strong>كن المتصدر واربح 🏆</strong>المركز الأول فقط يربح الهدية، فحاول تكون رقم 1.</div></li>
+          <li><span>1</span><div><strong>سيتم إعطاؤك رابط خاص بك</strong>انشره في القنوات والمجموعات وبين أصدقائك.</div></li>
+          <li><span>2</span><div><strong>كل شخص ينضم عبر رابطك = +1</strong>بشرط أن يكون جديداً، وأن يشترك في القنوات الإجبارية ويُكمل التحقق (الكابتشا).</div></li>
+          <li><span>3</span><div><strong>إذا حظر البوت = −1</strong>تُحذف دعوته ويُخصم من نقاطك.</div></li>
+          <li><span>4</span><div><strong>كن المتصدر واربح 🏆</strong>يفوز بالهدية صاحب المركز الأول فقط، فاحرص على أن تكون الأول.</div></li>
+          <li><span>5</span><div><strong>الحد الأدنى {data.minTotalInvites} دعوة</strong>يجب أن يصل مجموع دعوات جميع المتسابقين إلى {data.minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.</div></li>
         </ol>
       </div>
 
@@ -148,7 +179,7 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
 
       {error && <p className="wheel-error">{error}</p>}
       <button className="btn btn-primary contest-continue" disabled={left > 0 || joining} onClick={join}>
-        {left > 0 ? `اقرأ الشرح… متابعة بعد ${left}` : joining ? 'جاري التحضير...' : '✅ متابعة'}
+        {left > 0 ? `اقرأ الشرح… المتابعة بعد ${left}` : joining ? 'جارٍ التحضير...' : '✅ متابعة'}
       </button>
     </div>
   );
@@ -185,10 +216,11 @@ function Board({ data }: { data: ContestResponse }) {
       <div className="contest-hero contest-hero-small">
         <div className="contest-hero-icon">🏆</div>
         <h2>سباق الدعوات</h2>
-        <p>{data.participants} متسابق · المركز الأول فقط يربح</p>
+        <p>{data.participants} متسابق · يفوز صاحب المركز الأول فقط</p>
       </div>
 
       <RaceStatus data={data} />
+      {!data.winner && !data.noWinner && <TotalProgress data={data} />}
 
       <NftCard prize={data.prize} />
 
@@ -205,15 +237,15 @@ function Board({ data }: { data: ContestResponse }) {
           <button className="btn btn-primary" onClick={share} disabled={!link}>📤 مشاركة</button>
         </div>
         {data.myPending > 0 && (
-          <p className="contest-note">⏳ {data.myPending} شخص دخل من رابطك وبعده ما كمّل الاشتراك أو الكابتشا.</p>
+          <p className="contest-note">⏳ {data.myPending} شخص انضم عبر رابطك ولم يُكمل الاشتراك أو التحقق بعد.</p>
         )}
       </div>
 
       <div className="card leaderboard">
         <h3 className="card-title">🏅 المتصدرين (أول 25)</h3>
-        <p className="card-sub" style={{ marginTop: 0 }}>اضغط على أي متسابق حتى تفتح حسابه</p>
+        <p className="card-sub" style={{ marginTop: 0 }}>اضغط على أي متسابق لفتح حسابه</p>
         {!first ? (
-          <p className="card-sub" style={{ textAlign: 'center', padding: '12px 0' }}>ماكو متسابقين بعد، كن أول واحد يتصدر! 🚀</p>
+          <p className="card-sub" style={{ textAlign: 'center', padding: '12px 0' }}>لا يوجد متسابقون بعد، كن أول من يتصدّر! 🚀</p>
         ) : (
           <>
             <button className={`lb-leader ${first.isMe ? 'lb-me' : ''}`} onClick={() => openProfile(first.profileLink)}>
@@ -221,7 +253,9 @@ function Board({ data }: { data: ContestResponse }) {
               <Avatar name={first.name} photoUrl={first.photoUrl} />
               <div className="lb-leader-name"><bdi>{first.name}</bdi>{first.isMe ? ' (أنت)' : ''}</div>
               <div className="lb-leader-score">{first.score} دعوة</div>
-              <div className="lb-leader-tag">🏆 {data.winner ? 'فاز بـ' : 'يربح'} {data.prize.name}{data.winner ? '' : ' حالياً'}</div>
+              <div className="lb-leader-tag">
+                {data.winner ? `🏆 فاز بـ ${data.prize.name}` : data.noWinner ? '🥇 المركز الأول' : `🏆 في طريقه لربح ${data.prize.name}`}
+              </div>
             </button>
             <div className="lb-list">
               {rest.map((row) => (
