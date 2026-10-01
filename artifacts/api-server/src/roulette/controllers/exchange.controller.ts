@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
+import { getMediationAdminStats } from '../services/mediation.service';
 import { AppError } from '../utils/AppError';
 import {
   createListing,
@@ -19,6 +20,8 @@ import {
   UploadedFile,
   banListingOwner,
   makeOffer,
+  renewListingByUser,
+  updateListing,
 } from '../services/exchange.service';
 
 const files = (req: Request) => ((req.files as UploadedFile[] | undefined) ?? []);
@@ -49,6 +52,14 @@ export const postExchangeOffer = asyncHandler(async (req: Request, res: Response
   res.json({ ok: true, ...(await makeOffer(req.dbUser!, req.adminRole ?? null, req.params.id, req.body ?? {}, files(req))) });
 });
 
+export const patchExchangeListing = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await updateListing(req.dbUser!, req.adminRole ?? null, req.params.id, req.body ?? {}, files(req))) });
+});
+
+export const postRenewExchangeListing = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await renewListingByUser(req.dbUser!, req.adminRole ?? null, req.params.id)) });
+});
+
 export const deleteExchangeListing = asyncHandler(async (req: Request, res: Response) => {
   res.json({ ok: true, ...(await deleteListingByUser(req.dbUser!, req.adminRole ?? null, req.params.id)) });
 });
@@ -67,11 +78,16 @@ export const getExchangeImageFile = asyncHandler(async (req: Request, res: Respo
 });
 
 export const adminGetExchange = asyncHandler(async (_req: Request, res: Response) => {
-  res.json({ ok: true, settings: await getExchangeAdminSettings() });
+  const [settings, mediation] = await Promise.all([getExchangeAdminSettings(), getMediationAdminStats()]);
+  res.json({ ok: true, settings: { ...settings, mediation } });
 });
 
 export const adminUpdateExchange = asyncHandler(async (req: Request, res: Response) => {
-  res.json({ ok: true, settings: await updateExchangeAdminSettings((req.body ?? {}) as Record<string, unknown>) });
+  const [settings, mediation] = await Promise.all([
+    updateExchangeAdminSettings((req.body ?? {}) as Record<string, unknown>),
+    getMediationAdminStats(),
+  ]);
+  res.json({ ok: true, settings: { ...settings, mediation } });
 });
 
 export const adminGetExchangeReports = asyncHandler(async (req: Request, res: Response) => {

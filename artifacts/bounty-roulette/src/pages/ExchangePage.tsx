@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LayoutGrid, PlusCircle, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutGrid, PlusCircle, ClipboardList, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
 import { locale, tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp, haptic } from '../hooks/useTelegramWebApp';
@@ -9,10 +9,11 @@ import {
   ExchangeListingSummary,
   ExchangeMode,
   ExchangeStatus,
+  MediationTicketView,
   ReportReason,
 } from '../types';
 
-type ExTab = 'browse' | 'post' | 'mine';
+type ExTab = 'browse' | 'post' | 'mediation' | 'mine';
 type Price = { currency: ExchangeCurrency; amount: number };
 type Flash = (text: string) => void;
 
@@ -138,6 +139,8 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
   const [tab, setTab] = useState<ExTab>('browse');
   const [openId, setOpenId] = useState<string | null>(initialListingId ?? null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editing, setEditing] = useState<ExchangeListingDetail | null>(null);
+  const [mediationFor, setMediationFor] = useState<{ username: string; listingId: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
 
@@ -220,6 +223,7 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
   const s = status!;
   const goTab = (t: ExTab) => {
     setOpenId(null);
+    setEditing(null);
     setTab(t);
   };
   const posted = () => {
@@ -231,14 +235,37 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
   return (
     <div className="ex-page ex-main">
       <ExHeader
-        title={tab === 'browse' ? tr('🔄 قسم التبادل', '🔄 Exchange') : tab === 'post' ? tr('➕ اعرض حسابك', '➕ Post your account') : tr('📋 منشوراتي', '📋 My posts')}
+        title={
+          editing
+            ? tr('✏️ تعديل المنشور', '✏️ Edit post')
+            : tab === 'browse'
+            ? tr('🔄 قسم التبادل', '🔄 Exchange')
+            : tab === 'post'
+            ? tr('➕ اعرض حسابك', '➕ Post your account')
+            : tab === 'mediation'
+            ? tr('🛡️ الوساطة', '🛡️ Middleman')
+            : tr('📋 منشوراتي', '📋 My posts')
+        }
         onBack={onBack}
       />
       {s.comingSoon && <div className="games-soon-banner">{tr('🧪 وضع الاختبار: القسم ظاهر للمطورين فقط.', '🧪 Test mode: only developers can see this section.')}</div>}
 
-      {tab === 'browse' && <ListingGrid refreshKey={refreshKey} onOpen={setOpenId} emptyAction={() => goTab('post')} />}
-      {tab === 'post' && <PostForm status={s} flash={flash} onPosted={posted} />}
-      {tab === 'mine' && <MyListings refreshKey={refreshKey} status={s} onOpen={setOpenId} onNew={() => goTab('post')} />}
+      {editing ? (
+        <>
+          <button className="btn btn-secondary" onClick={() => { setOpenId(editing.id); setEditing(null); }}>{tr('↩️ إلغاء التعديل', '↩️ Cancel editing')}</button>
+          <PostForm
+            key={editing.id}
+            status={s}
+            flash={flash}
+            initial={editing}
+            onPosted={() => { const id = editing.id; setEditing(null); setRefreshKey((k) => k + 1); setOpenId(id); }}
+          />
+        </>
+      ) : null}
+      {!editing && tab === 'browse' && <ListingGrid refreshKey={refreshKey} onOpen={setOpenId} emptyAction={() => goTab('post')} />}
+      {!editing && tab === 'post' && <PostForm status={s} flash={flash} onPosted={posted} />}
+      {!editing && tab === 'mediation' && <MediationPanel flash={flash} prefill={mediationFor} onPrefillUsed={() => setMediationFor(null)} />}
+      {!editing && tab === 'mine' && <MyListings refreshKey={refreshKey} status={s} onOpen={setOpenId} onNew={() => goTab('post')} />}
 
       {openId && (
         <ListingDetail
@@ -247,6 +274,8 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
           flash={flash}
           onClose={() => setOpenId(null)}
           onChanged={() => { setRefreshKey((k) => k + 1); void loadStatus(); }}
+          onEdit={(l) => { setOpenId(null); setEditing(l); window.scrollTo(0, 0); }}
+          onRequestMediator={(username, listingId) => { setMediationFor({ username, listingId }); goTab('mediation'); }}
         />
       )}
 
@@ -254,6 +283,7 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
         {([
           ['browse', tr('الحسابات', 'Accounts'), <LayoutGrid size={22} key="i" />],
           ['post', tr('اعرض حسابك', 'Post'), <PlusCircle size={22} key="i" />],
+          ['mediation', tr('الوساطة', 'Middleman'), <ShieldCheck size={22} key="i" />],
           ['mine', tr('منشوراتي', 'My posts'), <ClipboardList size={22} key="i" />],
         ] as [ExTab, string, React.ReactNode][]).map(([key, label, icon]) => (
           <button key={key} className={`nav-item ${tab === key ? 'active' : ''}`} onClick={() => { haptic('light'); goTab(key); }}>
@@ -289,6 +319,7 @@ function ListingCard({ l, onOpen, showExpiry = false }: { l: ExchangeListingSumm
         {l.coverUrl ? <img src={l.coverUrl} alt="" loading="lazy" /> : <span>🎮</span>}
         {l.pinned && <span className="ex-pin">📌</span>}
         {l.imageCount > 1 && <span className="ex-count">🖼️ {l.imageCount}</span>}
+        <span className="ex-views">👁️ {l.views}</span>
       </div>
       <div className="ex-card-body">
         <ModeBadge mode={l.mode} />
@@ -375,17 +406,22 @@ function MyListings({ refreshKey, status, onOpen, onNew }: { refreshKey: number;
   );
 }
 
-function PostForm({ status, flash, onPosted }: { status: ExchangeStatus; flash: Flash; onPosted: () => void }) {
-  const [mode, setMode] = useState<ExchangeMode>('both');
-  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+type FormPhoto = { url: string; file?: File; id?: string };
+
+/** New post, or (with `initial`) editing one: photos already on it are kept unless removed. */
+function PostForm({ status, flash, onPosted, initial }: { status: ExchangeStatus; flash: Flash; onPosted: () => void; initial?: ExchangeListingDetail }) {
+  const [mode, setMode] = useState<ExchangeMode>(initial?.mode ?? 'both');
+  const [photos, setPhotos] = useState<FormPhoto[]>(() => initial?.images.map((url) => ({ url, id: url.split('/').pop() })) ?? []);
   const [cover, setCover] = useState(0);
-  const [details, setDetails] = useState('');
+  const [details, setDetails] = useState(initial?.details ?? '');
   // Selected payment methods, in the order they were picked, each with its own price.
-  const [prices, setPrices] = useState<{ currency: ExchangeCurrency; amount: string }[]>([]);
+  const [prices, setPrices] = useState<{ currency: ExchangeCurrency; amount: string }[]>(
+    () => initial?.prices.map((p) => ({ currency: p.currency, amount: String(p.amount) })) ?? []
+  );
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => photos.forEach((p) => p.file && URL.revokeObjectURL(p.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -396,7 +432,7 @@ function PostForm({ status, flash, onPosted }: { status: ExchangeStatus; flash: 
   }
 
   function removePhoto(i: number) {
-    URL.revokeObjectURL(photos[i].url);
+    if (photos[i].file) URL.revokeObjectURL(photos[i].url);
     setPhotos((cur) => cur.filter((_, j) => j !== i));
     setCover((c) => (i === c ? 0 : i < c ? c - 1 : c));
   }
@@ -419,12 +455,29 @@ function PostForm({ status, flash, onPosted }: { status: ExchangeStatus; flash: 
       const form = new FormData();
       form.append('mode', mode);
       form.append('details', details.trim());
-      form.append('cover', String(cover));
       if (mode !== 'trade') form.append('prices', JSON.stringify(prices.map((p) => ({ currency: p.currency, amount: Number(p.amount) }))));
-      for (const [i, p] of photos.entries()) form.append('images', await compressImage(p.file), `photo-${i + 1}.jpg`);
-      await api.form('/exchange/listings', form);
+      if (initial) {
+        // Final photo order, cover first: "e:<id>" keeps a photo, "n:<k>" is the k-th new upload.
+        const ordered = [photos[cover], ...photos.filter((_, i) => i !== cover)];
+        const order: string[] = [];
+        let k = 0;
+        for (const p of ordered) {
+          if (p.file) {
+            form.append('images', await compressImage(p.file), `photo-${k + 1}.jpg`);
+            order.push(`n:${k++}`);
+          } else {
+            order.push(`e:${p.id}`);
+          }
+        }
+        form.append('order', JSON.stringify(order));
+        await api.form(`/exchange/listings/${initial.id}`, form, 'PATCH');
+      } else {
+        form.append('cover', String(cover));
+        for (const [i, p] of photos.entries()) form.append('images', await compressImage(p.file!), `photo-${i + 1}.jpg`);
+        await api.form('/exchange/listings', form);
+      }
       haptic('heavy');
-      flash(tr('✅ تم نشر حسابك بنجاح، يبقى معروضاً 4 أيام', '✅ Your account is posted for 4 days'));
+      flash(initial ? tr('✅ تم حفظ التعديلات', '✅ Changes saved') : tr('✅ تم نشر حسابك بنجاح، يبقى معروضاً 4 أيام', '✅ Your account is posted for 4 days'));
       onPosted();
     } catch (err) {
       flash(errText(err));
@@ -519,7 +572,7 @@ function PostForm({ status, flash, onPosted }: { status: ExchangeStatus; flash: 
 
       <p className="card-sub ex-hint">{tr('⚠️ بنشرك للحساب أنت توافق على التعامل عن طريق وسيط فقط. ⏰ المنشور ينحذف تلقائياً بعد 4 أيام.', '⚠️ By posting you agree to deal through a middleman only. ⏰ Posts are removed automatically after 4 days.')}</p>
       <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
-        {busy ? tr('جاري النشر...', 'Posting...') : tr('🚀 نشر الحساب', '🚀 Post the account')}
+        {busy ? tr('جاري الحفظ...', 'Saving...') : initial ? tr('💾 حفظ التعديلات', '💾 Save changes') : tr('🚀 نشر الحساب', '🚀 Post the account')}
       </button>
     </div>
   );
@@ -665,7 +718,23 @@ function OfferModal({ listingId, mode, maxImages, flash, onClose }: { listingId:
   );
 }
 
-function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; status: ExchangeStatus; flash: Flash; onClose: () => void; onChanged: () => void }) {
+function ListingDetail({
+  id,
+  status,
+  flash,
+  onClose,
+  onChanged,
+  onEdit,
+  onRequestMediator,
+}: {
+  id: string;
+  status: ExchangeStatus;
+  flash: Flash;
+  onClose: () => void;
+  onChanged: () => void;
+  onEdit: (l: ExchangeListingDetail) => void;
+  onRequestMediator: (username: string, listingId: string) => void;
+}) {
   const [listing, setListing] = useState<ExchangeListingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
@@ -725,6 +794,7 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
               <div className="ex-detail-meta">
                 <span>👤 <bdi>{listing.ownerName ?? tr('مستخدم', 'User')}</bdi></span>
                 <span>🕒 {new Date(listing.createdAt).toLocaleDateString(locale())}</span>
+                <span>👁️ {listing.views} {tr('مشاهدة', 'views')}</span>
                 {listing.canModerate && listing.reportsCount !== undefined && <span>🚩 {listing.reportsCount}</span>}
               </div>
               {listing.status === 'active' && <div className="ex-expiry">⏰ {tr('ينحذف تلقائياً بعد', 'Removed automatically in')} {timeLeft(listing.expiresAt)}</div>}
@@ -733,7 +803,11 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
                 <div className="ex-actions">
                   <button className="btn btn-primary" onClick={() => setOffering(true)}>{tr('💌 تقديم عرض عن طريق البوت', '💌 Make an offer through the bot')}</button>
                   <button className="btn btn-secondary" onClick={() => setWarning(true)}>{tr('💬 تواصل مع صاحب الحساب', '💬 Contact the owner')}</button>
-                  <button className="btn btn-secondary" onClick={() => openTgLink(middlemen)}>{tr('🛡️ وسطاء MF', '🛡️ MF middlemen')}</button>
+                  {listing.owner.username ? (
+                    <button className="btn btn-secondary ex-mediator-btn" onClick={() => onRequestMediator(listing.owner.username!, listing.id)}>{tr('🛡️ طلب وسيط ويّا صاحب الحساب', '🛡️ Request a middleman with the owner')}</button>
+                  ) : (
+                    <button className="btn btn-secondary" onClick={() => openTgLink(middlemen)}>{tr('🛡️ وسطاء MF', '🛡️ MF middlemen')}</button>
+                  )}
                   <button className="btn ex-report-btn" onClick={() => setReporting(true)}>{tr('🚩 إبلاغ عن المنشور', '🚩 Report this post')}</button>
                 </div>
               )}
@@ -749,6 +823,19 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
                 >
                   {tr('🔗 نسخ رابط المنشور', '🔗 Copy post link')}
                 </button>
+              )}
+
+              {listing.isMine && listing.status === 'active' && (
+                <div className="ex-actions">
+                  <button className="btn btn-primary" onClick={() => onEdit(listing)}>{tr('✏️ تعديل المنشور', '✏️ Edit post')}</button>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy || !listing.canRenew}
+                    onClick={() => void act(() => api.post(`/exchange/listings/${listing.id}/renew`), tr('🔄 تم التجديد، يبقى معروض 4 أيام ثانية', '🔄 Renewed for another 4 days'))}
+                  >
+                    {listing.canRenew ? tr('🔄 تجديد 4 أيام', '🔄 Renew for 4 days') : tr('🔄 التجديد يتفعل بآخر يوم', '🔄 Renewal opens in the last day')}
+                  </button>
+                </div>
               )}
 
               {listing.isMine && listing.status === 'active' && (
@@ -819,7 +906,12 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
               <div className="ex-warning-icon">⚠️</div>
               <h2>{tr('احذر! لا تثق بأحد وتعامل بوسيط فقط!', "Careful! Trust no one and deal through a middleman only!")}</h2>
               <p className="card-sub">{tr('أي تبادل بدون وسيط على مسؤوليتك، وإذا تمت سرقتك ستُحظر من البوت لأنه تم تنبيهك.', "Any deal without a middleman is at your own risk. If you get scammed you'll be banned, because you were warned.")}</p>
-              <button className="btn btn-primary" onClick={() => openTgLink(middlemen)}>{tr('🛡️ اطلب وسيط من وسطاء MF', '🛡️ Get an MF middleman')}</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => (listing.owner.username ? onRequestMediator(listing.owner.username, listing.id) : openTgLink(middlemen))}
+              >
+                {tr('🛡️ اطلب وسيط من وسطاء MF', '🛡️ Get an MF middleman')}
+              </button>
               <button className="btn btn-secondary" onClick={() => { setWarning(false); openTgLink(listing.owner.profileLink); }}>{tr('💬 فهمت، تواصل مع صاحب الحساب', '💬 Got it, contact the owner')}</button>
             </div>
           </div>
@@ -928,6 +1020,280 @@ function ReportFlow({ listingId, reasons, flash, onClose }: { listingId: string;
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+type MediationData = { enabled: boolean; windowMinutes: number; tickets: MediationTicketView[] };
+type Partner = { telegramId: number; username: string | null; name: string | null; photoUrl: string | null };
+const OPEN_TICKET = ['waiting_join', 'waiting_mediator', 'in_progress'];
+
+function ticketStatusLabel(status: MediationTicketView['status']) {
+  switch (status) {
+    case 'waiting_join': return tr('⏳ بانتظار طلبات الانضمام', '⏳ Waiting for join requests');
+    case 'waiting_mediator': return tr('📣 بانتظار وسيط', '📣 Waiting for a middleman');
+    case 'in_progress': return tr('🤝 الوسيط استلمها', '🤝 Taken by a middleman');
+    case 'completed': return tr('✅ مكتملة', '✅ Completed');
+    case 'expired': return tr('⌛ انتهى وقتها', '⌛ Expired');
+    default: return tr('🚫 ملغية', '🚫 Cancelled');
+  }
+}
+
+function useNow(active: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return now;
+}
+
+function TicketCard({ ticket, flash, onCancel, busy }: { ticket: MediationTicketView; flash: Flash; onCancel: () => void; busy: boolean }) {
+  const now = useNow(ticket.status === 'waiting_join');
+  const left = Math.max(0, new Date(ticket.expiresAt).getTime() - now);
+  const mm = String(Math.floor(left / 60000)).padStart(2, '0');
+  const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, '0');
+  const shareText = ticket.groupLink
+    ? tr(
+        `اطلب انضمام لكروب وسطاء MF من هذا الرابط حتى نكمل التبادل (تذكرة #${ticket.number}):\n${ticket.groupLink}`,
+        `Ask to join the MF middleman group with this link so we can finish the trade (ticket #${ticket.number}):\n${ticket.groupLink}`
+      )
+    : '';
+
+  return (
+    <div className={`card ex-ticket ex-ticket-${ticket.status}`}>
+      <div className="ex-ticket-head">
+        <strong>🎫 {tr('تذكرة', 'Ticket')} <bdi dir="ltr">#{ticket.number}</bdi></strong>
+        <span className="ex-ticket-status">{ticketStatusLabel(ticket.status)}</span>
+      </div>
+
+      {ticket.status === 'waiting_join' && (
+        <>
+          <div className="ex-ticket-timer">
+            <span>{tr('الوقت المتبقي', 'Time left')}</span>
+            <b dir="ltr">{mm}:{ss}</b>
+          </div>
+          <div className="ex-ticket-steps">
+            <div className={`ex-ticket-step ${ticket.me.requested ? 'done' : ''}`}>
+              <span className="ex-step-dot">{ticket.me.requested ? '✓' : '1'}</span>
+              <div>
+                <b>{tr('اطلب انضمام للكروب', 'Ask to join the group')}</b>
+                <div className="ex-step-btns">
+                  <button className="btn btn-primary" onClick={() => openTgLink(ticket.groupLink!)}>{tr('🚪 طلب انضمام', '🚪 Request to join')}</button>
+                </div>
+              </div>
+            </div>
+            <div className={`ex-ticket-step ${ticket.other.requested ? 'done' : ''}`}>
+              <span className="ex-step-dot">{ticket.other.requested ? '✓' : '2'}</span>
+              <div>
+                <b>{tr('ارسل الرابط لطرفك الثاني', 'Send the link to the other side')}</b>
+                <div className="card-sub" style={{ margin: '2px 0 6px' }}>
+                  <bdi>{ticket.other.name}</bdi> — {ticket.other.requested ? tr('طلب انضمام ✅', 'asked to join ✅') : tr('ما طلب بعد ⏳', 'not yet ⏳')}
+                </div>
+                <div className="ex-step-btns">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void copyText(shareText).then((ok) => flash(ok ? tr('🔗 تم نسخ الرابط، دزه لطرفك', '🔗 Link copied, send it to them') : ticket.groupLink!))}
+                  >
+                    {tr('🔗 نسخ الرابط', '🔗 Copy link')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p className="card-sub ex-hint">{tr('⚠️ إذا ما طلبتوا انضمام ثنينكم خلال 15 دقيقة تنلغي التذكرة تلقائياً.', "⚠️ If you don't both ask to join within 15 minutes, the ticket is cancelled automatically.")}</p>
+          {ticket.isRequester && (
+            <button className="btn ex-danger-btn" disabled={busy} onClick={onCancel}>{tr('إلغاء التذكرة', 'Cancel ticket')}</button>
+          )}
+        </>
+      )}
+
+      {ticket.status === 'waiting_mediator' && (
+        <div className="ex-ticket-wait">
+          <div className="ex-ticket-pulse">📣</div>
+          <p>{tr('ثنينكم طلبتوا انضمام ✅\nتم تنبيه الوسطاء، أول وسيط يستلم التذكرة يقبلكم بالكروب.', 'You both asked to join ✅\nThe middlemen were notified; the first one to take the ticket lets you in.')}</p>
+        </div>
+      )}
+
+      {ticket.status === 'in_progress' && (
+        <div className="ex-ticket-wait">
+          <div style={{ fontSize: 38 }}>🤝</div>
+          <p>
+            {tr('راح يتوسطلكم:', 'Your middleman:')} <b><bdi>{ticket.mediator}</bdi></b>
+            <br />
+            {tr('تم قبولكم بالكروب، كمّلوا التبادل هناك فقط.', "You're in the group; finish the trade there only.")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefill: { username: string; listingId: string } | null; onPrefillUsed: () => void }) {
+  const [data, setData] = useState<MediationData | null>(null);
+  const [username, setUsername] = useState('');
+  const [listingId, setListingId] = useState<string | null>(null);
+  const [partner, setPartner] = useState<Partner | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get<MediationData>('/mediation'));
+    } catch {
+      setData({ enabled: false, windowMinutes: 15, tickets: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const active = data?.tickets.find((t) => OPEN_TICKET.includes(t.status) && t.status !== 'in_progress') ?? data?.tickets.find((t) => t.status === 'in_progress');
+  // Live updates while waiting on the other side or a middleman.
+  useEffect(() => {
+    if (!active || active.status === 'in_progress') return;
+    const id = window.setInterval(() => void load(), 4000);
+    return () => window.clearInterval(id);
+  }, [active, load]);
+
+  async function lookup(name = username) {
+    if (busy) return;
+    if (!name.trim()) return flash(tr('اكتب يوزر طرفك الثاني', 'Enter the other side’s username'));
+    setBusy(true);
+    try {
+      const res = await api.post<{ partner: Partner }>('/mediation/lookup', { username: name });
+      setPartner(res.partner);
+    } catch (err) {
+      setPartner(null);
+      flash(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!prefill || !data?.enabled) return;
+    setUsername('@' + prefill.username);
+    setListingId(prefill.listingId);
+    onPrefillUsed();
+    void lookup(prefill.username);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, data?.enabled]);
+
+  async function create() {
+    if (!partner || busy) return;
+    setBusy(true);
+    try {
+      await api.post('/mediation/tickets', { username: partner.username, listingId });
+      haptic('heavy');
+      setPartner(null);
+      setUsername('');
+      setListingId(null);
+      await load();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      flash(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel(id: string) {
+    if (!window.confirm(tr('إلغاء التذكرة؟', 'Cancel the ticket?'))) return;
+    setBusy(true);
+    try {
+      await api.post(`/mediation/tickets/${id}/cancel`);
+      await load();
+    } catch (err) {
+      flash(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!data) return <div className="card ex-empty"><p>{tr('يتم التحميل...', 'Loading...')}</p></div>;
+  const history = data.tickets.filter((t) => t !== active);
+  const blocking = active && active.status !== 'in_progress';
+
+  return (
+    <div className="ex-form">
+      <div className="ex-med-hero">
+        <div className="ex-med-icon">🛡️</div>
+        <div>
+          <b>{tr('وسيط مضمون لتبادلك', 'A trusted middleman for your trade')}</b>
+          <span>{tr('اطلب وسيط من وسطاء MF وكمّل التبادل بأمان', 'Request an MF middleman and trade safely')}</span>
+        </div>
+      </div>
+
+      {!data.enabled ? (
+        <div className="card ex-empty"><div style={{ fontSize: 40 }}>🔧</div><p>{tr('الوساطة غير مفعّلة حالياً، ارجع بعدين.', 'Mediation is not available right now, check back later.')}</p></div>
+      ) : (
+        <>
+          {active && <TicketCard ticket={active} flash={flash} busy={busy} onCancel={() => void cancel(active.id)} />}
+
+          {!blocking && (
+            <div className="card ex-form-card">
+              <label className="ex-label">{tr('👤 منو طرفك الثاني؟', '👤 Who is the other side?')}</label>
+              <div className="ex-med-search">
+                <input
+                  className="ex-input"
+                  dir="ltr"
+                  value={username}
+                  onChange={(e) => { setUsername(e.target.value); setPartner(null); }}
+                  onKeyDown={(e) => e.key === 'Enter' && void lookup()}
+                  placeholder="@username"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+                <button className="btn btn-primary" disabled={busy} onClick={() => void lookup()}>{tr('بحث', 'Find')}</button>
+              </div>
+              <p className="card-sub ex-hint" style={{ textAlign: 'start', margin: 0 }}>{tr('لازم طرفك يكون فاتح البوت مرة وحدة على الأقل.', 'The other side must have opened the bot at least once.')}</p>
+
+              {partner && (
+                <div className="ex-med-confirm">
+                  <div className="ex-med-avatar">
+                    {partner.photoUrl ? <img src={partner.photoUrl} alt="" /> : <span>{(partner.name || partner.username || '?').charAt(0).toUpperCase()}</span>}
+                  </div>
+                  <div className="ex-med-who">
+                    <span>{tr('هل طرفك هو:', 'Is the other side:')}</span>
+                    <b><bdi>{partner.name || partner.username}</bdi></b>
+                    {partner.username && <small dir="ltr">@{partner.username}</small>}
+                  </div>
+                  <div className="ex-row-btns" style={{ width: '100%' }}>
+                    <button className="btn btn-secondary" onClick={() => setPartner(null)}>{tr('لا', 'No')}</button>
+                    <button className="btn btn-primary" disabled={busy} onClick={() => void create()}>{busy ? '...' : tr('نعم، اطلب وسيط', 'Yes, request')}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="card ex-rules">
+            <h3>{tr('📋 شلون تشتغل الوساطة', '📋 How it works')}</h3>
+            <ul>
+              <li><span className="ex-rule-icon">1</span><span>{tr('اكتب يوزر طرفك وأكد إنه هو.', 'Enter the other side’s username and confirm it’s them.')}</span></li>
+              <li><span className="ex-rule-icon">2</span><span>{tr('اطلب انضمام لكروب الوساطة، ودز الرابط لطرفك حتى يطلب هو هم.', 'Ask to join the mediation group and send the link to the other side so they ask too.')}</span></li>
+              <li><span className="ex-rule-icon">3</span><span>{tr(`عندكم ${data.windowMinutes} دقيقة، وإلا تنلغي التذكرة.`, `You have ${data.windowMinutes} minutes, or the ticket is cancelled.`)}</span></li>
+              <li><span className="ex-rule-icon">4</span><span>{tr('أول وسيط يستلم التذكرة يقبلكم بالكروب ويتوسطلكم.', 'The first middleman to take the ticket lets you in and handles the trade.')}</span></li>
+            </ul>
+          </div>
+
+          {history.length > 0 && (
+            <div className="card">
+              <h3 className="card-title" style={{ marginTop: 0 }}>{tr('🗂️ تذاكري السابقة', '🗂️ My previous tickets')}</h3>
+              <div className="ex-ticket-history">
+                {history.map((t) => (
+                  <div key={t.id} className="ex-ticket-row">
+                    <span><bdi dir="ltr">#{t.number}</bdi> · <bdi>{t.other.name}</bdi></span>
+                    <span className="ex-ticket-status">{ticketStatusLabel(t.status)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

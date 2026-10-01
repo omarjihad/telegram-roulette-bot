@@ -33,6 +33,10 @@ export interface IExchangeListing extends Document {
   removedAt?: Date | null;
   removedByTelegramId?: number | null;
   reportsCount: number;
+  // Unique viewers (one count per person, the owner excluded).
+  views: number;
+  // Set once the "your post expires soon" reminder went out; cleared on renewal.
+  renewReminderSentAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +63,8 @@ const listingSchema = new Schema<IExchangeListing>(
     removedAt: { type: Date, default: null },
     removedByTelegramId: { type: Number, default: null },
     reportsCount: { type: Number, default: 0 },
+    views: { type: Number, default: 0 },
+    renewReminderSentAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

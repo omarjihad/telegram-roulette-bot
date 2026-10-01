@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   listingFind: vi.fn(),
   offerExists: vi.fn(),
   offerCreate: vi.fn(),
+  viewUpsert: vi.fn(),
 }));
 
 vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
@@ -37,6 +38,7 @@ vi.mock('../models/ExchangeReport', () => ({
   REPORT_REASONS: ['scammer', 'no_middleman', 'not_owner', 'fake_info', 'other'],
   ExchangeReport: { exists: mocks.reportExists, create: mocks.reportCreate },
 }));
+vi.mock('../models/ExchangeView', () => ({ ExchangeView: { updateOne: mocks.viewUpsert } }));
 vi.mock('../models/ExchangeOffer', () => ({ ExchangeOffer: { exists: mocks.offerExists, create: mocks.offerCreate } }));
 vi.mock('../models/AuditLog', () => ({ writeAudit: mocks.audit }));
 vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
@@ -45,7 +47,7 @@ vi.mock('./ban.service', () => ({ banUser: vi.fn() }));
 vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot', MINI_APP_SHORT_NAME: 'MFR' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { buildListingLink, createListing, exchangeAllowed, expireOldListings, listingPrices, makeOffer, removeListing, reportListing } from './exchange.service';
+import { getListing, renewListing, updateListing, buildListingLink, createListing, exchangeAllowed, expireOldListings, listingPrices, makeOffer, removeListing, reportListing } from './exchange.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 77, username: 'seller', firstName: 'S' } as never;
 const img = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
@@ -212,5 +214,55 @@ describe('reportListing', () => {
     mocks.listingFindById.mockResolvedValue(listing());
     mocks.reportExists.mockResolvedValue({ _id: 1 });
     await expect(reportListing(user, 'developer', String(new mongoose.Types.ObjectId()), { reason: 'scammer', description: 'abcdef' }, [])).rejects.toMatchObject({ code: 'ALREADY_REPORTED' });
+  });
+});
+
+describe('views', () => {
+  it('counts each person once and never the owner', async () => {
+    const doc = listing({ expiresAt: new Date(Date.now() + 3600e3), views: 4 });
+    mocks.listingFindById.mockResolvedValue(doc);
+    mocks.viewUpsert.mockResolvedValueOnce({ upsertedCount: 1 });
+    expect((await getListing(user, 'developer', String(doc._id))).listing.views).toBe(5);
+    mocks.viewUpsert.mockResolvedValueOnce({ upsertedCount: 0 });
+    expect((await getListing(user, 'developer', String(doc._id))).listing.views).toBe(5);
+    mocks.viewUpsert.mockClear();
+    mocks.listingFindById.mockResolvedValue(listing({ ownerTelegramId: 77, expiresAt: new Date(Date.now() + 3600e3) }));
+    await getListing(user, 'developer', String(doc._id));
+    expect(mocks.viewUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('renewListing', () => {
+  it('opens only in the last day and adds 4 days', async () => {
+    const early = listing({ ownerTelegramId: 77, expiresAt: new Date(Date.now() + 2 * 86400e3) });
+    mocks.listingFindById.mockResolvedValue(early);
+    await expect(renewListing(77, String(early._id))).rejects.toMatchObject({ code: 'TOO_EARLY' });
+    const late = listing({ ownerTelegramId: 77, expiresAt: new Date(Date.now() + 3 * 3600e3), renewReminderSentAt: new Date() }) as ReturnType<typeof listing> & { expiresAt: Date; renewReminderSentAt: Date | null };
+    mocks.listingFindById.mockResolvedValue(late);
+    await expect(renewListing(5, String(late._id))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await renewListing(77, String(late._id));
+    expect(late.expiresAt.getTime() - Date.now()).toBeGreaterThan(4 * 86400e3 - 5000);
+    expect(late.renewReminderSentAt).toBeNull();
+  });
+});
+
+describe('updateListing', () => {
+  it('keeps, reorders, adds and drops photos', async () => {
+    const [a, b, c] = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
+    const doc = listing({ ownerTelegramId: 77, images: [a, b, c], expiresAt: new Date(Date.now() + 3600e3) });
+    mocks.listingFindById.mockResolvedValue(doc);
+    const fresh = new mongoose.Types.ObjectId();
+    mocks.imageInsert.mockResolvedValueOnce([{ _id: fresh }]);
+    await updateListing(user, 'developer', String(doc._id), { mode: 'trade', details: 'Updated account details', order: JSON.stringify([`e:${c}`, 'n:0', `e:${a}`]) }, [img]);
+    expect(doc.images.map(String)).toEqual([String(c), String(fresh), String(a)]);
+    expect(mocks.imageDelete).toHaveBeenCalledWith({ _id: { $in: [b] } });
+    expect(doc.details).toBe('Updated account details');
+  });
+
+  it("rejects someone else's post and photos that aren't on it", async () => {
+    mocks.listingFindById.mockResolvedValue(listing({ expiresAt: new Date(Date.now() + 3600e3) }));
+    await expect(updateListing(user, 'developer', String(new mongoose.Types.ObjectId()), { mode: 'trade', details: 'Updated account details', order: '["n:0"]' }, [img])).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    mocks.listingFindById.mockResolvedValue(listing({ ownerTelegramId: 77, expiresAt: new Date(Date.now() + 3600e3) }));
+    await expect(updateListing(user, 'developer', String(new mongoose.Types.ObjectId()), { mode: 'trade', details: 'Updated account details', order: JSON.stringify([`e:${new mongoose.Types.ObjectId()}`]) }, [])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

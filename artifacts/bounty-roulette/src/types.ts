@@ -269,6 +269,7 @@ export interface ExchangeListingSummary {
   status: 'active' | 'removed';
   coverUrl: string | null;
   imageCount: number;
+  views: number;
   ownerName: string | null;
   createdAt: string;
 }
@@ -279,5 +280,21 @@ export interface ExchangeListingDetail extends ExchangeListingSummary {
   isMine: boolean;
   canModerate: boolean;
   shareLink: string | null;
+  canRenew: boolean;
   reportsCount?: number;
+}
+
+export type MediationStatus = 'waiting_join' | 'waiting_mediator' | 'in_progress' | 'completed' | 'expired' | 'cancelled';
+
+export interface MediationTicketView {
+  id: string;
+  number: number;
+  status: MediationStatus;
+  isRequester: boolean;
+  expiresAt: string;
+  groupLink: string | null;
+  me: { requested: boolean };
+  other: { name: string; requested: boolean };
+  mediator: string | null;
+  createdAt: string;
 }

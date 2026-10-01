@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyTelegramInitData } from '../utils/telegramAuth';
 import { findOrCreateUser } from '../services/user.service';
+import { User } from '../models/User';
 import { getSettings } from '../models/Settings';
 import { getAdminRole } from '../services/admin.service';
 import { AppError } from '../utils/AppError';
@@ -94,6 +95,12 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
       if (!captchaOpen.includes(req.path)) {
         throw new AppError('Captcha required', 403, 'CAPTCHA_REQUIRED');
       }
+    }
+
+    // Activity for the stats page; written at most every 5 minutes per user.
+    if (!user.lastSeenAt || Date.now() - user.lastSeenAt.getTime() > 5 * 60 * 1000) {
+      user.lastSeenAt = new Date();
+      void User.updateOne({ _id: user._id }, { $set: { lastSeenAt: user.lastSeenAt } }).catch(() => undefined);
     }
 
     req.dbUser = user;

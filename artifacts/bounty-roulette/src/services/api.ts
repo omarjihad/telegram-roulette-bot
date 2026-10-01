@@ -50,14 +50,14 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   /** Multipart POST with several fields/files (exchange posts and reports). */
-  form: async <T>(path: string, form: FormData): Promise<T> => {
+  form: async <T>(path: string, form: FormData, method: 'POST' | 'PATCH' = 'POST'): Promise<T> => {
     if (isPreviewMode()) {
       const err = new TelegramOnlyError();
       throw new ApiError(err.message, err.code, err.status);
     }
     const initData = getTelegramWebApp()?.initData ?? '';
     const res = await fetch(`${API_BASE}${path}`, {
-      method: 'POST',
+      method,
       headers: { 'X-Telegram-Init-Data': initData, 'X-Lang': getLang() },
       body: form,
     });

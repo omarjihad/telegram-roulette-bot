@@ -12,6 +12,7 @@ import {
   LISTING_LIFETIME_MS,
 } from '../models/ExchangeListing';
 import { ExchangeOffer } from '../models/ExchangeOffer';
+import { ExchangeView } from '../models/ExchangeView';
 import { ExchangeImage } from '../models/ExchangeImage';
 import { ExchangeReport, REPORT_REASONS, ReportReason } from '../models/ExchangeReport';
 import { writeAudit } from '../models/AuditLog';
@@ -29,6 +30,8 @@ export const MAX_ACTIVE_LISTINGS = 5;
 const MAX_ACTIVE_LISTINGS_ADMIN = 20;
 const PAGE_SIZE = 20;
 const MAX_PRICE = 100_000_000;
+/** Renewal opens (and the reminder goes out) in a post's last day. */
+const RENEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 
 /** Arabic labels used in the developers' bot messages. */
@@ -109,6 +112,7 @@ function summary(l: IExchangeListing) {
     status: l.status,
     coverUrl: l.images[0] ? exchangeImageUrl(l.images[0]) : null,
     imageCount: l.images.length,
+    views: l.views ?? 0,
     ownerName: l.ownerUsername ? '@' + l.ownerUsername : l.ownerName || null,
     createdAt: l.createdAt,
   };
@@ -135,6 +139,19 @@ export interface UploadedFile {
   mimetype: string;
   size: number;
   originalname?: string;
+}
+
+/** Mode, details and prices of a post, checked the same way when it's created or edited. */
+function parseListingFields(input: { mode?: unknown; details?: unknown; prices?: unknown }) {
+  const mode = String(input.mode ?? '') as ExchangeMode;
+  if (!['trade', 'sell', 'both'].includes(mode)) {
+    throw new AppError(t('اختر مكان عرض الحساب', 'Choose where to show the account'), 422, 'VALIDATION_ERROR');
+  }
+  const details = String(input.details ?? '').trim();
+  if (details.length < 10) throw new AppError(t('اكتب تفاصيل الحساب (10 أحرف على الأقل)', 'Write the account details (at least 10 characters)'), 422, 'VALIDATION_ERROR');
+  if (details.length > 1500) throw new AppError(t('التفاصيل طويلة جداً (1500 حرف كحد أقصى)', 'Details are too long (1500 characters max)'), 422, 'VALIDATION_ERROR');
+  const prices = mode === 'trade' ? [] : parsePrices(input.prices);
+  return { mode, details, prices };
 }
 
 /** Accepts `[{currency, amount}]` (a JSON string from the multipart form, or an array). */
@@ -175,15 +192,7 @@ export async function createListing(
 ) {
   await assertAllowed(adminRole);
   let files = uploaded;
-  const mode = String(input.mode ?? '') as ExchangeMode;
-  if (!['trade', 'sell', 'both'].includes(mode)) {
-    throw new AppError(t('اختر مكان عرض الحساب', 'Choose where to show the account'), 422, 'VALIDATION_ERROR');
-  }
-  const details = String(input.details ?? '').trim();
-  if (details.length < 10) throw new AppError(t('اكتب تفاصيل الحساب (10 أحرف على الأقل)', 'Write the account details (at least 10 characters)'), 422, 'VALIDATION_ERROR');
-  if (details.length > 1500) throw new AppError(t('التفاصيل طويلة جداً (1500 حرف كحد أقصى)', 'Details are too long (1500 characters max)'), 422, 'VALIDATION_ERROR');
-
-  const prices = mode === 'trade' ? [] : parsePrices(input.prices);
+  const { mode, details, prices } = parseListingFields(input);
   if (files.length === 0) throw new AppError(t('أضف صورة واحدة على الأقل للحساب', 'Add at least one photo of the account'), 422, 'VALIDATION_ERROR');
   if (files.length > MAX_LISTING_IMAGES) throw new AppError(t('7 صور كحد أقصى', '7 photos at most'), 422, 'VALIDATION_ERROR');
 
@@ -247,6 +256,19 @@ export async function getListing(user: HydratedDocument<IUser>, adminRole: strin
     throw new AppError(t('هذا المنشور لم يعد موجوداً', 'This post no longer exists'), 404, 'NOT_FOUND');
   }
   const isMine = listing.ownerTelegramId === user.telegramId;
+  if (!isMine && live) {
+    // Counted once per person: the unique index turns a repeat visit into a no-op.
+    const res = await ExchangeView.updateOne(
+      { listing: listing._id, telegramId: user.telegramId },
+      { $setOnInsert: { listing: listing._id, telegramId: user.telegramId } },
+      { upsert: true }
+    ).catch(() => null);
+    if (res?.upsertedCount) {
+      await ExchangeListing.updateOne({ _id: listing._id }, { $inc: { views: 1 } });
+      listing.views = (listing.views ?? 0) + 1;
+    }
+  }
+  const expiresAt = listingExpiresAt(listing);
   return {
     listing: {
       ...summary(listing),
@@ -261,9 +283,127 @@ export async function getListing(user: HydratedDocument<IUser>, adminRole: strin
       isMine,
       canModerate: isAdmin,
       shareLink: buildListingLink(String(listing._id)),
+      canRenew: isMine && live && expiresAt.getTime() - Date.now() <= RENEW_WINDOW_MS,
       reportsCount: isAdmin ? listing.reportsCount : undefined,
     },
   };
+}
+
+/**
+ * Edits a post (owner only). `order` lists the final photos, cover first, as "e:<imageId>"
+ * for a photo already on the post or "n:<index>" for one of the newly uploaded files.
+ * Editing never changes how long the post stays up.
+ */
+export async function updateListing(
+  user: HydratedDocument<IUser>,
+  adminRole: string | null,
+  listingId: string,
+  input: { mode?: unknown; details?: unknown; prices?: unknown; order?: unknown },
+  files: UploadedFile[]
+) {
+  await assertAllowed(adminRole);
+  const listing = await ExchangeListing.findById(parseObjectId(listingId));
+  if (!listing || listing.status !== 'active' || listingExpiresAt(listing).getTime() <= Date.now()) {
+    throw new AppError(t('هذا المنشور لم يعد موجوداً', 'This post no longer exists'), 404, 'NOT_FOUND');
+  }
+  if (listing.ownerTelegramId !== user.telegramId) throw new AppError(t('لا يمكنك تعديل هذا المنشور', "You can't edit this post"), 403, 'FORBIDDEN');
+  const { mode, details, prices } = parseListingFields(input);
+
+  let order: unknown = input.order;
+  if (typeof order === 'string') {
+    try {
+      order = JSON.parse(order);
+    } catch {
+      order = null;
+    }
+  }
+  if (!Array.isArray(order) || order.length === 0) throw new AppError(t('أضف صورة واحدة على الأقل للحساب', 'Add at least one photo of the account'), 422, 'VALIDATION_ERROR');
+  if (order.length > MAX_LISTING_IMAGES) throw new AppError(t('7 صور كحد أقصى', '7 photos at most'), 422, 'VALIDATION_ERROR');
+
+  const current = new Set(listing.images.map(String));
+  const usedNew = new Map<number, number>(); // file index -> position in `order`
+  const slots: (Types.ObjectId | number)[] = [];
+  for (const token of order as unknown[]) {
+    const [kind, value] = String(token).split(':');
+    if (kind === 'e' && current.has(value) && !slots.some((x) => String(x) === value)) {
+      slots.push(new Types.ObjectId(value));
+    } else if (kind === 'n' && Number.isInteger(Number(value)) && files[Number(value)] && !usedNew.has(Number(value))) {
+      usedNew.set(Number(value), slots.length);
+      slots.push(Number(value));
+    } else {
+      throw new AppError(t('ترتيب الصور غير صالح', 'Invalid photo order'), 422, 'VALIDATION_ERROR');
+    }
+  }
+
+  const fresh = usedNew.size
+    ? await ExchangeImage.insertMany(
+        [...usedNew.keys()].map((i) => ({ ownerTelegramId: user.telegramId, data: files[i].buffer, mimeType: files[i].mimetype, size: files[i].size }))
+      )
+    : [];
+  const freshIds = new Map([...usedNew.keys()].map((fileIndex, k) => [fileIndex, fresh[k]._id as Types.ObjectId]));
+  const images = slots.map((x) => (typeof x === 'number' ? freshIds.get(x)! : x));
+  const removed = listing.images.filter((id) => !images.some((x) => String(x) === String(id)));
+
+  listing.mode = mode;
+  listing.details = details;
+  listing.prices = prices;
+  listing.price = null;
+  listing.currency = null;
+  listing.images = images;
+  await listing.save();
+  if (removed.length) await ExchangeImage.deleteMany({ _id: { $in: removed } });
+  return { listing: summary(listing) };
+}
+
+/** Owner puts the post back up for another 4 days (only in its last day). */
+export async function renewListing(ownerTelegramId: number, listingId: string) {
+  const listing = await ExchangeListing.findById(parseObjectId(listingId));
+  if (!listing || listing.status !== 'active' || listingExpiresAt(listing).getTime() <= Date.now()) {
+    throw new AppError(t('هذا المنشور لم يعد موجوداً، تقدر تعرضه من جديد', 'This post is gone; you can post it again'), 404, 'NOT_FOUND');
+  }
+  if (listing.ownerTelegramId !== ownerTelegramId) throw new AppError(t('لا يمكنك تجديد هذا المنشور', "You can't renew this post"), 403, 'FORBIDDEN');
+  if (listingExpiresAt(listing).getTime() - Date.now() > RENEW_WINDOW_MS) {
+    throw new AppError(t('التجديد يتفعل بآخر يوم من عرض المنشور', 'Renewal opens in the post’s last day'), 409, 'TOO_EARLY');
+  }
+  listing.expiresAt = new Date(Date.now() + LISTING_LIFETIME_MS);
+  listing.renewReminderSentAt = null;
+  await listing.save();
+  return { listing: summary(listing) };
+}
+
+export async function renewListingByUser(user: HydratedDocument<IUser>, adminRole: string | null, listingId: string) {
+  await assertAllowed(adminRole);
+  return renewListing(user.telegramId, listingId);
+}
+
+/** A day before a post is removed, its owner gets a reminder with a renew button. */
+export async function sendRenewReminders(now = new Date()) {
+  if (!botRef) return 0;
+  const due = await ExchangeListing.find({
+    status: 'active',
+    renewReminderSentAt: null,
+    expiresAt: { $gt: now, $lte: new Date(now.getTime() + RENEW_WINDOW_MS) },
+  }).limit(200);
+  for (const l of due) {
+    const claimed = await ExchangeListing.updateOne({ _id: l._id, renewReminderSentAt: null }, { $set: { renewReminderSentAt: now } });
+    if (claimed.modifiedCount === 0) continue;
+    const owner = await User.findOne({ telegramId: l.ownerTelegramId }).select('language').lean();
+    const lang = userLang(owner);
+    const link = buildListingLink(String(l._id));
+    const text = pick(
+      {
+        ar: `⏰ منشورك بقسم التبادل راح ينحذف خلال يوم\n\n«${l.details.slice(0, 80)}${l.details.length > 80 ? '…' : ''}»\n\nإذا الحساب بعده متوفر اضغط تجديد حتى يبقى معروض 4 أيام ثانية.`,
+        en: `⏰ Your exchange post will be removed within a day\n\n“${l.details.slice(0, 80)}${l.details.length > 80 ? '…' : ''}”\n\nIf the account is still available, tap renew to keep it up for another 4 days.`,
+      },
+      lang
+    );
+    const buttons: TelegramBot.InlineKeyboardButton[][] = [[{ text: pick({ ar: '🔄 تجديد 4 أيام', en: '🔄 Renew for 4 days' }, lang), callback_data: `exn_renew_${l._id}` }]];
+    if (link) buttons.push([{ text: pick({ ar: '📄 فتح المنشور', en: '📄 Open the post' }, lang), url: link }]);
+    await botRef
+      .sendMessage(l.ownerTelegramId, text, { disable_web_page_preview: true, reply_markup: { inline_keyboard: buttons } })
+      .catch((err) => logger.warn({ err, listingId: String(l._id) }, 'failed to send renew reminder'));
+  }
+  return due.length;
 }
 
 /** Removes a listing (its owner, or a developer). Photos are deleted with it. */
@@ -501,6 +641,8 @@ export async function getExchangeAdminSettings() {
   return {
     exchangePublic: settings.exchangePublic,
     exchangeMiddlemanGroup: settings.exchangeMiddlemanGroup,
+    mediationGroupLink: settings.mediationGroupLink,
+    mediationLinked: Boolean(settings.mediationChatId),
     counts: { active, pinned, openReports },
   };
 }
@@ -508,6 +650,13 @@ export async function getExchangeAdminSettings() {
 export async function updateExchangeAdminSettings(input: Record<string, unknown>) {
   const settings = await getSettings();
   if ('exchangePublic' in input) settings.exchangePublic = Boolean(input.exchangePublic);
+  if ('mediationGroupLink' in input) {
+    const link = String(input.mediationGroupLink ?? '').trim();
+    if (link && !/^https:\/\/t\.me\/\+?[A-Za-z0-9_-]{5,}$/.test(link)) {
+      throw new AppError('رابط الكروب غير صالح (مثال: https://t.me/+AbCdEf...)', 422, 'VALIDATION_ERROR');
+    }
+    settings.mediationGroupLink = link;
+  }
   if ('exchangeMiddlemanGroup' in input) {
     const group = String(input.exchangeMiddlemanGroup ?? '').trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');
     if (!/^[A-Za-z0-9_]{4,64}$/.test(group)) throw new AppError('يوزر الكروب غير صالح', 422, 'VALIDATION_ERROR');

@@ -11,7 +11,8 @@ import { UserTask } from '../models/UserTask';
 import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
 import { processSpinReadyReminders } from './spinReady.worker';
-import { expireOldListings } from '../services/exchange.service';
+import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
+import { expireMediationTickets } from '../services/mediation.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -37,6 +38,7 @@ export function startExpirationWorker() {
     }
     try {
       await expireOldListings();
+      await sendRenewReminders();
     } catch (err) {
       logger.error({ err }, 'exchange listing expiry failed');
     }
@@ -44,6 +46,14 @@ export function startExpirationWorker() {
       await processSpinReadyReminders();
     } catch (err) {
       logger.error({ err }, 'spin-ready reminders failed');
+    }
+  });
+  // Mediation tickets live for 15 minutes, so they're checked every minute.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await expireMediationTickets();
+    } catch (err) {
+      logger.error({ err }, 'mediation ticket expiry failed');
     }
   });
   logger.info('⏰ Expiration worker scheduled (every 5 minutes)');

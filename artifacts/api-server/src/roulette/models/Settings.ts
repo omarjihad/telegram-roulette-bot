@@ -39,6 +39,10 @@ export interface ISettings extends Document {
   exchangePublic: boolean;
   // Telegram group of MF middlemen, without @.
   exchangeMiddlemanGroup: string;
+  // Mediation group: the join-request link shown to users, and the group's chat id
+  // (linked by sending /setmediation inside the group).
+  mediationGroupLink: string;
+  mediationChatId: number | null;
   adsgramBlockId: string;
   adTaskReward: number;
   snakePointsPerFood: number;
@@ -79,6 +83,8 @@ const settingsSchema = new Schema<ISettings>(
     gamesPublic: { type: Boolean, default: false },
     exchangePublic: { type: Boolean, default: false },
     exchangeMiddlemanGroup: { type: String, default: 'MF_MMMM' },
+    mediationGroupLink: { type: String, default: '' },
+    mediationChatId: { type: Number, default: null },
     adsgramBlockId: { type: String, default: '50375' },
     adTaskReward: { type: Number, default: 0.2, min: 0 },
     snakePointsPerFood: { type: Number, default: 0.03, min: 0 },

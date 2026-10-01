@@ -21,8 +21,11 @@ import {
   postExchangeListing,
   postExchangeReport,
   postExchangeOffer,
+  patchExchangeListing,
+  postRenewExchangeListing,
 } from '../controllers/exchange.controller';
 import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
+import { getMediation, postCancelMediationTicket, postMediationLookup, postMediationTicket } from '../controllers/mediation.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
 
 const router = Router();
@@ -66,8 +69,15 @@ router.get('/exchange/listings/mine', getMyExchangeListings);
 router.get('/exchange/listings/:id', getExchangeListing);
 router.post('/exchange/listings', purchaseLimiter, uploadExchangeImages, postExchangeListing);
 router.delete('/exchange/listings/:id', deleteExchangeListing);
+router.patch('/exchange/listings/:id', purchaseLimiter, uploadExchangeImages, patchExchangeListing);
+router.post('/exchange/listings/:id/renew', postRenewExchangeListing);
 router.post('/exchange/listings/:id/offer', purchaseLimiter, uploadExchangeImages, postExchangeOffer);
 router.post('/exchange/listings/:id/report', purchaseLimiter, uploadReportMedia, postExchangeReport);
+
+router.get('/mediation', getMediation);
+router.post('/mediation/lookup', postMediationLookup);
+router.post('/mediation/tickets', purchaseLimiter, postMediationTicket);
+router.post('/mediation/tickets/:id/cancel', postCancelMediationTicket);
 
 router.get('/contest', getContest);
 router.post('/contest/join', postJoinContest);

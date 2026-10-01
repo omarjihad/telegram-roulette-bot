@@ -1,14 +1,15 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../config/logger';
 import { getAdminRole } from '../services/admin.service';
-import { banListingOwner, decideOffer, removeListing, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
+import { banListingOwner, decideOffer, removeListing, renewListing, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
 import { User } from '../models/User';
-import { pick, userLang } from '../i18n';
+import { pick, runWithLang, userLang } from '../i18n';
 import { ExchangeReport } from '../models/ExchangeReport';
 
 /** Buttons under an exchange report alert: remove post, pin, ban owner, mark handled. */
 export function registerExchangeActions(bot: TelegramBot) {
   registerOfferActions(bot);
+  registerRenewAction(bot);
 
   bot.on('callback_query', async (query) => {
     const data = query.data;
@@ -103,6 +104,30 @@ function registerOfferActions(bot: TelegramBot) {
     } catch (err) {
       logger.warn({ err, data }, 'exchange offer action failed');
       await bot.answerCallbackQuery(query.id, { text: '⚠️', show_alert: false }).catch(() => undefined);
+    }
+  });
+}
+
+/** "Renew for 4 days" under the expiry reminder. */
+function registerRenewAction(bot: TelegramBot) {
+  bot.on('callback_query', async (query) => {
+    const data = query.data;
+    if (!data || !data.startsWith('exn_renew_')) return;
+    const lang = userLang(await User.findOne({ telegramId: query.from.id }).select('language').lean());
+    try {
+      await runWithLang(lang, () => renewListing(query.from.id, data.slice('exn_renew_'.length)));
+      const note = pick({ ar: '✅ تم التجديد، منشورك يبقى معروض 4 أيام ثانية', en: '✅ Renewed: your post stays up for another 4 days' }, lang);
+      await bot.answerCallbackQuery(query.id, { text: note });
+      const msg = query.message;
+      if (msg?.text) {
+        await bot
+          .editMessageText(`${msg.text}\n\n━━━━━━━━━━\n${note}`, { chat_id: msg.chat.id, message_id: msg.message_id, reply_markup: { inline_keyboard: [] } })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      await bot
+        .answerCallbackQuery(query.id, { text: `⚠️ ${err instanceof Error ? err.message : ''}`, show_alert: true })
+        .catch(() => undefined);
     }
   });
 }

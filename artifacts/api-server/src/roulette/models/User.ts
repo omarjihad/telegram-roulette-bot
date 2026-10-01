@@ -23,6 +23,8 @@ export interface IUser extends Document {
   spinReadyNotifiedAt?: Date | null;
   // True while the user has the bot blocked; no reminders are sent then.
   botBlocked?: boolean;
+  // Last time the Mini App was opened (updated at most every few minutes), for activity stats.
+  lastSeenAt?: Date | null;
   // Invite race: personal link token, and when the user read the intro and joined.
   contestToken?: string | null;
   contestJoinedAt?: Date | null;
@@ -83,6 +85,7 @@ const userSchema = new Schema<IUser>(
     lastSpinAt: { type: Date, default: null },
     spinReadyNotifiedAt: { type: Date, default: null },
     botBlocked: { type: Boolean, default: false },
+    lastSeenAt: { type: Date, default: null, index: true },
     contestToken: { type: String },
     contestJoinedAt: { type: Date, default: null },
     lastFreeGameAt: { type: Date, default: null },

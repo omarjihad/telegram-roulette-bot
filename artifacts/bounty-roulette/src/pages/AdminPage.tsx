@@ -492,6 +492,15 @@ const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: s
 interface ExchangeAdminSettings {
   exchangePublic: boolean;
   exchangeMiddlemanGroup: string;
+  mediationGroupLink: string;
+  mediationLinked: boolean;
+  mediation: {
+    open: number;
+    completed: number;
+    completedWeek: number;
+    expired: number;
+    topMediators: Array<{ telegramId: number; name: string; count: number }>;
+  };
   counts: { active: number; pinned: number; openReports: number };
 }
 
@@ -508,6 +517,7 @@ interface ExchangeAdminReport {
 function ExchangeAdminTab() {
   const [settings, setSettings] = useState<ExchangeAdminSettings | null>(null);
   const [group, setGroup] = useState('');
+  const [medLink, setMedLink] = useState('');
   const [reports, setReports] = useState<ExchangeAdminReport[] | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -516,6 +526,7 @@ function ExchangeAdminTab() {
     const r = await api.get<{ ok: true; settings: ExchangeAdminSettings }>('/admin/exchange');
     setSettings(r.settings);
     setGroup(r.settings.exchangeMiddlemanGroup);
+    setMedLink(r.settings.mediationGroupLink);
   }, []);
   const loadReports = useCallback(async () => {
     setReports(null);
@@ -564,6 +575,41 @@ function ExchangeAdminTab() {
         <p className="card-sub" style={{ marginBottom: 0 }}>
           📄 منشورات فعالة: {settings.counts.active} · 📌 مثبتة: {settings.counts.pinned} · 🚩 بلاغات مفتوحة: {settings.counts.openReports}
         </p>
+      </div>
+
+      <div className="card" style={{ borderColor: settings.mediationLinked && settings.mediationGroupLink ? 'rgba(74, 222, 128, 0.6)' : 'rgba(252, 211, 77, 0.6)' }}>
+        <h3 className="card-title">🤝 كروب الوساطة (طلب وسيط)</h3>
+        <div className="list-item"><span>ربط الكروب بالبوت</span><strong>{settings.mediationLinked ? '✅ مربوط' : '❌ غير مربوط'}</strong></div>
+        <div className="list-item"><span>رابط طلب الانضمام</span><strong>{settings.mediationGroupLink ? '✅ موجود' : '❌ ماكو'}</strong></div>
+        <p className="card-sub" style={{ lineHeight: 1.9 }}>
+          طريقة التفعيل:
+          <br />١- ضيف البوت للكروب وارفعه مشرف ويّا صلاحية «دعوة مستخدمين».
+          <br />٢- اكتب داخل الكروب: <b dir="ltr">/setmediation</b>
+          <br />٣- سوّ رابط دعوة «بطلب انضمام» وحطه هنا.
+          <br />مشرفين الكروب هم الوسطاء: ينمنشنون ويگدرون يستلمون التذاكر.
+        </p>
+        <input
+          value={medLink}
+          onChange={(e) => setMedLink(e.target.value)}
+          placeholder="https://t.me/+AbCdEf..."
+          dir="ltr"
+          style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', fontFamily: 'inherit', marginBottom: 10 }}
+        />
+        <button className="btn btn-primary" disabled={busy} onClick={() => void run(() => api.patch('/admin/exchange', { mediationGroupLink: medLink }), '✅ تم الحفظ')}>💾 حفظ الرابط</button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 12 }}>
+          <StatBox label="مفتوحة" value={settings.mediation.open} />
+          <StatBox label="مكتملة" value={settings.mediation.completed} />
+          <StatBox label="هالأسبوع" value={settings.mediation.completedWeek} />
+          <StatBox label="انتهت" value={settings.mediation.expired} />
+        </div>
+        {settings.mediation.topMediators.length > 0 && (
+          <>
+            <h4 style={{ margin: '12px 0 6px' }}>🏅 أكثر الوسطاء</h4>
+            {settings.mediation.topMediators.map((m, i) => (
+              <div className="list-item" key={m.telegramId}><span>#{i + 1} <bdi>{m.name}</bdi></span><strong>{m.count} وساطة</strong></div>
+            ))}
+          </>
+        )}
       </div>
 
       <div className="card">
@@ -2448,6 +2494,50 @@ interface DashboardStats {
   withdrawals: { pending: number; approved: number; delivered: number; rejected: number };
   channels: number;
   developers: number;
+  activity?: {
+    active: { today: number; week: number; month: number; blocked: number; english: number };
+    today: { spins: number; ads: number; rounds: number; referrals: number; withdrawals: number };
+    week: { spins: number; ads: number; rounds: number; referrals: number };
+    exchange: { active: number; today: number; views: number; offers: number; offersAccepted: number; reportsOpen: number; ticketsToday: number; ticketsCompleted: number };
+    series: Array<{ day: string; users: number; spins: number; ads: number }>;
+  };
+}
+
+/** One series over the last 14 days as thin bars; tap a bar to read its day and value. */
+function DayBars({ title, points }: { title: string; points: Array<{ day: string; value: number }> }) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const max = Math.max(1, ...points.map((p) => p.value));
+  const total = points.reduce((a, p) => a + p.value, 0);
+  const shown = picked ?? points.length - 1;
+  const fmtDay = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('ar-EG', { day: 'numeric', month: 'numeric' });
+  return (
+    <div className="stat-chart">
+      <div className="stat-chart-head">
+        <span>{title}</span>
+        <span className="stat-chart-read">
+          {fmtDay(points[shown].day)}: <b>{points[shown].value}</b>
+        </span>
+      </div>
+      <div className="stat-chart-bars" dir="ltr" onMouseLeave={() => setPicked(null)}>
+        {points.map((p, i) => (
+          <button
+            key={p.day}
+            className={`stat-chart-col ${i === shown ? 'on' : ''}`}
+            onClick={() => setPicked(i)}
+            onMouseEnter={() => setPicked(i)}
+            aria-label={`${fmtDay(p.day)}: ${p.value}`}
+          >
+            <span className="stat-chart-bar" style={{ height: `${Math.max(p.value ? 4 : 0, (p.value / max) * 100)}%` }} />
+          </button>
+        ))}
+      </div>
+      <div className="stat-chart-foot" dir="ltr">
+        <span>{fmtDay(points[0].day)}</span>
+        <span>المجموع: {total}</span>
+        <span>اليوم</span>
+      </div>
+    </div>
+  );
 }
 
 function StatBox({ label, value }: { label: string; value: number | string }) {
@@ -2469,9 +2559,59 @@ function StatsTab() {
   if (!stats) return <LoadingScreen />;
 
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 10 } as const;
+  const a = stats.activity;
 
   return (
     <>
+      {a && (
+        <>
+          <div className="card">
+            <h3 className="card-title">📈 النشاط</h3>
+            <p className="card-sub" style={{ margin: 0 }}>الأشخاص اللي فتحوا البوت (بتوقيت بغداد)</p>
+            <div style={grid}>
+              <StatBox label="نشطين اليوم" value={a.active.today} />
+              <StatBox label="آخر 7 أيام" value={a.active.week} />
+              <StatBox label="آخر 30 يوم" value={a.active.month} />
+              <StatBox label="جدد اليوم" value={stats.users.newToday} />
+              <StatBox label="حاظرين البوت" value={a.active.blocked} />
+              <StatBox label="لغتهم إنگليزي" value={a.active.english} />
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="card-title">📊 آخر 14 يوم</h3>
+            <DayBars title="👥 مستخدمين جدد" points={a.series.map((d) => ({ day: d.day, value: d.users }))} />
+            <DayBars title="🎡 الفرّات" points={a.series.map((d) => ({ day: d.day, value: d.spins }))} />
+            <DayBars title="📺 الإعلانات" points={a.series.map((d) => ({ day: d.day, value: d.ads }))} />
+          </div>
+
+          <div className="card">
+            <h3 className="card-title">🕒 اليوم / آخر 7 أيام</h3>
+            <div style={grid}>
+              <StatBox label="فرّات" value={`${a.today.spins} / ${a.week.spins}`} />
+              <StatBox label="إعلانات" value={`${a.today.ads} / ${a.week.ads}`} />
+              <StatBox label="جولات الحية" value={`${a.today.rounds} / ${a.week.rounds}`} />
+              <StatBox label="إحالات مؤهلة" value={`${a.today.referrals} / ${a.week.referrals}`} />
+              <StatBox label="طلبات سحب اليوم" value={a.today.withdrawals} />
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="card-title">🔄 التبادل والوساطة</h3>
+            <div style={grid}>
+              <StatBox label="منشورات فعالة" value={a.exchange.active} />
+              <StatBox label="منشورات اليوم" value={a.exchange.today} />
+              <StatBox label="مشاهدات" value={a.exchange.views} />
+              <StatBox label="عروض" value={a.exchange.offers} />
+              <StatBox label="عروض مقبولة" value={a.exchange.offersAccepted} />
+              <StatBox label="بلاغات مفتوحة" value={a.exchange.reportsOpen} />
+              <StatBox label="تذاكر اليوم" value={a.exchange.ticketsToday} />
+              <StatBox label="وساطات مكتملة" value={a.exchange.ticketsCompleted} />
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="card">
         <h3 className="card-title">🪙 النقاط والعجلات</h3>
         <div style={grid}>

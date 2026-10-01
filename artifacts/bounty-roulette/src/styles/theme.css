@@ -2006,3 +2006,52 @@ html[dir='ltr'] body { direction: ltr; }
 .ex-offer-kinds button { padding: 9px 4px; border: none; border-radius: 10px; background: none; color: var(--text-dim); font: inherit; font-weight: 900; font-size: 13px; }
 .ex-offer-kinds button.active { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: #fff; }
 .ex-offer .ex-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Exchange: views, edit/renew, mediation tickets */
+.ex-views { position: absolute; bottom: 6px; inset-inline-start: 6px; font-size: 11px; font-weight: 800; background: rgba(0, 0, 0, 0.65); border-radius: 8px; padding: 2px 6px; }
+.ex-mediator-btn { border-color: rgba(74, 222, 128, 0.55) !important; color: #bbf7d0 !important; background: rgba(74, 222, 128, 0.1) !important; }
+
+.ex-med-hero { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, rgba(22, 163, 74, 0.25), rgba(30, 27, 75, 0.9)); border: 1px solid rgba(74, 222, 128, 0.45); }
+.ex-med-hero b { display: block; font-size: 16px; font-weight: 950; }
+.ex-med-hero span { font-size: 12.5px; color: #bbf7d0; }
+.ex-med-icon { font-size: 34px; filter: drop-shadow(0 0 12px rgba(74, 222, 128, 0.5)); }
+.ex-med-search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.ex-med-search .btn { width: auto; padding: 0 18px; }
+.ex-med-confirm { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.07); text-align: center; animation: ex-up 0.2s ease-out; }
+.ex-med-avatar { width: 64px; height: 64px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, #7c3aed, #a78bfa); font-size: 26px; font-weight: 950; border: 2px solid rgba(74, 222, 128, 0.7); }
+.ex-med-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ex-med-who { display: flex; flex-direction: column; gap: 2px; }
+.ex-med-who span { font-size: 12.5px; color: var(--text-dim); }
+.ex-med-who b { font-size: 18px; }
+.ex-med-who small { color: #a5b4fc; font-weight: 800; }
+
+.ex-ticket { display: flex; flex-direction: column; gap: 12px; border-color: rgba(74, 222, 128, 0.6) !important; }
+.ex-ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ex-ticket-head strong { font-size: 17px; }
+.ex-ticket-status { font-size: 11.5px; font-weight: 900; padding: 4px 10px; border-radius: 999px; background: rgba(148, 163, 184, 0.15); white-space: nowrap; }
+.ex-ticket-timer { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 14px; background: rgba(252, 211, 77, 0.08); border: 1px solid rgba(252, 211, 77, 0.35); font-weight: 800; color: #fde68a; }
+.ex-ticket-timer b { font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.ex-ticket-steps { display: flex; flex-direction: column; gap: 12px; }
+.ex-ticket-step { display: flex; gap: 10px; align-items: flex-start; }
+.ex-ticket-step > div { flex: 1; min-width: 0; }
+.ex-step-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 950; background: #334155; }
+.ex-ticket-step.done .ex-step-dot { background: #16a34a; }
+.ex-step-btns { display: flex; gap: 8px; margin-top: 6px; }
+.ex-step-btns .btn { padding: 9px 12px; font-size: 13.5px; }
+.ex-ticket-wait { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ex-ticket-wait p { margin: 0; white-space: pre-line; line-height: 1.8; }
+.ex-ticket-pulse { font-size: 40px; animation: ex-pulse 0.9s ease-in-out infinite alternate; }
+.ex-ticket-history { display: flex; flex-direction: column; gap: 8px; }
+.ex-ticket-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: #0f172a; }
+.ex-main .bottom-nav .nav-label { font-size: 11px; }
+
+/* Developer stats: 14-day bars (single series per chart, tap/hover to read a day) */
+.stat-chart { margin-top: 12px; }
+.stat-chart-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 800; color: var(--text-dim); }
+.stat-chart-read { color: var(--text-main); font-weight: 700; }
+.stat-chart-read b { font-size: 16px; }
+.stat-chart-bars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 2px; align-items: end; height: 84px; margin-top: 6px; border-bottom: 1px solid rgba(148, 163, 184, 0.25); }
+.stat-chart-col { height: 100%; display: flex; align-items: flex-end; justify-content: center; padding: 0; border: none; background: none; cursor: pointer; }
+.stat-chart-bar { width: 70%; max-width: 16px; border-radius: 4px 4px 0 0; background: rgba(243, 198, 35, 0.55); transition: background 0.15s; }
+.stat-chart-col.on .stat-chart-bar { background: var(--accent); }
+.stat-chart-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); margin-top: 4px; }

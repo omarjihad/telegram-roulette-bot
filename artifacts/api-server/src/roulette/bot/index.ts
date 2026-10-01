@@ -9,6 +9,8 @@ import { attachBotInstance } from '../services/notification.service';
 import { registerAdminCommands } from './adminCommands';
 import { registerExchangeActions } from './exchangeActions';
 import { attachExchangeBot } from '../services/exchange.service';
+import { registerMediationActions } from './mediationActions';
+import { attachMediationBot } from '../services/mediation.service';
 
 export function createBot(enablePolling = false): TelegramBot {
   // `allowed_updates` must be listed explicitly: Telegram only sends the classic update
@@ -18,7 +20,7 @@ export function createBot(enablePolling = false): TelegramBot {
   const bot = new TelegramBot(env.BOT_TOKEN, {
     polling: enablePolling ? {
       params: {
-        allowed_updates: ['message', 'callback_query', 'my_chat_member', 'chat_member'],
+        allowed_updates: ['message', 'callback_query', 'my_chat_member', 'chat_member', 'chat_join_request'],
       },
     } : false,
   });
@@ -31,11 +33,13 @@ export function createBot(enablePolling = false): TelegramBot {
   registerAdminWithdrawalActions(bot);
   registerAdminCommands(bot);
   registerExchangeActions(bot);
+  registerMediationActions(bot);
   registerMemberEventHandlers(bot);
 
   setBotInstance(bot);
   attachBotInstance(bot);
   attachExchangeBot(bot);
+  attachMediationBot(bot);
 
   // Keep the chat menu button pointing at the current deployment. Without this it keeps
   // whatever URL was set earlier (e.g. an old, now-suspended host). Note: the Mini App
