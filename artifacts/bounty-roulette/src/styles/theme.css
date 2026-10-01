@@ -1694,9 +1694,9 @@ button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
 .snake-pad {
   display: grid;
   grid-template-columns: repeat(3, 64px);
-  grid-template-rows: repeat(2, 56px);
+  grid-template-rows: repeat(3, 52px);
   gap: 8px;
-  grid-template-areas: '. up .' 'left down right';
+  grid-template-areas: '. up .' 'left . right' '. down .';
 }
 .snake-key {
   border: 1px solid rgba(74, 222, 128, 0.45);
