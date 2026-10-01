@@ -44,6 +44,8 @@ const CURRENCY_AR: Record<ExchangeCurrency, string> = {
   usd: 'دولار', asia: 'اسيا', zain: 'زين', master: 'ماستر', ton: 'تون', pound: 'جنيه', riyal: 'ريال',
 };
 const MAX_OFFER_LENGTH = 500;
+/** A trade offer describes the sender's own account, so it gets as much room as a post. */
+const MAX_TRADE_OFFER_LENGTH = 1500;
 
 export function exchangeAllowed(settings: Pick<ISettings, 'exchangePublic'>, adminRole: string | null) {
   return settings.exchangePublic || adminRole !== null;
@@ -549,16 +551,34 @@ function personLine(p: { username?: string | null; firstName?: string | null; te
 }
 
 /** Sends an offer to the post's owner through the bot, with accept / reject buttons. */
-export async function makeOffer(user: HydratedDocument<IUser>, adminRole: string | null, listingId: string, input: { message?: unknown }) {
+export async function makeOffer(
+  user: HydratedDocument<IUser>,
+  adminRole: string | null,
+  listingId: string,
+  input: { message?: unknown; kind?: unknown },
+  photos: UploadedFile[] = []
+) {
   await assertAllowed(adminRole);
   const listing = await ExchangeListing.findById(parseObjectId(listingId));
   if (!listing || listing.status !== 'active' || listingExpiresAt(listing).getTime() <= Date.now()) {
     throw new AppError(t('هذا المنشور لم يعد موجوداً', 'This post no longer exists'), 404, 'NOT_FOUND');
   }
   if (listing.ownerTelegramId === user.telegramId) throw new AppError(t('لا يمكنك تقديم عرض على منشورك', "You can't make an offer on your own post"), 422, 'VALIDATION_ERROR');
+  // What the post accepts decides the kinds of offer: money for a sale, an account for a trade.
+  const kind = input.kind === 'trade' || listing.mode === 'trade' ? 'trade' : 'buy';
+  if (kind === 'trade' && listing.mode === 'sell') {
+    throw new AppError(t('صاحب هذا الحساب يقبل البيع فقط', 'This owner only accepts a sale'), 422, 'VALIDATION_ERROR');
+  }
+  if (kind === 'buy' && photos.length > 0) throw new AppError(t('الصور تُرفق مع عرض التبديل فقط', 'Photos go with trade offers only'), 422, 'VALIDATION_ERROR');
+  if (photos.length > MAX_LISTING_IMAGES) throw new AppError(t('7 صور كحد أقصى', '7 photos at most'), 422, 'VALIDATION_ERROR');
   const message = String(input.message ?? '').trim();
-  if (message.length < 2) throw new AppError(t('اكتب عرضك', 'Write your offer'), 422, 'VALIDATION_ERROR');
-  if (message.length > MAX_OFFER_LENGTH) throw new AppError(t('العرض طويل جداً (500 حرف كحد أقصى)', 'The offer is too long (500 characters max)'), 422, 'VALIDATION_ERROR');
+  const maxLength = kind === 'trade' ? MAX_TRADE_OFFER_LENGTH : MAX_OFFER_LENGTH;
+  if (message.length < 2) {
+    throw new AppError(kind === 'trade' ? t('اكتب تفاصيل حسابك', 'Describe your account') : t('اكتب عرضك', 'Write your offer'), 422, 'VALIDATION_ERROR');
+  }
+  if (message.length > maxLength) {
+    throw new AppError(t(`العرض طويل جداً (${maxLength} حرف كحد أقصى)`, `The offer is too long (${maxLength} characters max)`), 422, 'VALIDATION_ERROR');
+  }
   const pending = await ExchangeOffer.exists({ listing: listing._id, fromTelegramId: user.telegramId, status: 'pending' });
   if (pending) throw new AppError(t('عندك عرض على هذا المنشور بانتظار رد صاحبه', 'You already have an offer waiting for the owner'), 409, 'OFFER_PENDING');
   if (!botRef) throw new AppError(t('تعذر إرسال العرض حالياً', "Couldn't send the offer right now"), 503, 'BOT_UNAVAILABLE');
@@ -568,7 +588,9 @@ export async function makeOffer(user: HydratedDocument<IUser>, adminRole: string
     fromUser: user._id,
     fromTelegramId: user.telegramId,
     toTelegramId: listing.ownerTelegramId,
+    kind,
     message,
+    photoCount: photos.length,
   });
   const owner = await User.findOne({ telegramId: listing.ownerTelegramId }).select('language').lean();
   const lang = userLang(owner);
@@ -576,21 +598,32 @@ export async function makeOffer(user: HydratedDocument<IUser>, adminRole: string
   const text = pick(
     {
       ar:
-        `💌 وصلك عرض جديد على حسابك في قسم التبادل\n\n` +
+        (kind === 'trade' ? `🔁 وصلك عرض تبديل على حسابك في قسم التبادل\n\n` : `💌 وصلك عرض جديد على حسابك في قسم التبادل\n\n`) +
         `من: ${personLine(user)}\n\n` +
-        `العرض:\n${message}\n\n` +
+        (kind === 'trade' ? `يعرض عليك حسابه:\n${message}\n\n` : `العرض:\n${message}\n\n`) +
+        (photos.length ? `🖼️ صور حسابه (${photos.length}) بالأعلى\n\n` : '') +
         (link ? `🔗 منشورك: ${link}\n\n` : '') +
         `⚠️ تعامل عن طريق وسيط فقط.`,
       en:
-        `💌 New offer on your exchange post\n\n` +
+        (kind === 'trade' ? `🔁 New trade offer on your exchange post\n\n` : `💌 New offer on your exchange post\n\n`) +
         `From: ${personLine(user)}\n\n` +
-        `Offer:\n${message}\n\n` +
+        (kind === 'trade' ? `Their account:\n${message}\n\n` : `Offer:\n${message}\n\n`) +
+        (photos.length ? `🖼️ Photos of their account (${photos.length}) above\n\n` : '') +
         (link ? `🔗 Your post: ${link}\n\n` : '') +
         `⚠️ Deal through a middleman only.`,
     },
     lang
   );
   try {
+    // The account photos go first as one album; the offer text with its buttons follows.
+    if (photos.length === 1) {
+      await botRef.sendPhoto(listing.ownerTelegramId, photos[0].buffer, {}, { filename: 'offer-1.jpg', contentType: photos[0].mimetype });
+    } else if (photos.length > 1) {
+      await botRef.sendMediaGroup(
+        listing.ownerTelegramId,
+        photos.map((p, i) => ({ type: 'photo', media: p.buffer, fileOptions: { filename: `offer-${i + 1}.jpg`, contentType: p.mimetype } })) as never
+      );
+    }
     const sent = await botRef.sendMessage(listing.ownerTelegramId, text, {
       disable_web_page_preview: true,
       reply_markup: {

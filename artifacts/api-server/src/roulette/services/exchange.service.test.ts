@@ -159,6 +159,15 @@ describe('makeOffer', () => {
     await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { message: '20$' })).rejects.toMatchObject({ code: 'OFFER_PENDING' });
   });
 
+  it('only takes account photos with a trade offer, on posts that accept a trade', async () => {
+    mocks.offerExists.mockResolvedValue(null);
+    mocks.listingFindById.mockResolvedValue(listing({ mode: 'sell' }));
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { kind: 'trade', message: 'my level 90 account' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    mocks.listingFindById.mockResolvedValue(listing({ mode: 'both' }));
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { kind: 'buy', message: '20$' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { kind: 'trade', message: 'my account' }, Array(8).fill(img))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
   it('refuses expired posts', async () => {
     mocks.listingFindById.mockResolvedValue(listing({ expiresAt: new Date(Date.now() - 1000) }));
     await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { message: '20$' })).rejects.toMatchObject({ code: 'NOT_FOUND' });

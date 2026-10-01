@@ -576,15 +576,36 @@ function Gallery({ images, onZoom }: { images: string[]; onZoom: (src: string) =
   );
 }
 
-function OfferModal({ listingId, flash, onClose }: { listingId: string; flash: Flash; onClose: () => void }) {
+function OfferModal({ listingId, mode, maxImages, flash, onClose }: { listingId: string; mode: ExchangeMode; maxImages: number; flash: Flash; onClose: () => void }) {
+  // A sale-only post takes money offers, a trade-only post takes accounts, "both" lets the sender choose.
+  const [kind, setKind] = useState<'buy' | 'trade'>(mode === 'trade' ? 'trade' : 'buy');
   const [message, setMessage] = useState('');
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const isTrade = kind === 'trade';
+  const maxLength = isTrade ? 1500 : 500;
+
+  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const room = maxImages - photos.length;
+    const picked = Array.from(list).filter((f) => f.type.startsWith('image/'));
+    if (picked.length > room) flash(tr(`الحد الأقصى ${maxImages} صور`, `${maxImages} photos at most`));
+    setPhotos((cur) => [...cur, ...picked.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) }))]);
+  }
+
   async function send() {
     if (busy) return;
-    if (message.trim().length < 2) return flash(tr('اكتب عرضك', 'Write your offer'));
+    if (message.trim().length < 2) return flash(isTrade ? tr('اكتب تفاصيل حسابك', 'Describe your account') : tr('اكتب عرضك', 'Write your offer'));
     setBusy(true);
     try {
-      await api.post(`/exchange/listings/${listingId}/offer`, { message: message.trim() });
+      const form = new FormData();
+      form.append('kind', kind);
+      form.append('message', message.trim());
+      if (isTrade) for (const [i, p] of photos.entries()) form.append('images', await compressImage(p.file), `offer-${i + 1}.jpg`);
+      await api.form(`/exchange/listings/${listingId}/offer`, form);
       haptic('heavy');
       flash(tr('✅ وصل عرضك لصاحب الحساب عن طريق البوت، راح يوصلك رده', '✅ Your offer was sent through the bot; you will get the reply'));
       onClose();
@@ -594,19 +615,47 @@ function OfferModal({ listingId, flash, onClose }: { listingId: string; flash: F
       setBusy(false);
     }
   }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card ex-report" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card ex-report ex-offer" onClick={(e) => e.stopPropagation()}>
         <h3>{tr('💌 قدّم عرضك', '💌 Make an offer')}</h3>
-        <p className="card-sub">{tr('البوت يوصل عرضك لصاحب الحساب، وإذا قبله يوصلك إشعار ويّا يوزره.', 'The bot delivers your offer to the owner. If they accept, you get notified with their username.')}</p>
+        {mode === 'both' && (
+          <div className="ex-offer-kinds">
+            <button className={kind === 'buy' ? 'active' : ''} onClick={() => setKind('buy')}>{tr('💰 عرض شراء', '💰 Buy offer')}</button>
+            <button className={kind === 'trade' ? 'active' : ''} onClick={() => setKind('trade')}>{tr('🔁 أبدل بحسابي', '🔁 Trade my account')}</button>
+          </div>
+        )}
+        <p className="card-sub">
+          {isTrade
+            ? tr('ضيف صور حسابك وتفاصيله، والبوت يوصلها لصاحب الحساب ويّا العرض.', "Add your account's photos and details; the bot sends them to the owner with your offer.")
+            : tr('البوت يوصل عرضك لصاحب الحساب، وإذا قبله يوصلك إشعار ويّا يوزره.', 'The bot delivers your offer to the owner. If they accept, you get notified with their username.')}
+        </p>
+        {isTrade && (
+          <>
+            <label className="ex-label">{tr(`🖼️ صور حسابك (${photos.length}/${maxImages})`, `🖼️ Your account photos (${photos.length}/${maxImages})`)}</label>
+            <div className="ex-photos">
+              {photos.map((p, i) => (
+                <div key={p.url} className="ex-photo">
+                  <img src={p.url} alt="" />
+                  <button aria-label={tr('حذف', 'Remove')} onClick={() => { URL.revokeObjectURL(p.url); setPhotos((cur) => cur.filter((_, j) => j !== i)); }}>✕</button>
+                </div>
+              ))}
+              {photos.length < maxImages && (
+                <button className="ex-photo ex-photo-add" onClick={() => fileRef.current?.click()}><span>＋</span><small>{tr('إضافة', 'Add')}</small></button>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          </>
+        )}
         <textarea
           className="ex-input ex-textarea"
-          maxLength={500}
+          maxLength={maxLength}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={tr('مثال: أشتريه بـ 20 دولار، أو أبدلك بحسابي لفل 90...', 'e.g. I’ll buy it for $20, or trade my level 90 account...')}
+          placeholder={isTrade ? tr('تفاصيل حسابك: اللفل، الشخصيات، المهارات، الربط...', 'Your account: level, characters, skills, linked to...') : tr('مثال: أشتريه بـ 20 دولار اسيا', 'e.g. I’ll buy it for $20')}
         />
-        <div className="ex-counter">{message.length}/500</div>
+        <div className="ex-counter">{message.length}/{maxLength}</div>
         <div className="ex-row-btns">
           <button className="btn btn-secondary" onClick={onClose}>{tr('إلغاء', 'Cancel')}</button>
           <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>{busy ? tr('جاري الإرسال...', 'Sending...') : tr('📤 إرسال العرض', '📤 Send offer')}</button>
@@ -776,7 +825,7 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
           </div>
         )}
 
-        {offering && listing && <OfferModal listingId={listing.id} flash={flash} onClose={() => setOffering(false)} />}
+        {offering && listing && <OfferModal listingId={listing.id} mode={listing.mode} maxImages={status.maxImages} flash={flash} onClose={() => setOffering(false)} />}
 
         {reporting && listing && (
           <ReportFlow listingId={listing.id} reasons={status.reasons} flash={flash} onClose={() => setReporting(false)} />

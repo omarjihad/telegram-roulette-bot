@@ -1999,3 +1999,10 @@ html[dir='ltr'] body { direction: ltr; }
 .ex-gallery-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
 .ex-gallery-dots span.on { background: #fff; width: 18px; border-radius: 999px; }
 .ex-gallery-index { position: absolute; bottom: 8px; right: 10px; font-size: 12px; font-weight: 900; background: rgba(0, 0, 0, 0.65); padding: 3px 10px; border-radius: 999px; color: #fff; }
+
+/* Offer window: buy offer or trade with the sender's own account (+ photos) */
+.ex-offer { max-height: calc(100vh - 48px); overflow-y: auto; }
+.ex-offer-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border-radius: 14px; background: #0f172a; border: 1px solid rgba(167, 139, 250, 0.3); }
+.ex-offer-kinds button { padding: 9px 4px; border: none; border-radius: 10px; background: none; color: var(--text-dim); font: inherit; font-weight: 900; font-size: 13px; }
+.ex-offer-kinds button.active { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: #fff; }
+.ex-offer .ex-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); }

@@ -46,7 +46,7 @@ export const postExchangeListing = asyncHandler(async (req: Request, res: Respon
 });
 
 export const postExchangeOffer = asyncHandler(async (req: Request, res: Response) => {
-  res.json({ ok: true, ...(await makeOffer(req.dbUser!, req.adminRole ?? null, req.params.id, req.body ?? {})) });
+  res.json({ ok: true, ...(await makeOffer(req.dbUser!, req.adminRole ?? null, req.params.id, req.body ?? {}, files(req))) });
 });
 
 export const deleteExchangeListing = asyncHandler(async (req: Request, res: Response) => {
