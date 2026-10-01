@@ -20,5 +20,3 @@ coverage
 **/.env.*
 **/.replit-artifact
 **/public/uploads
-# Cloudflare Worker (deployed separately, not part of the image)
-cloudflare
