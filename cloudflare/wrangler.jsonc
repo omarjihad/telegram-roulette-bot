@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Worker's name; the bot's address becomes https://mf-roulette-bot.<your-subdomain>.workers.dev
+  "name": "mf-roulette-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // The whole bot (API + Mini App + Telegram polling + background jobs) runs from the
+  // repository's Dockerfile, exactly like on Railway, as ONE always-on container.
+  "containers": [
+    {
+      "class_name": "BotContainer",
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      // 1 GiB RAM / 1/4 vCPU: enough for Node + MongoDB driver + the delivery account client.
+      "instance_type": "basic",
+      // Exactly one: two copies would both poll Telegram and fight over updates.
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "class_name": "BotContainer", "name": "BOT" }]
+  },
+  "migrations": [{ "new_sqlite_classes": ["BotContainer"], "tag": "v1" }],
+
+  // Every 2 minutes: make sure the container is up (after a crash or a settings change).
+  "triggers": { "crons": ["*/2 * * * *"] },
+
+  // Values set in the dashboard (Settings -> Variables and Secrets) are kept on every deploy.
+  "keep_vars": true
+}
