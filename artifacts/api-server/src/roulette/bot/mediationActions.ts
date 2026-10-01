@@ -1,7 +1,9 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../config/logger';
 import { getAdminRole } from '../services/admin.service';
-import { completeByMediatorMessage, handleJoinRequest, linkMediationGroup, takeTicket } from '../services/mediation.service';
+import { completeByMediatorMessage, handleJoinRequest, linkMediationGroup, rateMediator, takeTicket } from '../services/mediation.service';
+import { User } from '../models/User';
+import { pick, userLang } from '../i18n';
 
 /** Mediation group: join requests from ticket sides, the "take ticket" button, setup and "م". */
 export function registerMediationActions(bot: TelegramBot) {
@@ -39,6 +41,33 @@ export function registerMediationActions(bot: TelegramBot) {
     } catch (err) {
       logger.warn({ err }, 'take mediation ticket failed');
       await bot.answerCallbackQuery(query.id, { text: '⚠️ تعذر استلام التذكرة', show_alert: true }).catch(() => undefined);
+    }
+  });
+
+  // 1-5 stars for the middleman after a completed ticket.
+  bot.on('callback_query', async (query) => {
+    const data = query.data;
+    if (!data || !data.startsWith('medr_')) return;
+    const [, ticketId, n] = data.split('_');
+    const lang = userLang(await User.findOne({ telegramId: query.from.id }).select('language').lean());
+    try {
+      const stars = Number(n);
+      const rated = await rateMediator(ticketId, query.from.id, stars);
+      if (!rated) {
+        await bot.answerCallbackQuery(query.id, { text: pick({ ar: 'قيّمت هذي الوساطة مسبقاً', en: 'You already rated this' }, lang) });
+        return;
+      }
+      const note = pick({ ar: `شكراً لتقييمك ${'⭐'.repeat(stars)}`, en: `Thanks for rating ${'⭐'.repeat(stars)}` }, lang);
+      await bot.answerCallbackQuery(query.id, { text: note });
+      const msg = query.message;
+      if (msg?.text) {
+        await bot
+          .editMessageText(`${msg.text}\n\n${note}`, { chat_id: msg.chat.id, message_id: msg.message_id, reply_markup: { inline_keyboard: [] } })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'rate mediator failed');
+      await bot.answerCallbackQuery(query.id).catch(() => undefined);
     }
   });
 

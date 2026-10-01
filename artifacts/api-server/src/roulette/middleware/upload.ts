@@ -46,14 +46,20 @@ function friendly(handler: (req: never, res: never, cb: (err?: unknown) => void)
     });
 }
 
-/** Up to 7 listing photos, 5MB each (the Mini App compresses them first). */
+/**
+ * Up to 7 listing photos, 5MB each (the Mini App compresses them first), plus an optional
+ * small "thumbs" copy of each, in the same order, for the listing cards.
+ */
 export const uploadExchangeImages = friendly(
   multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024, files: 7 },
+    limits: { fileSize: 5 * 1024 * 1024, files: 14 },
     fileFilter: (_req, file, cb) =>
       EXCHANGE_IMAGE_MIME.has(file.mimetype) ? cb(null, true) : cb(new Error(t('نوع الصورة غير مدعوم.', 'Unsupported image type.'))),
-  }).array('images', 7) as never
+  }).fields([
+    { name: 'images', maxCount: 7 },
+    { name: 'thumbs', maxCount: 7 },
+  ]) as never
 );
 
 /** Report evidence: up to 4 photos/videos, 20MB each. */

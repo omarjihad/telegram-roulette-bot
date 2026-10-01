@@ -26,6 +26,14 @@ export interface IMediationTicket extends Document {
   expiresAt: Date;
   chatId?: number | null;
   groupMessageId?: number | null;
+  // Waiting for a middleman: since when, the 10-minute re-ping and the 30-minute alert.
+  waitingMediatorAt?: Date | null;
+  reminderMessageId?: number | null;
+  mediatorsRepingedAt?: Date | null;
+  adminsAlertedAt?: Date | null;
+  // 1-5 stars each side gives the middleman after a completed ticket.
+  requesterRating?: number | null;
+  partnerRating?: number | null;
   mediatorTelegramId?: number | null;
   mediatorUsername?: string | null;
   mediatorName?: string | null;
@@ -61,6 +69,12 @@ const ticketSchema = new Schema<IMediationTicket>(
     expiresAt: { type: Date, required: true, index: true },
     chatId: { type: Number, default: null },
     groupMessageId: { type: Number, default: null },
+    waitingMediatorAt: { type: Date, default: null },
+    reminderMessageId: { type: Number, default: null },
+    mediatorsRepingedAt: { type: Date, default: null },
+    adminsAlertedAt: { type: Date, default: null },
+    requesterRating: { type: Number, default: null, min: 1, max: 5 },
+    partnerRating: { type: Number, default: null, min: 1, max: 5 },
     mediatorTelegramId: { type: Number, default: null, index: true },
     mediatorUsername: { type: String, default: null },
     mediatorName: { type: String, default: null },

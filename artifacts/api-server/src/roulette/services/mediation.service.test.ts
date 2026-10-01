@@ -27,6 +27,7 @@ vi.mock('../models/MediationTicket', () => ({
 vi.mock('../models/ExchangeListing', () => ({ ExchangeListing: { findById: vi.fn() } }));
 vi.mock('../models/Counter', () => ({ nextSequence: mocks.nextSequence }));
 vi.mock('./exchange.service', () => ({ exchangeAllowed: (s: { exchangePublic: boolean }, r: string | null) => s.exchangePublic || r !== null }));
+vi.mock('./admin.service', () => ({ listAllAdminTelegramIds: vi.fn().mockResolvedValue([1000]) }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
 import {
@@ -36,6 +37,8 @@ import {
   expireMediationTickets,
   handleJoinRequest,
   lookupPartner,
+  rateMediator,
+  remindWaitingTickets,
   takeTicket,
 } from './mediation.service';
 
@@ -45,6 +48,7 @@ const bot = {
   declineChatJoinRequest: vi.fn().mockResolvedValue(true),
   getChatAdministrators: vi.fn().mockResolvedValue([{ user: { id: 500, username: 'mid1', is_bot: false } }, { user: { id: 1, is_bot: true } }]),
   getChatMember: vi.fn(),
+  editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
 };
 attachMediationBot(bot as never);
 
@@ -173,5 +177,33 @@ describe('closing tickets', () => {
       expect.anything(),
       expect.anything()
     );
+  });
+});
+
+describe('waiting for a middleman', () => {
+  it('re-pings the middlemen after 10 minutes and alerts the developers after 30', async () => {
+    const tk = ticket({ status: 'waiting_mediator', groupMessageId: 3, waitingMediatorAt: new Date(Date.now() - 31 * 60_000) });
+    mocks.ticketFind.mockReturnValue({ limit: () => Promise.resolve([tk]) });
+    mocks.ticketUpdateOne.mockResolvedValue({ modifiedCount: 1 });
+    await remindWaitingTickets();
+    const reping = bot.sendMessage.mock.calls.find((c) => c[0] === CHAT);
+    expect(reping?.[1]).toContain('تذكير');
+    expect(reping?.[2].reply_to_message_id).toBe(3);
+    expect(bot.sendMessage).toHaveBeenCalledWith(1000, expect.stringContaining('30 دقيقة'));
+  });
+});
+
+describe('ratings', () => {
+  it('asks both sides to rate after م, once each', async () => {
+    mocks.ticketFindOneAndUpdate.mockResolvedValueOnce(ticket({ status: 'completed', mediatorTelegramId: 500, mediatorUsername: 'mid1' }));
+    mocks.userFindOne.mockReturnValue(select({ language: 'ar' }));
+    await completeByMediatorMessage(CHAT, 500, 'م');
+    const asks = bot.sendMessage.mock.calls.filter((c) => c[0] === 10 || c[0] === 20);
+    expect(asks).toHaveLength(2);
+    expect(asks[0][2].reply_markup.inline_keyboard[0]).toHaveLength(5);
+
+    mocks.ticketFindOneAndUpdate.mockResolvedValueOnce(null).mockResolvedValueOnce({ partnerRating: 4 });
+    expect(await rateMediator(String(new mongoose.Types.ObjectId()), 20, 4)).toEqual({ partnerRating: 4 });
+    expect(await rateMediator(String(new mongoose.Types.ObjectId()), 20, 9)).toBeNull();
   });
 });

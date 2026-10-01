@@ -94,8 +94,11 @@ function openTgLink(url: string) {
   else window.location.href = url;
 }
 
+/** Small copy for the listing cards: loads fast even on a weak connection. */
+const makeThumb = (file: File) => compressImage(file, 480, 0.72);
+
 /** Shrinks a photo to ~1280px JPEG before upload so posts stay light on slow connections. */
-async function compressImage(file: File): Promise<Blob> {
+async function compressImage(file: File, maxSide = 1280, quality = 0.82): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
   const url = URL.createObjectURL(file);
   try {
@@ -105,12 +108,12 @@ async function compressImage(file: File): Promise<Blob> {
       el.onerror = reject;
       el.src = url;
     });
-    const scale = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(img.naturalWidth * scale);
     canvas.height = Math.round(img.naturalHeight * scale);
     canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
     return blob ?? file;
   } catch {
     return file;
@@ -133,14 +136,23 @@ function rules(): { icon: string; text: string }[] {
   ];
 }
 
-export function ExchangePage({ onBack, initialListingId }: { onBack: () => void; initialListingId?: string | null }) {
+export function ExchangePage({
+  onBack,
+  initialListingId,
+  initialOfferId,
+}: {
+  onBack: () => void;
+  initialListingId?: string | null;
+  // From "request a middleman" under an accepted offer in the bot.
+  initialOfferId?: string | null;
+}) {
   const [stage, setStage] = useState<'loading' | 'intro' | 'main' | 'locked' | 'error'>('loading');
   const [status, setStatus] = useState<ExchangeStatus | null>(null);
   const [tab, setTab] = useState<ExTab>('browse');
   const [openId, setOpenId] = useState<string | null>(initialListingId ?? null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [editing, setEditing] = useState<ExchangeListingDetail | null>(null);
-  const [mediationFor, setMediationFor] = useState<{ username: string; listingId: string } | null>(null);
+  const [mediationFor, setMediationFor] = useState<MediationPrefill | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
 
@@ -162,14 +174,23 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
       .then(([s]) => {
         if (cancelled) return;
         if (!s.allowed) setStage('locked');
-        // Links to one post (from report alerts) skip the rules screen.
-        else setStage(initialListingId ? 'main' : 'intro');
+        // Links to one post (from report alerts) or from an accepted offer skip the rules screen.
+        else setStage(initialListingId || initialOfferId ? 'main' : 'intro');
       })
       .catch(() => !cancelled && setStage('error'));
     return () => {
       cancelled = true;
     };
-  }, [loadStatus, initialListingId]);
+  }, [loadStatus, initialListingId, initialOfferId]);
+
+  useEffect(() => {
+    if (!initialOfferId) return;
+    setTab('mediation');
+    api
+      .get<{ target: { telegramId: number; username: string | null; listingId: string } }>(`/mediation/offer/${initialOfferId}`)
+      .then((r) => setMediationFor({ telegramId: r.target.telegramId, username: r.target.username, listingId: r.target.listingId }))
+      .catch((err) => flash(errText(err)));
+  }, [initialOfferId, flash]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -275,7 +296,7 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
           onClose={() => setOpenId(null)}
           onChanged={() => { setRefreshKey((k) => k + 1); void loadStatus(); }}
           onEdit={(l) => { setOpenId(null); setEditing(l); window.scrollTo(0, 0); }}
-          onRequestMediator={(username, listingId) => { setMediationFor({ username, listingId }); goTab('mediation'); }}
+          onRequestMediator={(prefill) => { setMediationFor(prefill); goTab('mediation'); }}
         />
       )}
 
@@ -464,6 +485,7 @@ function PostForm({ status, flash, onPosted, initial }: { status: ExchangeStatus
         for (const p of ordered) {
           if (p.file) {
             form.append('images', await compressImage(p.file), `photo-${k + 1}.jpg`);
+            form.append('thumbs', await makeThumb(p.file), `thumb-${k + 1}.jpg`);
             order.push(`n:${k++}`);
           } else {
             order.push(`e:${p.id}`);
@@ -473,7 +495,10 @@ function PostForm({ status, flash, onPosted, initial }: { status: ExchangeStatus
         await api.form(`/exchange/listings/${initial.id}`, form, 'PATCH');
       } else {
         form.append('cover', String(cover));
-        for (const [i, p] of photos.entries()) form.append('images', await compressImage(p.file!), `photo-${i + 1}.jpg`);
+        for (const [i, p] of photos.entries()) {
+          form.append('images', await compressImage(p.file!), `photo-${i + 1}.jpg`);
+          form.append('thumbs', await makeThumb(p.file!), `thumb-${i + 1}.jpg`);
+        }
         await api.form('/exchange/listings', form);
       }
       haptic('heavy');
@@ -733,7 +758,7 @@ function ListingDetail({
   onClose: () => void;
   onChanged: () => void;
   onEdit: (l: ExchangeListingDetail) => void;
-  onRequestMediator: (username: string, listingId: string) => void;
+  onRequestMediator: (prefill: MediationPrefill) => void;
 }) {
   const [listing, setListing] = useState<ExchangeListingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -803,11 +828,12 @@ function ListingDetail({
                 <div className="ex-actions">
                   <button className="btn btn-primary" onClick={() => setOffering(true)}>{tr('💌 تقديم عرض عن طريق البوت', '💌 Make an offer through the bot')}</button>
                   <button className="btn btn-secondary" onClick={() => setWarning(true)}>{tr('💬 تواصل مع صاحب الحساب', '💬 Contact the owner')}</button>
-                  {listing.owner.username ? (
-                    <button className="btn btn-secondary ex-mediator-btn" onClick={() => onRequestMediator(listing.owner.username!, listing.id)}>{tr('🛡️ طلب وسيط ويّا صاحب الحساب', '🛡️ Request a middleman with the owner')}</button>
-                  ) : (
-                    <button className="btn btn-secondary" onClick={() => openTgLink(middlemen)}>{tr('🛡️ وسطاء MF', '🛡️ MF middlemen')}</button>
-                  )}
+                  <button
+                    className="btn btn-secondary ex-mediator-btn"
+                    onClick={() => onRequestMediator({ username: listing.owner.username, telegramId: listing.owner.telegramId, listingId: listing.id })}
+                  >
+                    {tr('🛡️ طلب وسيط ويّا صاحب الحساب', '🛡️ Request a middleman with the owner')}
+                  </button>
                   <button className="btn ex-report-btn" onClick={() => setReporting(true)}>{tr('🚩 إبلاغ عن المنشور', '🚩 Report this post')}</button>
                 </div>
               )}
@@ -908,7 +934,7 @@ function ListingDetail({
               <p className="card-sub">{tr('أي تبادل بدون وسيط على مسؤوليتك، وإذا تمت سرقتك ستُحظر من البوت لأنه تم تنبيهك.', "Any deal without a middleman is at your own risk. If you get scammed you'll be banned, because you were warned.")}</p>
               <button
                 className="btn btn-primary"
-                onClick={() => (listing.owner.username ? onRequestMediator(listing.owner.username, listing.id) : openTgLink(middlemen))}
+                onClick={() => onRequestMediator({ username: listing.owner.username, telegramId: listing.owner.telegramId, listingId: listing.id })}
               >
                 {tr('🛡️ اطلب وسيط من وسطاء MF', '🛡️ Get an MF middleman')}
               </button>
@@ -1024,6 +1050,7 @@ function ReportFlow({ listingId, reasons, flash, onClose }: { listingId: string;
   );
 }
 
+type MediationPrefill = { username?: string | null; telegramId?: number; listingId?: string | null };
 type MediationData = { enabled: boolean; windowMinutes: number; tickets: MediationTicketView[] };
 type Partner = { telegramId: number; username: string | null; name: string | null; photoUrl: string | null };
 const OPEN_TICKET = ['waiting_join', 'waiting_mediator', 'in_progress'];
@@ -1130,7 +1157,7 @@ function TicketCard({ ticket, flash, onCancel, busy }: { ticket: MediationTicket
   );
 }
 
-function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefill: { username: string; listingId: string } | null; onPrefillUsed: () => void }) {
+function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefill: MediationPrefill | null; onPrefillUsed: () => void }) {
   const [data, setData] = useState<MediationData | null>(null);
   const [username, setUsername] = useState('');
   const [listingId, setListingId] = useState<string | null>(null);
@@ -1157,12 +1184,12 @@ function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefi
     return () => window.clearInterval(id);
   }, [active, load]);
 
-  async function lookup(name = username) {
+  async function lookup(name = username, telegramId?: number) {
     if (busy) return;
-    if (!name.trim()) return flash(tr('اكتب يوزر طرفك الثاني', 'Enter the other side’s username'));
+    if (!telegramId && !name.trim()) return flash(tr('اكتب يوزر طرفك الثاني', 'Enter the other side’s username'));
     setBusy(true);
     try {
-      const res = await api.post<{ partner: Partner }>('/mediation/lookup', { username: name });
+      const res = await api.post<{ partner: Partner }>('/mediation/lookup', telegramId ? { telegramId } : { username: name });
       setPartner(res.partner);
     } catch (err) {
       setPartner(null);
@@ -1174,10 +1201,10 @@ function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefi
 
   useEffect(() => {
     if (!prefill || !data?.enabled) return;
-    setUsername('@' + prefill.username);
-    setListingId(prefill.listingId);
+    setUsername(prefill.username ? '@' + prefill.username : '');
+    setListingId(prefill.listingId ?? null);
     onPrefillUsed();
-    void lookup(prefill.username);
+    void lookup(prefill.username ?? '', prefill.telegramId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill, data?.enabled]);
 
@@ -1185,7 +1212,7 @@ function MediationPanel({ flash, prefill, onPrefillUsed }: { flash: Flash; prefi
     if (!partner || busy) return;
     setBusy(true);
     try {
-      await api.post('/mediation/tickets', { username: partner.username, listingId });
+      await api.post('/mediation/tickets', { telegramId: partner.telegramId, listingId });
       haptic('heavy');
       setPartner(null);
       setUsername('');

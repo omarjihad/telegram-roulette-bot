@@ -12,7 +12,7 @@ import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
 import { processSpinReadyReminders } from './spinReady.worker';
 import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
-import { expireMediationTickets } from '../services/mediation.service';
+import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -52,6 +52,7 @@ export function startExpirationWorker() {
   cron.schedule('* * * * *', async () => {
     try {
       await expireMediationTickets();
+      await remindWaitingTickets();
     } catch (err) {
       logger.error({ err }, 'mediation ticket expiry failed');
     }

@@ -25,7 +25,7 @@ import {
   postRenewExchangeListing,
 } from '../controllers/exchange.controller';
 import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
-import { getMediation, postCancelMediationTicket, postMediationLookup, postMediationTicket } from '../controllers/mediation.controller';
+import { getMediation, getMediationOfferTarget, postCancelMediationTicket, postMediationLookup, postMediationTicket } from '../controllers/mediation.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
 
 const router = Router();
@@ -76,6 +76,7 @@ router.post('/exchange/listings/:id/report', purchaseLimiter, uploadReportMedia,
 
 router.get('/mediation', getMediation);
 router.post('/mediation/lookup', postMediationLookup);
+router.get('/mediation/offer/:id', getMediationOfferTarget);
 router.post('/mediation/tickets', purchaseLimiter, postMediationTicket);
 router.post('/mediation/tickets/:id/cancel', postCancelMediationTicket);
 

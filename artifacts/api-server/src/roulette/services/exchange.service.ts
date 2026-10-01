@@ -110,7 +110,8 @@ function summary(l: IExchangeListing) {
     pinned: l.pinned,
     expiresAt: listingExpiresAt(l),
     status: l.status,
-    coverUrl: l.images[0] ? exchangeImageUrl(l.images[0]) : null,
+    // Cards load the small copy; the full photo is only fetched inside the post.
+    coverUrl: l.images[0] ? `${exchangeImageUrl(l.images[0])}?size=thumb` : null,
     imageCount: l.images.length,
     views: l.views ?? 0,
     ownerName: l.ownerUsername ? '@' + l.ownerUsername : l.ownerName || null,
@@ -139,6 +140,8 @@ export interface UploadedFile {
   mimetype: string;
   size: number;
   originalname?: string;
+  // Small copy for the listing cards (exchange photos only).
+  thumb?: UploadedFile;
 }
 
 /** Mode, details and prices of a post, checked the same way when it's created or edited. */
@@ -211,7 +214,7 @@ export async function createListing(
   if (Number.isInteger(cover) && cover > 0 && cover < files.length) files = [files[cover], ...files.filter((_, i) => i !== cover)];
 
   const images = await ExchangeImage.insertMany(
-    files.map((f) => ({ ownerTelegramId: user.telegramId, data: f.buffer, mimeType: f.mimetype, size: f.size }))
+    files.map((f) => ({ ownerTelegramId: user.telegramId, data: f.buffer, thumb: f.thumb?.buffer ?? null, mimeType: f.mimetype, size: f.size }))
   );
   const listing = await ExchangeListing.create({
     owner: user._id,
@@ -337,7 +340,13 @@ export async function updateListing(
 
   const fresh = usedNew.size
     ? await ExchangeImage.insertMany(
-        [...usedNew.keys()].map((i) => ({ ownerTelegramId: user.telegramId, data: files[i].buffer, mimeType: files[i].mimetype, size: files[i].size }))
+        [...usedNew.keys()].map((i) => ({
+          ownerTelegramId: user.telegramId,
+          data: files[i].buffer,
+          thumb: files[i].thumb?.buffer ?? null,
+          mimeType: files[i].mimetype,
+          size: files[i].size,
+        }))
       )
     : [];
   const freshIds = new Map([...usedNew.keys()].map((fileIndex, k) => [fileIndex, fresh[k]._id as Types.ObjectId]));
@@ -666,9 +675,15 @@ export async function updateExchangeAdminSettings(input: Record<string, unknown>
   return getExchangeAdminSettings();
 }
 
-export async function getExchangeImage(id: string) {
+/** The photo, or its small copy when asked for (falling back to the full photo). */
+export async function getExchangeImage(id: string, thumb = false) {
   if (!mongoose.isValidObjectId(id)) return null;
-  return ExchangeImage.findById(id).select('data mimeType');
+  if (thumb) {
+    const small = await ExchangeImage.findById(id).select('thumb').lean();
+    if (small?.thumb) return { data: Buffer.from(small.thumb.buffer ?? small.thumb), mimeType: 'image/jpeg' };
+  }
+  const full = await ExchangeImage.findById(id).select('data mimeType');
+  return full ? { data: full.data, mimeType: full.mimeType } : null;
 }
 
 /** Removes posts older than 4 days and tells their owners (run by the expiration worker). */
@@ -766,12 +781,14 @@ export async function makeOffer(
   try {
     // The account photos go first as one album; the offer text with its buttons follows.
     if (photos.length === 1) {
-      await botRef.sendPhoto(listing.ownerTelegramId, photos[0].buffer, {}, { filename: 'offer-1.jpg', contentType: photos[0].mimetype });
+      const m = await botRef.sendPhoto(listing.ownerTelegramId, photos[0].buffer, {}, { filename: 'offer-1.jpg', contentType: photos[0].mimetype });
+      offer.photoMessageIds = [m.message_id];
     } else if (photos.length > 1) {
-      await botRef.sendMediaGroup(
+      const album = await botRef.sendMediaGroup(
         listing.ownerTelegramId,
         photos.map((p, i) => ({ type: 'photo', media: p.buffer, fileOptions: { filename: `offer-${i + 1}.jpg`, contentType: p.mimetype } })) as never
       );
+      offer.photoMessageIds = (album as unknown as { message_id: number }[]).map((m) => m.message_id);
     }
     const sent = await botRef.sendMessage(listing.ownerTelegramId, text, {
       disable_web_page_preview: true,
@@ -779,6 +796,8 @@ export async function makeOffer(
         inline_keyboard: [[
           { text: pick({ ar: '✅ قبول العرض', en: '✅ Accept' }, lang), callback_data: `exo_acc_${offer._id}` },
           { text: pick({ ar: '❌ رفض', en: '❌ Decline' }, lang), callback_data: `exo_rej_${offer._id}` },
+        ], [
+          { text: pick({ ar: '🚩 إبلاغ عن العرض', en: '🚩 Report this offer' }, lang), callback_data: `exo_rep_${offer._id}` },
         ]],
       },
     });
@@ -790,6 +809,84 @@ export async function makeOffer(
     throw new AppError(t('تعذر إيصال العرض لصاحب الحساب (ربما أوقف البوت)', "Couldn't deliver the offer (the owner may have stopped the bot)"), 409, 'OFFER_UNDELIVERED');
   }
   return { offerId: String(offer._id) };
+}
+
+/**
+ * Button that opens the Mini App's mediation tab with the other side of an accepted offer
+ * filled in, so asking for a middleman is one tap.
+ */
+export function mediationButton(offerId: string, text: string): TelegramBot.InlineKeyboardButton | null {
+  if (env.BOT_USERNAME && env.MINI_APP_SHORT_NAME) {
+    return { text, url: `https://t.me/${env.BOT_USERNAME}/${env.MINI_APP_SHORT_NAME}?startapp=mo_${offerId}` };
+  }
+  if (env.MINI_APP_URL) return { text, web_app: { url: `${env.MINI_APP_URL.replace(/\/$/, '')}/?tab=exchange&mo=${offerId}` } };
+  return null;
+}
+
+/** Who the middleman request from an accepted offer is with (the side that isn't you). */
+export async function getOfferMediationTarget(user: HydratedDocument<IUser>, adminRole: string | null, offerId: string) {
+  await assertAllowed(adminRole);
+  if (!mongoose.isValidObjectId(offerId)) throw new AppError(t('العرض غير موجود', 'Offer not found'), 404, 'NOT_FOUND');
+  const offer = await ExchangeOffer.findById(offerId);
+  if (!offer || offer.status !== 'accepted') throw new AppError(t('العرض غير موجود', 'Offer not found'), 404, 'NOT_FOUND');
+  const otherId = offer.fromTelegramId === user.telegramId ? offer.toTelegramId : offer.toTelegramId === user.telegramId ? offer.fromTelegramId : null;
+  if (!otherId) throw new AppError(t('العرض غير موجود', 'Offer not found'), 404, 'NOT_FOUND');
+  const other = await User.findOne({ telegramId: otherId }).select('username').lean();
+  return { telegramId: otherId, username: other?.username ?? null, listingId: String(offer.listing) };
+}
+
+/** The owner reported an offer (e.g. an insulting message): developers get it with the photos. */
+export async function reportOffer(offerId: string, ownerTelegramId: number) {
+  if (!mongoose.isValidObjectId(offerId)) return null;
+  const offer = await ExchangeOffer.findOneAndUpdate(
+    { _id: offerId, toTelegramId: ownerTelegramId, status: 'pending' },
+    { $set: { status: 'reported', reportedAt: new Date() } },
+    { new: true }
+  );
+  if (!offer || !botRef) return offer;
+  const [sender, owner] = await Promise.all([
+    User.findOne({ telegramId: offer.fromTelegramId }).select('telegramId username firstName').lean(),
+    User.findOne({ telegramId: ownerTelegramId }).select('telegramId username firstName').lean(),
+  ]);
+  const link = buildListingLink(String(offer.listing));
+  const text =
+    `🚩 بلاغ على عرض في قسم التبادل\n\n` +
+    `نوع العرض: ${offer.kind === 'trade' ? 'تبديل بحسابه' : 'شراء'}\n` +
+    `نص العرض:\n${offer.message}\n\n` +
+    `━━━━━━━━━━\n` +
+    `👤 صاحب العرض (المُبلَّغ عليه):\n${person({ username: sender?.username, firstName: sender?.firstName, telegramId: offer.fromTelegramId })}\n\n` +
+    `🎯 المُبلِّغ (صاحب المنشور):\n${person({ username: owner?.username, firstName: owner?.firstName, telegramId: ownerTelegramId })}\n` +
+    (link ? `\n🔗 المنشور: ${link}\n` : '') +
+    (offer.photoMessageIds.length ? `\n🖼️ صور العرض (${offer.photoMessageIds.length}) بالأسفل` : '');
+  const adminIds = await listAllAdminTelegramIds();
+  for (const id of adminIds) {
+    try {
+      const msg = await botRef.sendMessage(id, text, {
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🚫 حظر صاحب العرض', callback_data: `exr_bano_${offer._id}` },
+            { text: '✅ تمت المعالجة', callback_data: `exr_oko_${offer._id}` },
+          ]],
+        },
+      });
+      for (const mid of offer.photoMessageIds) {
+        await botRef.copyMessage(id, ownerTelegramId, mid, { reply_to_message_id: msg.message_id } as never).catch(() => undefined);
+      }
+    } catch (err) {
+      logger.warn({ err, id }, 'failed to send offer report to admin');
+    }
+  }
+  return offer;
+}
+
+/** A developer banned the sender of a reported offer from the bot. */
+export async function banOfferSender(offerId: string, actor: { telegramId: number; username?: string | null }) {
+  if (!mongoose.isValidObjectId(offerId)) throw new AppError('العرض غير موجود', 404, 'NOT_FOUND');
+  const offer = await ExchangeOffer.findById(offerId);
+  if (!offer) throw new AppError('العرض غير موجود', 404, 'NOT_FOUND');
+  const user = await banUser(String(offer.fromTelegramId), actor.telegramId, actor.username ?? undefined, 'exchange: reported offer');
+  return { telegramId: user.telegramId, username: user.username ?? null };
 }
 
 /** The owner pressed accept / reject under an offer in the bot. */
@@ -807,8 +904,25 @@ export async function decideOffer(offerId: string, ownerTelegramId: number, acce
     getSettings(),
   ]);
   const group = settings.exchangeMiddlemanGroup || 'MF_MMMM';
+  if (buyer && accept && botRef) {
+    // Straight to the bot with a one-tap "request a middleman" button for this pair.
+    const lang = userLang(buyer);
+    const ownerName = owner ? personLine(owner) : '';
+    const text = pick(
+      {
+        ar: `✅ تم قبول عرضك!\n\nعرضك: «${offer.message.slice(0, 300)}»\n\nتواصل ويّا صاحب الحساب ${ownerName}، وبعد التفاهم اطلب وسيط من الزر أدناه 👇\n⚠️ لا تثق بأحد وتعامل بوسيط فقط!`,
+        en: `✅ Your offer was accepted!\n\nYour offer: “${offer.message.slice(0, 300)}”\n\nContact the owner ${ownerName}, and once you agree, request a middleman with the button below 👇\n⚠️ Trust no one, deal through a middleman only!`,
+      },
+      lang
+    );
+    const button = mediationButton(String(offer._id), pick({ ar: `🛡️ طلب وسيط ويّا ${ownerName}`, en: `🛡️ Request a middleman with ${ownerName}` }, lang));
+    await botRef
+      .sendMessage(buyer.telegramId, text, { disable_web_page_preview: true, ...(button ? { reply_markup: { inline_keyboard: [[button]] } } : {}) })
+      .catch((err) => logger.warn({ err }, 'failed to tell the offer sender'));
+  }
   if (buyer) {
     await createNotification({
+      pushToTelegram: !accept,
       userId: buyer._id as Types.ObjectId,
       telegramId: buyer.telegramId,
       type: 'system_announcement',

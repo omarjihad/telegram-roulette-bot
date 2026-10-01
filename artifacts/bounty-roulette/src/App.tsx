@@ -32,8 +32,16 @@ function initialTab(): TabKey {
   const startParam = tg?.initDataUnsafe?.start_param ?? '';
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (startParam === 'race' || startParam.startsWith('race_') || urlTab === 'race') return 'contest';
-  if (initialListingId() || urlTab === 'exchange') return 'exchange';
+  if (initialListingId() || initialOfferId() || urlTab === 'exchange') return 'exchange';
   return 'home';
+}
+
+// "Request a middleman" under an accepted offer: startapp=mo_<offerId>, or ?mo=<offerId>.
+function initialOfferId(): string | null {
+  const tg = getTelegramWebApp() as { initDataUnsafe?: { start_param?: string } } | null;
+  const startParam = tg?.initDataUnsafe?.start_param ?? '';
+  const id = startParam.startsWith('mo_') ? startParam.slice(3) : new URLSearchParams(window.location.search).get('mo');
+  return id && /^[a-f0-9]{24}$/.test(id) ? id : null;
 }
 
 // Exchange post links: startapp=listing_<id>, or ?tab=exchange&listing=<id> from the bot's button.
@@ -53,6 +61,7 @@ export default function App() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [listingLink, setListingLink] = useState(initialListingId);
+  const [offerLink, setOfferLink] = useState(initialOfferId);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);
@@ -168,7 +177,7 @@ export default function App() {
         {tab === 'referrals' && <ReferralsPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
-        {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setTab('home'); }} initialListingId={listingLink} />}
+        {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setOfferLink(null); setTab('home'); }} initialListingId={listingLink} initialOfferId={offerLink} />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && (
           <>

@@ -10,7 +10,10 @@ export interface IExchangeOffer extends Document {
   kind: 'buy' | 'trade';
   message: string;
   photoCount: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'reported';
+  // The album of a trade offer in the owner's chat, so a report can forward it.
+  photoMessageIds: number[];
+  reportedAt?: Date | null;
   ownerMessage?: { chatId: number; messageId: number } | null;
   decidedAt?: Date | null;
   createdAt: Date;
@@ -25,7 +28,9 @@ const offerSchema = new Schema<IExchangeOffer>(
     kind: { type: String, enum: ['buy', 'trade'], default: 'buy' },
     message: { type: String, required: true, maxlength: 1500 },
     photoCount: { type: Number, default: 0 },
-    status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'accepted', 'rejected', 'reported'], default: 'pending' },
+    photoMessageIds: { type: [Number], default: [] },
+    reportedAt: { type: Date, default: null },
     ownerMessage: { type: { _id: false, chatId: Number, messageId: Number }, default: null },
     decidedAt: { type: Date, default: null },
   },

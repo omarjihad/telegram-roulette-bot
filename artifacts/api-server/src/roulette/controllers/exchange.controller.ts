@@ -24,7 +24,14 @@ import {
   updateListing,
 } from '../services/exchange.service';
 
-const files = (req: Request) => ((req.files as UploadedFile[] | undefined) ?? []);
+/** Uploaded files; listing photos come with their small "thumbs" copy at the same index. */
+const files = (req: Request): UploadedFile[] => {
+  const f = req.files as UploadedFile[] | Record<string, UploadedFile[]> | undefined;
+  if (!f) return [];
+  if (Array.isArray(f)) return f;
+  const thumbs = f.thumbs ?? [];
+  return (f.images ?? []).map((img, i) => ({ ...img, thumb: thumbs[i] && thumbs[i].size <= 400 * 1024 ? thumbs[i] : undefined }));
+};
 const actor = (req: Request) => ({ telegramId: req.dbUser!.telegramId, username: req.dbUser!.username ?? null });
 
 export const getExchange = asyncHandler(async (req: Request, res: Response) => {
@@ -70,7 +77,7 @@ export const postExchangeReport = asyncHandler(async (req: Request, res: Respons
 
 /** Public (no initData) because <img> tags can't send headers; ids are random ObjectIds. */
 export const getExchangeImageFile = asyncHandler(async (req: Request, res: Response) => {
-  const image = await getExchangeImage(req.params.id);
+  const image = await getExchangeImage(req.params.id, (req.query as { size?: string }).size === 'thumb');
   if (!image) throw new AppError('Image not found', 404, 'NOT_FOUND');
   res.setHeader('Content-Type', image.mimeType);
   res.setHeader('Cache-Control', 'public, max-age=604800, immutable');

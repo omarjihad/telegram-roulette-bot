@@ -9,11 +9,15 @@ import { AppError } from '../utils/AppError';
 import { logger } from '../config/logger';
 import { pick, t, userLang } from '../i18n';
 import { exchangeAllowed } from './exchange.service';
+import { listAllAdminTelegramIds } from './admin.service';
 
 /** Both sides must ask to join the mediation group within this time. */
 export const MEDIATION_JOIN_WINDOW_MS = 15 * 60 * 1000;
 /** What the middleman types in the group to finish a ticket. */
 const COMPLETE_WORDS = new Set(['م', 'م2']);
+/** No middleman took a ready ticket: ping them again after 10 minutes, tell the developers after 30. */
+const REPING_AFTER_MS = 10 * 60 * 1000;
+const ALERT_ADMINS_AFTER_MS = 30 * 60 * 1000;
 
 let botRef: TelegramBot | null = null;
 export function attachMediationBot(bot: TelegramBot) {
@@ -67,11 +71,20 @@ function ticketView(tk: IMediationTicket, me: number, link: string) {
 }
 
 /** "Is your other side: <name>?" — the person must have opened the bot before. */
-export async function lookupPartner(user: HydratedDocument<IUser>, adminRole: string | null, rawUsername: unknown) {
+export async function lookupPartner(user: HydratedDocument<IUser>, adminRole: string | null, rawUsername: unknown, telegramId?: unknown) {
   await assertAllowed(adminRole);
-  const username = normalizeUsername(rawUsername);
-  if (!/^[A-Za-z0-9_]{4,32}$/.test(username)) throw new AppError(t('اكتب يوزر صحيح مثل @username', 'Enter a valid username like @username'), 422, 'VALIDATION_ERROR');
-  const partner = await User.findOne({ username: new RegExp(`^${username}$`, 'i') }).select('telegramId username firstName lastName photoUrl isBanned');
+  const fields = 'telegramId username firstName lastName photoUrl isBanned';
+  let partner;
+  // From an accepted offer the other side is known by id (they may have no @username).
+  if (telegramId !== undefined && telegramId !== null && telegramId !== '') {
+    const id = Number(telegramId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new AppError(t('اكتب يوزر صحيح مثل @username', 'Enter a valid username like @username'), 422, 'VALIDATION_ERROR');
+    partner = await User.findOne({ telegramId: id }).select(fields);
+  } else {
+    const username = normalizeUsername(rawUsername);
+    if (!/^[A-Za-z0-9_]{4,32}$/.test(username)) throw new AppError(t('اكتب يوزر صحيح مثل @username', 'Enter a valid username like @username'), 422, 'VALIDATION_ERROR');
+    partner = await User.findOne({ username: new RegExp(`^${username}$`, 'i') }).select(fields);
+  }
   if (!partner) {
     throw new AppError(
       t('هذا الشخص ما دخل البوت بعد. خليه يفتح البوت مرة وحدة وبعدها حاول.', "This person hasn't opened the bot yet. Ask them to open it once, then try again."),
@@ -101,10 +114,10 @@ async function findOpenTicketFor(telegramId: number) {
 export async function createTicket(
   user: HydratedDocument<IUser>,
   adminRole: string | null,
-  input: { username?: unknown; listingId?: unknown }
+  input: { username?: unknown; telegramId?: unknown; listingId?: unknown }
 ) {
   const settings = await assertAllowed(adminRole);
-  const { partner } = await lookupPartner(user, adminRole, input.username);
+  const { partner } = await lookupPartner(user, adminRole, input.username, input.telegramId);
 
   // Waiting tickets block a new one; a ticket a middleman already took doesn't.
   for (const [who, id] of [['me', user.telegramId], ['partner', partner.telegramId]] as const) {
@@ -204,19 +217,28 @@ async function dm(telegramId: number, text: { ar: string; en: string }) {
   await botRef.sendMessage(telegramId, pick(text, userLang(u)), { disable_web_page_preview: true }).catch(() => undefined);
 }
 
-/** Pings the group's middlemen (its human admins) with a "take ticket" button. */
-async function announceToMediators(ticket: IMediationTicket) {
-  if (!botRef || !ticket.chatId) return;
-  let mediators = '';
+/** Mentions of the mediation group's middlemen (its human admins). */
+async function mediatorMentions(chatId: number) {
   try {
-    const admins = await botRef.getChatAdministrators(ticket.chatId);
-    mediators = admins
+    const admins = await botRef!.getChatAdministrators(chatId);
+    return admins
       .filter((a) => !a.user.is_bot)
       .map((a) => mention({ telegramId: a.user.id, username: a.user.username, name: a.user.first_name }))
       .join(' ');
   } catch (err) {
     logger.warn({ err }, 'failed to list mediation group admins');
+    return '';
   }
+}
+
+function takeButton(ticket: IMediationTicket) {
+  return { inline_keyboard: [[{ text: `✋ استلام التذكرة #${ticket.number}`, callback_data: `med_take_${ticket._id}` }]] };
+}
+
+/** Pings the group's middlemen (its human admins) with a "take ticket" button. */
+async function announceToMediators(ticket: IMediationTicket) {
+  if (!botRef || !ticket.chatId) return;
+  const mediators = await mediatorMentions(ticket.chatId);
   const listing = ticket.listing ? await ExchangeListing.findById(ticket.listing).select('details') : null;
   const text =
     `🛡️ <b>تذكرة وساطة #${ticket.number}</b>\n\n` +
@@ -229,7 +251,7 @@ async function announceToMediators(ticket: IMediationTicket) {
     .sendMessage(ticket.chatId, text, {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [[{ text: `✋ استلام التذكرة #${ticket.number}`, callback_data: `med_take_${ticket._id}` }]] },
+      reply_markup: takeButton(ticket),
     })
     .catch((err) => {
       logger.warn({ err }, 'failed to post mediation ticket to the group');
@@ -251,7 +273,11 @@ export async function handleJoinRequest(req: TelegramBot.ChatJoinRequest) {
   if (!ticket) return false;
 
   if (ticket.requester.requestedAt && ticket.partner.requestedAt) {
-    ticket = await MediationTicket.findOneAndUpdate({ _id: ticket._id, status: 'waiting_join' }, { $set: { status: 'waiting_mediator' } }, { new: true });
+    ticket = await MediationTicket.findOneAndUpdate(
+      { _id: ticket._id, status: 'waiting_join' },
+      { $set: { status: 'waiting_mediator', waitingMediatorAt: now } },
+      { new: true }
+    );
     if (!ticket) return true;
     await announceToMediators(ticket);
     for (const p of [ticket.requester, ticket.partner]) {
@@ -290,6 +316,13 @@ export async function takeTicket(ticketId: string, mediator: TelegramBot.User, c
     { new: true }
   );
   if (!ticket) return { error: 'هذي التذكرة استلمها وسيط ثاني أو انتهت' };
+  // The reminder carries the same button; it goes away once someone takes the ticket.
+  if (ticket.reminderMessageId) {
+    await botRef.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: ticket.reminderMessageId }).catch(() => undefined);
+  }
+  if (ticket.groupMessageId) {
+    await botRef.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: ticket.groupMessageId }).catch(() => undefined);
+  }
 
   for (const p of [ticket.requester, ticket.partner]) {
     await botRef.approveChatJoinRequest(chatId, p.telegramId).catch((err) => logger.warn({ err, ticket: ticket.number }, 'failed to approve join request'));
@@ -319,11 +352,110 @@ export async function completeByMediatorMessage(chatId: number, mediatorId: numb
   if (!COMPLETE_WORDS.has(text.trim())) return null;
   const settings = await getSettings();
   if (!settings.mediationChatId || chatId !== settings.mediationChatId) return null;
-  return MediationTicket.findOneAndUpdate(
+  const ticket = await MediationTicket.findOneAndUpdate(
     { chatId, mediatorTelegramId: mediatorId, status: 'in_progress' },
     { $set: { status: 'completed', completedAt: new Date(), closedAt: new Date() } },
     { sort: { takenAt: -1 }, new: true }
   );
+  if (ticket) await askForRatings(ticket);
+  return ticket;
+}
+
+/** After a completed ticket, each side is asked to rate the middleman (1-5 stars). */
+async function askForRatings(ticket: IMediationTicket) {
+  if (!botRef) return;
+  const med = plainName({ telegramId: ticket.mediatorTelegramId!, username: ticket.mediatorUsername, name: ticket.mediatorName });
+  for (const p of [ticket.requester, ticket.partner]) {
+    const u = await User.findOne({ telegramId: p.telegramId }).select('language').lean();
+    const lang = userLang(u);
+    await botRef
+      .sendMessage(
+        p.telegramId,
+        pick(
+          {
+            ar: `✅ اكتملت الوساطة #${ticket.number}\n\nشلون كانت الوساطة ويّا ${med}؟ قيّمه حتى نعرف أحسن الوسطاء:`,
+            en: `✅ Mediation #${ticket.number} is complete\n\nHow was it with ${med}? Rate them so we know the best middlemen:`,
+          },
+          lang
+        ),
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [1, 2, 3, 4, 5].map((n) => ({ text: `${n}⭐`, callback_data: `medr_${ticket._id}_${n}` })),
+            ],
+          },
+        }
+      )
+      .catch(() => undefined);
+  }
+}
+
+/** A side tapped a star under the rating question. Each side rates once. */
+export async function rateMediator(ticketId: string, raterId: number, stars: number) {
+  if (!mongoose.isValidObjectId(ticketId) || !Number.isInteger(stars) || stars < 1 || stars > 5) return null;
+  const asRequester = await MediationTicket.findOneAndUpdate(
+    { _id: ticketId, status: 'completed', 'requester.telegramId': raterId, requesterRating: null },
+    { $set: { requesterRating: stars } },
+    { new: true }
+  );
+  if (asRequester) return asRequester;
+  return MediationTicket.findOneAndUpdate(
+    { _id: ticketId, status: 'completed', 'partner.telegramId': raterId, partnerRating: null },
+    { $set: { partnerRating: stars } },
+    { new: true }
+  );
+}
+
+/**
+ * Ready tickets nobody took: the middlemen are pinged again after 10 minutes, and the
+ * developers get a private alert after 30.
+ */
+export async function remindWaitingTickets(now = new Date()) {
+  if (!botRef) return;
+  const repingDue = await MediationTicket.find({
+    status: 'waiting_mediator',
+    mediatorsRepingedAt: null,
+    waitingMediatorAt: { $lte: new Date(now.getTime() - REPING_AFTER_MS) },
+  }).limit(50);
+  for (const tk of repingDue) {
+    const claimed = await MediationTicket.updateOne({ _id: tk._id, mediatorsRepingedAt: null }, { $set: { mediatorsRepingedAt: now } });
+    if (claimed.modifiedCount === 0 || !tk.chatId) continue;
+    const mediators = await mediatorMentions(tk.chatId);
+    const sent = await botRef
+      .sendMessage(
+        tk.chatId,
+        `⏰ <b>تذكير: التذكرة #${tk.number} تنتظر وسيط من 10 دقايق</b>\n\n👤 ${mention(tk.requester)} و ${mention(tk.partner)}\n` + (mediators ? `\n📣 ${mediators}` : ''),
+        {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: takeButton(tk),
+          ...(tk.groupMessageId ? { reply_to_message_id: tk.groupMessageId } : {}),
+        }
+      )
+      .catch((err) => {
+        logger.warn({ err }, 'failed to re-ping mediators');
+        return null;
+      });
+    if (sent) await MediationTicket.updateOne({ _id: tk._id }, { $set: { reminderMessageId: sent.message_id } });
+  }
+
+  const alertDue = await MediationTicket.find({
+    status: 'waiting_mediator',
+    adminsAlertedAt: null,
+    waitingMediatorAt: { $lte: new Date(now.getTime() - ALERT_ADMINS_AFTER_MS) },
+  }).limit(50);
+  if (alertDue.length === 0) return;
+  const adminIds = await listAllAdminTelegramIds();
+  for (const tk of alertDue) {
+    const claimed = await MediationTicket.updateOne({ _id: tk._id, adminsAlertedAt: null }, { $set: { adminsAlertedAt: now } });
+    if (claimed.modifiedCount === 0) continue;
+    const text =
+      `⚠️ التذكرة #${tk.number} تنتظر وسيط من 30 دقيقة وما استلمها أحد\n\n` +
+      `الطرف الأول: ${plainName(tk.requester)} (${tk.requester.telegramId})\n` +
+      `الطرف الثاني: ${plainName(tk.partner)} (${tk.partner.telegramId})\n\n` +
+      `ادخل كروب الوساطة واستلمها أو نبّه الوسطاء.`;
+    for (const id of adminIds) await botRef.sendMessage(id, text).catch(() => undefined);
+  }
 }
 
 /** Tickets where someone didn't ask to join within 15 minutes are cancelled. */
@@ -362,7 +494,23 @@ export async function getMediationAdminStats() {
   ]);
   const top = await MediationTicket.aggregate([
     { $match: { status: 'completed' } },
-    { $group: { _id: '$mediatorTelegramId', username: { $last: '$mediatorUsername' }, name: { $last: '$mediatorName' }, count: { $sum: 1 } } },
+    {
+      $group: {
+        _id: '$mediatorTelegramId',
+        username: { $last: '$mediatorUsername' },
+        name: { $last: '$mediatorName' },
+        count: { $sum: 1 },
+        ratingSum: { $sum: { $add: [{ $ifNull: ['$requesterRating', 0] }, { $ifNull: ['$partnerRating', 0] }] } },
+        ratingCount: {
+          $sum: {
+            $add: [
+              { $cond: [{ $gt: ['$requesterRating', null] }, 1, 0] },
+              { $cond: [{ $gt: ['$partnerRating', null] }, 1, 0] },
+            ],
+          },
+        },
+      },
+    },
     { $sort: { count: -1 } },
     { $limit: 5 },
   ]);
@@ -371,6 +519,12 @@ export async function getMediationAdminStats() {
     completed,
     completedWeek,
     expired,
-    topMediators: top.map((m) => ({ telegramId: m._id, name: m.username ? '@' + m.username : m.name || String(m._id), count: m.count })),
+    topMediators: top.map((m) => ({
+      telegramId: m._id,
+      name: m.username ? '@' + m.username : m.name || String(m._id),
+      count: m.count,
+      rating: m.ratingCount ? Math.round((m.ratingSum / m.ratingCount) * 10) / 10 : null,
+      ratings: m.ratingCount,
+    })),
   };
 }

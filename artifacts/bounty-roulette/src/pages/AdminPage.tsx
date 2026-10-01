@@ -499,7 +499,7 @@ interface ExchangeAdminSettings {
     completed: number;
     completedWeek: number;
     expired: number;
-    topMediators: Array<{ telegramId: number; name: string; count: number }>;
+    topMediators: Array<{ telegramId: number; name: string; count: number; rating: number | null; ratings: number }>;
   };
   counts: { active: number; pinned: number; openReports: number };
 }
@@ -606,7 +606,10 @@ function ExchangeAdminTab() {
           <>
             <h4 style={{ margin: '12px 0 6px' }}>🏅 أكثر الوسطاء</h4>
             {settings.mediation.topMediators.map((m, i) => (
-              <div className="list-item" key={m.telegramId}><span>#{i + 1} <bdi>{m.name}</bdi></span><strong>{m.count} وساطة</strong></div>
+              <div className="list-item" key={m.telegramId}>
+                <span>#{i + 1} <bdi>{m.name}</bdi></span>
+                <strong>{m.count} وساطة · {m.rating !== null ? `⭐ ${m.rating} (${m.ratings})` : 'بدون تقييم'}</strong>
+              </div>
             ))}
           </>
         )}

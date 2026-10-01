@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../config/logger';
 import { getAdminRole } from '../services/admin.service';
-import { banListingOwner, decideOffer, removeListing, renewListing, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
+import { banListingOwner, banOfferSender, decideOffer, mediationButton, removeListing, renewListing, reportOffer, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
 import { User } from '../models/User';
 import { pick, runWithLang, userLang } from '../i18n';
 import { ExchangeReport } from '../models/ExchangeReport';
@@ -40,6 +40,11 @@ export function registerExchangeActions(bot: TelegramBot) {
       } else if (action === 'ok') {
         await resolveReport(id, actor);
         note = `✅ تمت معالجة البلاغ بواسطة ${by}`;
+      } else if (action === 'bano') {
+        const r = await banOfferSender(id, actor);
+        note = `🚫 تم حظر صاحب العرض (${r.username ? '@' + r.username : r.telegramId}) بواسطة ${by}`;
+      } else if (action === 'oko') {
+        note = `✅ تمت معالجة البلاغ بواسطة ${by}`;
       } else {
         return;
       }
@@ -48,7 +53,7 @@ export function registerExchangeActions(bot: TelegramBot) {
       if (msg?.text) {
         // Keep the buttons that still make sense; a removed post or handled report loses them.
         const done = action !== 'pin';
-        const listingId = action === 'ok' ? null : id;
+        const listingId = action === 'ok' || action === 'bano' || action === 'oko' ? null : id;
         await bot
           .editMessageText(`${msg.text}\n\n━━━━━━━━━━\n${note}`, {
             chat_id: msg.chat.id,
@@ -75,6 +80,22 @@ function registerOfferActions(bot: TelegramBot) {
     const [, action, offerId] = data.split('_');
     const lang = userLang(await User.findOne({ telegramId: query.from.id }).select('language').lean());
     try {
+      if (action === 'rep') {
+        const reported = await reportOffer(offerId, query.from.id);
+        if (!reported) {
+          await bot.answerCallbackQuery(query.id, { text: pick({ ar: 'تم الرد على هذا العرض مسبقاً', en: 'This offer was already answered' }, lang) });
+          return;
+        }
+        const note = pick({ ar: '🚩 تم إرسال البلاغ للمطورين وإلغاء العرض. شكراً لك', en: '🚩 Reported to the developers and the offer was dropped. Thank you' }, lang);
+        await bot.answerCallbackQuery(query.id, { text: note });
+        const msg = query.message;
+        if (msg?.text) {
+          await bot
+            .editMessageText(`${msg.text}\n\n━━━━━━━━━━\n${note}`, { chat_id: msg.chat.id, message_id: msg.message_id, disable_web_page_preview: true, reply_markup: { inline_keyboard: [] } })
+            .catch(() => undefined);
+        }
+        return;
+      }
       const result = await decideOffer(offerId, query.from.id, action === 'acc');
       if (!result) {
         await bot.answerCallbackQuery(query.id, { text: pick({ ar: 'تم الرد على هذا العرض مسبقاً', en: 'This offer was already answered' }, lang) });
@@ -82,13 +103,14 @@ function registerOfferActions(bot: TelegramBot) {
       }
       const { offer, buyer, group } = result;
       const who = buyer?.username ? '@' + buyer.username : `tg://user?id=${offer.fromTelegramId}`;
-      const note =
-        action === 'acc'
-          ? pick({
-              ar: `✅ قبلت العرض. تواصل مع صاحب العرض: ${who}\n🛡️ كمّلوا التبادل عن طريق وسطاء MF فقط: https://t.me/${group}`,
-              en: `✅ You accepted. Contact the buyer: ${who}\n🛡️ Finish the deal through MF middlemen only: https://t.me/${group}`,
-            }, lang)
-          : pick({ ar: '❌ رفضت هذا العرض.', en: '❌ You declined this offer.' }, lang);
+      const accepted = action === 'acc';
+      const medButton = accepted ? mediationButton(String(offer._id), pick({ ar: `🛡️ طلب وسيط ويّا ${who}`, en: `🛡️ Request a middleman with ${who}` }, lang)) : null;
+      const note = accepted
+        ? pick({
+            ar: `✅ تم قبول العرض. تواصل ويّا صاحب العرض: ${who}\nوبعد التفاهم اطلب وسيط من الزر أدناه 👇` + (medButton ? '' : `\n🛡️ وسطاء MF: https://t.me/${group}`),
+            en: `✅ Offer accepted. Contact the sender: ${who}\nOnce you agree, request a middleman with the button below 👇` + (medButton ? '' : `\n🛡️ MF middlemen: https://t.me/${group}`),
+          }, lang)
+        : pick({ ar: '❌ رفضت هذا العرض.', en: '❌ You declined this offer.' }, lang);
       await bot.answerCallbackQuery(query.id);
       const msg = query.message;
       if (msg?.text) {
@@ -97,7 +119,7 @@ function registerOfferActions(bot: TelegramBot) {
             chat_id: msg.chat.id,
             message_id: msg.message_id,
             disable_web_page_preview: true,
-            reply_markup: { inline_keyboard: [] },
+            reply_markup: { inline_keyboard: medButton ? [[medButton]] : [] },
           })
           .catch(() => undefined);
       }

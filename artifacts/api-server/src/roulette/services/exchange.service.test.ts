@@ -18,10 +18,13 @@ const mocks = vi.hoisted(() => ({
   offerExists: vi.fn(),
   offerCreate: vi.fn(),
   viewUpsert: vi.fn(),
+  offerFindOneAndUpdate: vi.fn(),
+  offerFindById: vi.fn(),
+  userFindOne: vi.fn(),
 }));
 
 vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
-vi.mock('../models/User', () => ({ User: {} }));
+vi.mock('../models/User', () => ({ User: { findOne: mocks.userFindOne } }));
 vi.mock('../models/ExchangeListing', () => ({
   EXCHANGE_CURRENCIES: ['usd', 'asia', 'zain', 'master', 'ton', 'pound', 'riyal'],
   ExchangeListing: {
@@ -39,7 +42,9 @@ vi.mock('../models/ExchangeReport', () => ({
   ExchangeReport: { exists: mocks.reportExists, create: mocks.reportCreate },
 }));
 vi.mock('../models/ExchangeView', () => ({ ExchangeView: { updateOne: mocks.viewUpsert } }));
-vi.mock('../models/ExchangeOffer', () => ({ ExchangeOffer: { exists: mocks.offerExists, create: mocks.offerCreate } }));
+vi.mock('../models/ExchangeOffer', () => ({
+  ExchangeOffer: { exists: mocks.offerExists, create: mocks.offerCreate, findOneAndUpdate: mocks.offerFindOneAndUpdate, findById: mocks.offerFindById },
+}));
 vi.mock('../models/AuditLog', () => ({ writeAudit: mocks.audit }));
 vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
 vi.mock('./admin.service', () => ({ listAllAdminTelegramIds: mocks.admins }));
@@ -47,7 +52,7 @@ vi.mock('./ban.service', () => ({ banUser: vi.fn() }));
 vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot', MINI_APP_SHORT_NAME: 'MFR' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { getListing, renewListing, updateListing, buildListingLink, createListing, exchangeAllowed, expireOldListings, listingPrices, makeOffer, removeListing, reportListing } from './exchange.service';
+import { attachExchangeBot, getOfferMediationTarget, mediationButton, reportOffer, getListing, renewListing, updateListing, buildListingLink, createListing, exchangeAllowed, expireOldListings, listingPrices, makeOffer, removeListing, reportListing } from './exchange.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 77, username: 'seller', firstName: 'S' } as never;
 const img = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
@@ -264,5 +269,33 @@ describe('updateListing', () => {
     await expect(updateListing(user, 'developer', String(new mongoose.Types.ObjectId()), { mode: 'trade', details: 'Updated account details', order: '["n:0"]' }, [img])).rejects.toMatchObject({ code: 'FORBIDDEN' });
     mocks.listingFindById.mockResolvedValue(listing({ ownerTelegramId: 77, expiresAt: new Date(Date.now() + 3600e3) }));
     await expect(updateListing(user, 'developer', String(new mongoose.Types.ObjectId()), { mode: 'trade', details: 'Updated account details', order: JSON.stringify([`e:${new mongoose.Types.ObjectId()}`]) }, [])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});
+
+describe('offers: middleman button and reports', () => {
+  it('links straight to the mediation tab for that offer', () => {
+    expect(mediationButton('abc', 'x')).toEqual({ text: 'x', url: 'https://t.me/MfRuLiTbot/MFR?startapp=mo_abc' });
+  });
+
+  it('gives each side of an accepted offer the other one', async () => {
+    const offerId = String(new mongoose.Types.ObjectId());
+    mocks.offerFindById.mockResolvedValue({ status: 'accepted', fromTelegramId: 77, toTelegramId: 99, listing: 'L1' });
+    mocks.userFindOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ username: 'owner' }) }) });
+    expect(await getOfferMediationTarget(user, 'developer', offerId)).toEqual({ telegramId: 99, username: 'owner', listingId: 'L1' });
+    mocks.offerFindById.mockResolvedValue({ status: 'accepted', fromTelegramId: 1, toTelegramId: 2, listing: 'L1' });
+    await expect(getOfferMediationTarget(user, 'developer', offerId)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('sends a reported offer to the developers with its photos', async () => {
+    const bot = { sendMessage: vi.fn().mockResolvedValue({ message_id: 5 }), copyMessage: vi.fn().mockResolvedValue({}) };
+    attachExchangeBot(bot as never);
+    mocks.admins.mockResolvedValue([1000]);
+    mocks.userFindOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ username: 'x' }) }) });
+    mocks.offerFindOneAndUpdate.mockResolvedValue({ _id: 'o1', kind: 'trade', message: 'rude words', fromTelegramId: 77, toTelegramId: 99, listing: 'L1', photoMessageIds: [11, 12] });
+    await reportOffer(String(new mongoose.Types.ObjectId()), 99);
+    expect(mocks.offerFindOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ toTelegramId: 99, status: 'pending' }), expect.anything(), expect.anything());
+    expect(bot.sendMessage).toHaveBeenCalledWith(1000, expect.stringContaining('rude words'), expect.anything());
+    expect(bot.copyMessage).toHaveBeenCalledTimes(2);
+    attachExchangeBot(null as never);
   });
 });
