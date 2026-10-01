@@ -15,6 +15,7 @@ import { getShareImage } from './controllers/adminSystem.controller';
 import { getShowcase } from './controllers/showcase.controller';
 import { env } from './config/env';
 import { getAdsgramReward } from './controllers/games.controller';
+import { getExchangeImageFile } from './controllers/exchange.controller';
 import { parseLang, runWithLang, t } from './i18n';
 
 export function createApp() {
@@ -55,6 +56,7 @@ export function createApp() {
   // header, so this route (and the settings share-image one below) must stay public.
   app.get('/api/prizes/:key/image', getPrizeImage);
   app.get('/api/settings/share-image', getShareImage);
+  app.get('/api/exchange/images/:id', getExchangeImageFile);
   // Adsgram calls this server-to-server (no Telegram initData); guarded by ADSGRAM_REWARD_KEY.
   app.get('/api/adsgram/reward', getAdsgramReward);
 

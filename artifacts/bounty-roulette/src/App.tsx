@@ -16,6 +16,7 @@ import { StorePage } from './pages/StorePage';
 import { ContestPage } from './pages/ContestPage';
 import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
+import { ExchangePage } from './pages/ExchangePage';
 import { PreviewBanner } from './components/PreviewBanner';
 import { hasStoredLang, setLang, tr, useLang } from './i18n';
 import { isPreviewMode } from './services/preview';
@@ -31,7 +32,16 @@ function initialTab(): TabKey {
   const startParam = tg?.initDataUnsafe?.start_param ?? '';
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (startParam === 'race' || startParam.startsWith('race_') || urlTab === 'race') return 'contest';
+  if (initialListingId() || urlTab === 'exchange') return 'exchange';
   return 'home';
+}
+
+// Exchange post links: startapp=listing_<id>, or ?tab=exchange&listing=<id> from the bot's button.
+function initialListingId(): string | null {
+  const tg = getTelegramWebApp() as { initDataUnsafe?: { start_param?: string } } | null;
+  const startParam = tg?.initDataUnsafe?.start_param ?? '';
+  const id = startParam.startsWith('listing_') ? startParam.slice('listing_'.length) : new URLSearchParams(window.location.search).get('listing');
+  return id && /^[a-f0-9]{24}$/.test(id) ? id : null;
 }
 
 export default function App() {
@@ -42,6 +52,7 @@ export default function App() {
   const [stage, setStage] = useState<Stage>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
   const [tab, setTab] = useState<TabKey>(initialTab);
+  const [listingLink, setListingLink] = useState(initialListingId);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);
@@ -157,6 +168,7 @@ export default function App() {
         {tab === 'referrals' && <ReferralsPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
+        {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setTab('home'); }} initialListingId={listingLink} />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && (
           <>
@@ -172,7 +184,8 @@ export default function App() {
         )}
         </div>
       </div>
-      <BottomNav active={tab} onChange={setTab} hideContest={!contestOn} />
+      {/* The exchange section has its own bottom tabs. */}
+      {tab !== 'exchange' && <BottomNav active={tab} onChange={setTab} hideContest={!contestOn} />}
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { registerMemberEventHandlers } from './memberEvents';
 import { setBotInstance } from './instance';
 import { attachBotInstance } from '../services/notification.service';
 import { registerAdminCommands } from './adminCommands';
+import { registerExchangeActions } from './exchangeActions';
+import { attachExchangeBot } from '../services/exchange.service';
 
 export function createBot(enablePolling = false): TelegramBot {
   // `allowed_updates` must be listed explicitly: Telegram only sends the classic update
@@ -28,10 +30,12 @@ export function createBot(enablePolling = false): TelegramBot {
   registerStartHandler(bot);
   registerAdminWithdrawalActions(bot);
   registerAdminCommands(bot);
+  registerExchangeActions(bot);
   registerMemberEventHandlers(bot);
 
   setBotInstance(bot);
   attachBotInstance(bot);
+  attachExchangeBot(bot);
 
   // Keep the chat menu button pointing at the current deployment. Without this it keeps
   // whatever URL was set earlier (e.g. an old, now-suspended host). Note: the Mini App

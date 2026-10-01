@@ -166,6 +166,17 @@ export function registerStartHandler(bot: TelegramBot) {
         return;
       }
 
+      // Exchange post links (sent to developers in report alerts) open straight on the post.
+      const listingMatch = startParam?.match(/^listing_([a-f0-9]{24})$/);
+      if (listingMatch) {
+        await bot.sendMessage(
+          msg.chat.id,
+          t('🔄 قسم التبادل\n\n👇 اضغط الزر لفتح المنشور', '🔄 Exchange\n\n👇 Tap the button to open the post'),
+          buildMiniAppKeyboard(t('🔄 فتح المنشور', '🔄 Open the post'), `exchange&listing=${listingMatch[1]}`)
+        );
+        return;
+      }
+
       // The race section link (?start=race) and race invite links open straight on the race tab.
       if ((startParam === 'race' || contestToken) && (await isContestEnabled())) {
         await bot.sendMessage(

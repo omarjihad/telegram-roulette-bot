@@ -40,6 +40,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     wheel: { ready, nextSpinAt, lastSpin },
     contestEnabled: await isContestEnabled(),
     gamesPublic: (await getSettings()).gamesPublic,
+    exchangePublic: (await getSettings()).exchangePublic,
     language: user.language ?? null,
     isAdmin: req.adminRole !== null,
     adminRole: req.adminRole,

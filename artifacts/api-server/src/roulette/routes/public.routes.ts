@@ -12,6 +12,16 @@ import { getContest, postJoinContest } from '../controllers/contest.controller';
 import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart } from '../controllers/games.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
+import {
+  deleteExchangeListing,
+  getExchange,
+  getExchangeListing,
+  getExchangeListings,
+  getMyExchangeListings,
+  postExchangeListing,
+  postExchangeReport,
+} from '../controllers/exchange.controller';
+import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
 
 const router = Router();
@@ -48,6 +58,14 @@ router.get('/games', getGames);
 router.post('/games/ad-task/claim', postAdTaskClaim);
 router.post('/games/snake/start', postSnakeStart);
 router.post('/games/snake/finish', postSnakeFinish);
+
+router.get('/exchange', getExchange);
+router.get('/exchange/listings', getExchangeListings);
+router.get('/exchange/listings/mine', getMyExchangeListings);
+router.get('/exchange/listings/:id', getExchangeListing);
+router.post('/exchange/listings', purchaseLimiter, uploadExchangeImages, postExchangeListing);
+router.delete('/exchange/listings/:id', deleteExchangeListing);
+router.post('/exchange/listings/:id/report', purchaseLimiter, uploadReportMedia, postExchangeReport);
 
 router.get('/contest', getContest);
 router.post('/contest/join', postJoinContest);

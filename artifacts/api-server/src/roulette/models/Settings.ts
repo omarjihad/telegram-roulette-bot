@@ -35,6 +35,10 @@ export interface ISettings extends Document {
   // Games & ads (snake game + "watch an ad" task). While gamesPublic is false only admins
   // can use them; everyone else sees "coming soon".
   gamesPublic: boolean;
+  // Exchange section: while false only developers can use it; members see "coming soon".
+  exchangePublic: boolean;
+  // Telegram group of MF middlemen, without @.
+  exchangeMiddlemanGroup: string;
   adsgramBlockId: string;
   adTaskReward: number;
   snakePointsPerFood: number;
@@ -73,6 +77,8 @@ const settingsSchema = new Schema<ISettings>(
     contestEndsAt: { type: Date, default: null },
     contestMinTotalInvites: { type: Number, default: 120, min: 0 },
     gamesPublic: { type: Boolean, default: false },
+    exchangePublic: { type: Boolean, default: false },
+    exchangeMiddlemanGroup: { type: String, default: 'MF_MMMM' },
     adsgramBlockId: { type: String, default: '50375' },
     adTaskReward: { type: Number, default: 0.2, min: 0 },
     snakePointsPerFood: { type: Number, default: 0.03, min: 0 },

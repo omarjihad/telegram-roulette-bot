@@ -38,6 +38,8 @@ export interface MeResponse {
   contestEnabled?: boolean;
   // Snake game + ad task are open to everyone (otherwise only admins, others see "coming soon").
   gamesPublic?: boolean;
+  // Exchange section is open to everyone (otherwise only admins, others see "coming soon").
+  exchangePublic?: boolean;
   // The user's saved language (null until they pick one).
   language?: 'ar' | 'en' | null;
 }
@@ -238,4 +240,43 @@ export interface SnakeRound {
   maxFood: number;
   pointsPerFood: number;
   durationSec: number;
+}
+
+export type ExchangeMode = 'trade' | 'sell' | 'both';
+export type ExchangeCurrency = 'usd' | 'asia' | 'zain' | 'master' | 'ton' | 'pound' | 'riyal';
+export type ReportReason = 'scammer' | 'no_middleman' | 'not_owner' | 'fake_info' | 'other';
+
+export interface ExchangeStatus {
+  ok: true;
+  allowed: boolean;
+  comingSoon: boolean;
+  isAdmin: boolean;
+  middlemanGroup: string;
+  currencies: ExchangeCurrency[];
+  reasons: ReportReason[];
+  maxImages: number;
+  maxActive: number;
+  myActive: number;
+}
+
+export interface ExchangeListingSummary {
+  id: string;
+  mode: ExchangeMode;
+  details: string;
+  price: number | null;
+  currency: ExchangeCurrency | null;
+  pinned: boolean;
+  status: 'active' | 'removed';
+  coverUrl: string | null;
+  imageCount: number;
+  ownerName: string | null;
+  createdAt: string;
+}
+
+export interface ExchangeListingDetail extends ExchangeListingSummary {
+  images: string[];
+  owner: { telegramId: number; username: string | null; name: string | null; profileLink: string };
+  isMine: boolean;
+  canModerate: boolean;
+  reportsCount?: number;
 }

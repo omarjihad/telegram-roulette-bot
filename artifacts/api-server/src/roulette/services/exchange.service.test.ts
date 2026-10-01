@@ -1,0 +1,155 @@
+import mongoose from 'mongoose';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  settings: vi.fn(),
+  listingCount: vi.fn(),
+  listingCreate: vi.fn(),
+  listingFindById: vi.fn(),
+  listingUpdateOne: vi.fn(),
+  imageInsert: vi.fn(),
+  imageDelete: vi.fn(),
+  reportExists: vi.fn(),
+  reportCreate: vi.fn(),
+  notify: vi.fn(),
+  admins: vi.fn(),
+  audit: vi.fn(),
+}));
+
+vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
+vi.mock('../models/User', () => ({ User: {} }));
+vi.mock('../models/ExchangeListing', () => ({
+  EXCHANGE_CURRENCIES: ['usd', 'asia', 'zain', 'master', 'ton', 'pound', 'riyal'],
+  ExchangeListing: {
+    countDocuments: mocks.listingCount,
+    create: mocks.listingCreate,
+    findById: mocks.listingFindById,
+    updateOne: mocks.listingUpdateOne,
+  },
+}));
+vi.mock('../models/ExchangeImage', () => ({ ExchangeImage: { insertMany: mocks.imageInsert, deleteMany: mocks.imageDelete } }));
+vi.mock('../models/ExchangeReport', () => ({
+  REPORT_REASONS: ['scammer', 'no_middleman', 'not_owner', 'fake_info', 'other'],
+  ExchangeReport: { exists: mocks.reportExists, create: mocks.reportCreate },
+}));
+vi.mock('../models/AuditLog', () => ({ writeAudit: mocks.audit }));
+vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
+vi.mock('./admin.service', () => ({ listAllAdminTelegramIds: mocks.admins }));
+vi.mock('./ban.service', () => ({ banUser: vi.fn() }));
+vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot', MINI_APP_SHORT_NAME: 'MFR' } }));
+vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
+
+import { buildListingLink, createListing, exchangeAllowed, removeListing, reportListing } from './exchange.service';
+
+const user = { _id: new mongoose.Types.ObjectId(), telegramId: 77, username: 'seller', firstName: 'S' } as never;
+const img = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
+
+function listing(overrides: Record<string, unknown> = {}) {
+  const doc = {
+    _id: new mongoose.Types.ObjectId(),
+    owner: new mongoose.Types.ObjectId(),
+    ownerTelegramId: 99,
+    ownerUsername: 'owner',
+    mode: 'both',
+    details: 'Account with many characters',
+    price: 10,
+    currency: 'usd',
+    images: [new mongoose.Types.ObjectId()],
+    status: 'active',
+    pinned: false,
+    reportsCount: 0,
+    createdAt: new Date(),
+    save: vi.fn(),
+    ...overrides,
+  };
+  return doc;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.settings.mockResolvedValue({ exchangePublic: false, exchangeMiddlemanGroup: 'MF_MMMM' });
+  mocks.listingCount.mockResolvedValue(0);
+  mocks.imageInsert.mockImplementation(async (docs: unknown[]) => docs.map(() => ({ _id: new mongoose.Types.ObjectId() })));
+  mocks.listingCreate.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new mongoose.Types.ObjectId(), pinned: false, status: 'active', createdAt: new Date(), ...doc }));
+  mocks.notify.mockResolvedValue(undefined);
+  mocks.admins.mockResolvedValue([]);
+});
+
+describe('exchange access', () => {
+  it('is developers-only until made public', () => {
+    expect(exchangeAllowed({ exchangePublic: false }, null)).toBe(false);
+    expect(exchangeAllowed({ exchangePublic: false }, 'developer')).toBe(true);
+    expect(exchangeAllowed({ exchangePublic: true }, null)).toBe(true);
+  });
+
+  it('refuses members while the section is not public', async () => {
+    await expect(createListing(user, null, { mode: 'trade', details: 'long enough details' }, [img])).rejects.toMatchObject({ code: 'EXCHANGE_COMING_SOON' });
+  });
+
+  it('builds a Mini App deep link to a listing', () => {
+    expect(buildListingLink('abc')).toBe('https://t.me/MfRuLiTbot/MFR?startapp=listing_abc');
+  });
+});
+
+describe('createListing', () => {
+  it('stores a trade-only post without a price', async () => {
+    const res = await createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account', price: '50', currency: 'usd' }, [img, img]);
+    expect(mocks.listingCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'trade', price: null, currency: null }));
+    expect(res.listing.imageCount).toBe(2);
+  });
+
+  it('requires a price and a known currency for sale posts', async () => {
+    await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', price: '5', currency: 'euro' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await createListing(user, 'developer', { mode: 'both', details: 'Level 70 account', price: '5', currency: 'zain' }, [img]);
+    expect(mocks.listingCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'both', price: 5, currency: 'zain' }));
+  });
+
+  it('needs at least one photo and respects the active-post limit', async () => {
+    await expect(createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account' }, [])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    mocks.settings.mockResolvedValue({ exchangePublic: true });
+    mocks.listingCount.mockResolvedValue(5);
+    await expect(createListing(user, null, { mode: 'trade', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'EXCHANGE_LIMIT' });
+  });
+});
+
+describe('removeListing', () => {
+  it('lets only the owner or a developer delete, and tells the owner when admins remove it', async () => {
+    const doc = listing();
+    mocks.listingFindById.mockResolvedValue(doc);
+    await expect(removeListing(String(doc._id), { telegramId: 5, isAdmin: false })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    await removeListing(String(doc._id), { telegramId: 5, isAdmin: true }, 'scam');
+    expect(doc.status).toBe('removed');
+    expect(mocks.imageDelete).toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 99 }));
+  });
+
+  it("doesn't notify the owner when they delete their own post", async () => {
+    const doc = listing();
+    mocks.listingFindById.mockResolvedValue(doc);
+    await removeListing(String(doc._id), { telegramId: 99, isAdmin: false });
+    expect(doc.status).toBe('removed');
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('reportListing', () => {
+  it('saves a report and counts it on the listing', async () => {
+    const doc = listing();
+    mocks.listingFindById.mockResolvedValue(doc);
+    mocks.reportExists.mockResolvedValue(null);
+    mocks.reportCreate.mockResolvedValue({ _id: new mongoose.Types.ObjectId() });
+    await reportListing(user, 'developer', String(doc._id), { reason: 'scammer', description: 'He took my account' }, []);
+    expect(mocks.reportCreate).toHaveBeenCalledWith(expect.objectContaining({ reason: 'scammer', reporterTelegramId: 77 }));
+    expect(mocks.listingUpdateOne).toHaveBeenCalledWith({ _id: doc._id }, { $inc: { reportsCount: 1 } });
+  });
+
+  it('rejects reporting your own post or reporting twice', async () => {
+    mocks.listingFindById.mockResolvedValue(listing({ ownerTelegramId: 77 }));
+    await expect(reportListing(user, 'developer', String(new mongoose.Types.ObjectId()), { reason: 'scammer', description: 'abcdef' }, [])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    mocks.listingFindById.mockResolvedValue(listing());
+    mocks.reportExists.mockResolvedValue({ _id: 1 });
+    await expect(reportListing(user, 'developer', String(new mongoose.Types.ObjectId()), { reason: 'scammer', description: 'abcdef' }, [])).rejects.toMatchObject({ code: 'ALREADY_REPORTED' });
+  });
+});

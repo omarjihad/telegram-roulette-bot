@@ -29,6 +29,9 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
   const initial = (me.user.firstName || me.user.username || '؟').charAt(0).toUpperCase();
   const [toast, setToast] = useState<string | null>(null);
 
+  // Developers can use the exchange while it's being tested; members get "coming soon".
+  const exchangeOpen = me.isAdmin || me.exchangePublic === true;
+
   function comingSoon() {
     setToast(tr('🔜 قريباً! تحديث خرافي قادم… ترقّبوا 🔥', '🔜 Coming soon! Something huge is on the way… stay tuned 🔥'));
     window.setTimeout(() => setToast(null), 2500);
@@ -113,14 +116,14 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </button>
 
-      <button className="home-exchange-card" onClick={comingSoon}>
+      <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
         <span className="home-exchange-shade" />
         <span className="home-exchange-copy">
           <span className="home-section-label">{tr('🔄 قسم التبادل', '🔄 Exchange')}</span>
           <strong>{tr('بدّل أو بِع حسابك في باونتي راش', 'Trade or sell your Bounty Rush account')}</strong>
           <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
         </span>
-        <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>
+        {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
       </button>
 
       {me.contestEnabled !== false && (

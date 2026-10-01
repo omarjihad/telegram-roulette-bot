@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../services/api';
 import { LoadingScreen } from '../components/Common';
 import { MeResponse } from '../types';
@@ -34,7 +34,7 @@ interface Withdrawal {
   status?: string;
 }
 
-type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games';
+type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games' | 'exchange';
 
 export function AdminPage({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<AdminTab>('prizes');
@@ -50,7 +50,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', background: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-          {(['prizes', 'withdrawals', 'race', 'games', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
+          {(['prizes', 'withdrawals', 'race', 'games', 'exchange', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
             <button
               key={t}
               className={`pill`}
@@ -85,6 +85,8 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
                 ? '🏆 السباق'
                 : t === 'games'
                 ? '🎮 الألعاب'
+                : t === 'exchange'
+                ? '🔄 التبادل'
                 : 'الإعدادات'}
             </button>
           ))}
@@ -105,6 +107,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         {tab === 'gifts' && <GiftLinksTab />}
         {tab === 'race' && <RaceAdminTab />}
         {tab === 'games' && <GamesAdminTab />}
+        {tab === 'exchange' && <ExchangeAdminTab />}
       </div>
     </div>
   );
@@ -485,6 +488,155 @@ const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: s
   { key: 'snakeDurationSec', label: '⏱️ مدة الجولة (ثانية)', hint: 'مثال: 30', step: '1' },
   { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة)', hint: 'مثال: 12', step: '0.5' },
 ];
+
+interface ExchangeAdminSettings {
+  exchangePublic: boolean;
+  exchangeMiddlemanGroup: string;
+  counts: { active: number; pinned: number; openReports: number };
+}
+
+interface ExchangeAdminReport {
+  id: string;
+  reasonLabel: string;
+  description: string;
+  mediaCount: number;
+  createdAt: string;
+  reporter: { telegramId: number; username: string | null; name: string | null };
+  listing: { id: string; status: string; mode: string; ownerTelegramId: number; ownerUsername: string | null; reportsCount: number } | null;
+}
+
+function ExchangeAdminTab() {
+  const [settings, setSettings] = useState<ExchangeAdminSettings | null>(null);
+  const [group, setGroup] = useState('');
+  const [reports, setReports] = useState<ExchangeAdminReport[] | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const loadSettings = useCallback(async () => {
+    const r = await api.get<{ ok: true; settings: ExchangeAdminSettings }>('/admin/exchange');
+    setSettings(r.settings);
+    setGroup(r.settings.exchangeMiddlemanGroup);
+  }, []);
+  const loadReports = useCallback(async () => {
+    setReports(null);
+    const r = await api.get<{ ok: true; reports: ExchangeAdminReport[] }>(`/admin/exchange/reports?status=${showResolved ? 'resolved' : 'open'}`);
+    setReports(r.reports);
+  }, [showResolved]);
+
+  useEffect(() => { void loadSettings().catch(() => undefined); }, [loadSettings]);
+  useEffect(() => { void loadReports().catch(() => setReports([])); }, [loadReports]);
+
+  async function run(fn: () => Promise<unknown>, done?: string) {
+    setBusy(true);
+    try {
+      await fn();
+      if (done) window.alert(done);
+      await Promise.all([loadSettings(), loadReports()]);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'تعذر تنفيذ العملية');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!settings) return <LoadingScreen />;
+  const who = (u: { username: string | null; name?: string | null; telegramId: number }) => (u.username ? '@' + u.username : u.name || String(u.telegramId));
+
+  return (
+    <div>
+      <div className="card" style={{ borderColor: settings.exchangePublic ? undefined : 'rgba(167, 139, 250, 0.7)' }}>
+        <h3 className="card-title">{settings.exchangePublic ? '🟢 قسم التبادل متاح للجميع' : '🧪 وضع الاختبار'}</h3>
+        <p className="card-sub">
+          {settings.exchangePublic
+            ? 'كل المستخدمين يگدرون يعرضون ويتصفحون الحسابات.'
+            : 'المستخدمين يشوفون "قريباً"، والقسم يشتغل للمطورين بس حتى تختبره.'}
+        </p>
+        <button
+          className={settings.exchangePublic ? 'btn btn-secondary' : 'btn btn-primary'}
+          disabled={busy}
+          onClick={() => {
+            if (!settings.exchangePublic && !window.confirm('فتح قسم التبادل لكل المستخدمين؟')) return;
+            void run(() => api.patch('/admin/exchange', { exchangePublic: !settings.exchangePublic }));
+          }}
+        >
+          {settings.exchangePublic ? '🧪 إرجاعه للاختبار (قريباً)' : '🚀 فتحه للجميع'}
+        </button>
+        <p className="card-sub" style={{ marginBottom: 0 }}>
+          📄 منشورات فعالة: {settings.counts.active} · 📌 مثبتة: {settings.counts.pinned} · 🚩 بلاغات مفتوحة: {settings.counts.openReports}
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">🛡️ كروب الوسطاء</h3>
+        <p className="card-sub">زر "وسطاء MF" يفتح هذا الكروب.</p>
+        <input
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder="MF_MMMM"
+          dir="ltr"
+          style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', fontFamily: 'inherit', marginBottom: 10 }}
+        />
+        <button className="btn btn-primary" disabled={busy} onClick={() => void run(() => api.patch('/admin/exchange', { exchangeMiddlemanGroup: group }), '✅ تم الحفظ')}>💾 حفظ</button>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <h3 className="card-title" style={{ margin: 0 }}>🚩 البلاغات</h3>
+          <button className="btn btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: 13 }} onClick={() => setShowResolved(!showResolved)}>
+            {showResolved ? 'عرض المفتوحة' : 'عرض المعالجة'}
+          </button>
+        </div>
+        {!reports ? (
+          <p className="card-sub">جاري التحميل...</p>
+        ) : reports.length === 0 ? (
+          <p className="card-sub">{showResolved ? 'ماكو بلاغات معالجة.' : 'ماكو بلاغات مفتوحة 👌'}</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {reports.map((r) => (
+              <div key={r.id} style={{ border: '1px solid #475569', borderRadius: 12, padding: 12 }}>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>{r.reasonLabel}</div>
+                <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', marginBottom: 6 }}>{r.description}</div>
+                <div className="card-sub" style={{ fontSize: 12, margin: 0 }}>
+                  المُبلِّغ: <bdi>{who(r.reporter)}</bdi> · ID {r.reporter.telegramId}
+                  <br />
+                  صاحب المنشور: {r.listing ? <><bdi>{who({ username: r.listing.ownerUsername, telegramId: r.listing.ownerTelegramId })}</bdi> · ID {r.listing.ownerTelegramId}</> : '-'}
+                  <br />
+                  {r.listing ? `المنشور: ${r.listing.status === 'active' ? 'معروض' : 'محذوف'} · بلاغات عليه: ${r.listing.reportsCount}` : ''}
+                  {r.mediaCount > 0 && ` · 📎 ${r.mediaCount} مرفق (بالبوت)`}
+                  <br />
+                  {new Date(r.createdAt).toLocaleString('ar-EG')}
+                </div>
+                {!showResolved && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 8 }}>
+                    {r.listing?.status === 'active' ? (
+                      <button className="btn btn-secondary" style={{ fontSize: 12, padding: 8 }} disabled={busy} onClick={() => {
+                        if (!window.confirm('حذف المنشور؟')) return;
+                        void run(async () => {
+                          await api.post(`/admin/exchange/listings/${r.listing!.id}/remove`, { reason: r.reasonLabel });
+                          await api.post(`/admin/exchange/reports/${r.id}/resolve`);
+                        }, '🗑️ تم حذف المنشور');
+                      }}>🗑️ حذف</button>
+                    ) : <span />}
+                    {r.listing ? (
+                      <button className="btn btn-secondary" style={{ fontSize: 12, padding: 8 }} disabled={busy} onClick={() => {
+                        if (!window.confirm('حظر صاحب المنشور وحذف كل منشوراته؟')) return;
+                        void run(async () => {
+                          await api.post(`/admin/exchange/listings/${r.listing!.id}/ban-owner`);
+                          await api.post(`/admin/exchange/reports/${r.id}/resolve`);
+                        }, '🚫 تم الحظر');
+                      }}>🚫 حظر</button>
+                    ) : <span />}
+                    <button className="btn btn-primary" style={{ fontSize: 12, padding: 8 }} disabled={busy} onClick={() => void run(() => api.post(`/admin/exchange/reports/${r.id}/resolve`))}>✅ تمت</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function GamesAdminTab() {
   const [settings, setSettings] = useState<GamesAdminSettings | null>(null);

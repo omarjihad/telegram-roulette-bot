@@ -68,6 +68,15 @@ import {
   adminStartContestRound,
 } from '../controllers/adminContest.controller';
 import { adminGetGames, adminUpdateGames } from '../controllers/games.controller';
+import {
+  adminBanExchangeOwner,
+  adminGetExchange,
+  adminGetExchangeReports,
+  adminPinExchangeListing,
+  adminRemoveExchangeListing,
+  adminResolveExchangeReport,
+  adminUpdateExchange,
+} from '../controllers/exchange.controller';
 
 const router = Router();
 
@@ -145,6 +154,15 @@ router.post('/points/deduct', adminDeductUserPoints);
 // Games & ads
 router.get('/games', adminGetGames);
 router.patch('/games', adminUpdateGames);
+
+// Exchange section
+router.get('/exchange', adminGetExchange);
+router.patch('/exchange', adminUpdateExchange);
+router.get('/exchange/reports', adminGetExchangeReports);
+router.post('/exchange/reports/:id/resolve', adminResolveExchangeReport);
+router.post('/exchange/listings/:id/pin', adminPinExchangeListing);
+router.post('/exchange/listings/:id/remove', adminRemoveExchangeListing);
+router.post('/exchange/listings/:id/ban-owner', adminBanExchangeOwner);
 
 // Invite race
 router.get('/contest', adminGetContest);
