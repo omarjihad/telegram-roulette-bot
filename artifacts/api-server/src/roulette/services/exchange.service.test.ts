@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   admins: vi.fn(),
   audit: vi.fn(),
+  listingFind: vi.fn(),
+  offerExists: vi.fn(),
+  offerCreate: vi.fn(),
 }));
 
 vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
@@ -25,13 +28,16 @@ vi.mock('../models/ExchangeListing', () => ({
     create: mocks.listingCreate,
     findById: mocks.listingFindById,
     updateOne: mocks.listingUpdateOne,
+    find: mocks.listingFind,
   },
+  LISTING_LIFETIME_MS: 4 * 24 * 60 * 60 * 1000,
 }));
 vi.mock('../models/ExchangeImage', () => ({ ExchangeImage: { insertMany: mocks.imageInsert, deleteMany: mocks.imageDelete } }));
 vi.mock('../models/ExchangeReport', () => ({
   REPORT_REASONS: ['scammer', 'no_middleman', 'not_owner', 'fake_info', 'other'],
   ExchangeReport: { exists: mocks.reportExists, create: mocks.reportCreate },
 }));
+vi.mock('../models/ExchangeOffer', () => ({ ExchangeOffer: { exists: mocks.offerExists, create: mocks.offerCreate } }));
 vi.mock('../models/AuditLog', () => ({ writeAudit: mocks.audit }));
 vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
 vi.mock('./admin.service', () => ({ listAllAdminTelegramIds: mocks.admins }));
@@ -39,7 +45,7 @@ vi.mock('./ban.service', () => ({ banUser: vi.fn() }));
 vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot', MINI_APP_SHORT_NAME: 'MFR' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { buildListingLink, createListing, exchangeAllowed, removeListing, reportListing } from './exchange.service';
+import { buildListingLink, createListing, exchangeAllowed, expireOldListings, listingPrices, makeOffer, removeListing, reportListing } from './exchange.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 77, username: 'seller', firstName: 'S' } as never;
 const img = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
@@ -52,8 +58,9 @@ function listing(overrides: Record<string, unknown> = {}) {
     ownerUsername: 'owner',
     mode: 'both',
     details: 'Account with many characters',
-    price: 10,
-    currency: 'usd',
+    prices: [{ currency: 'usd', amount: 10 }],
+    price: null,
+    currency: null,
     images: [new mongoose.Types.ObjectId()],
     status: 'active',
     pinned: false,
@@ -92,17 +99,31 @@ describe('exchange access', () => {
 });
 
 describe('createListing', () => {
-  it('stores a trade-only post without a price', async () => {
-    const res = await createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account', price: '50', currency: 'usd' }, [img, img]);
-    expect(mocks.listingCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'trade', price: null, currency: null }));
+  it('stores a trade-only post without prices and with a 4-day expiry', async () => {
+    const res = await createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account', prices: '[{"currency":"usd","amount":5}]' }, [img, img]);
+    const doc = mocks.listingCreate.mock.calls[0][0];
+    expect(doc).toMatchObject({ mode: 'trade', prices: [] });
+    expect(doc.expiresAt.getTime() - Date.now()).toBeGreaterThan(4 * 24 * 3600e3 - 5000);
     expect(res.listing.imageCount).toBe(2);
   });
 
-  it('requires a price and a known currency for sale posts', async () => {
+  it('accepts several payment methods, each with its own price', async () => {
+    await createListing(user, 'developer', { mode: 'both', details: 'Level 70 account', prices: JSON.stringify([{ currency: 'usd', amount: 25 }, { currency: 'asia', amount: '40000' }]) }, [img]);
+    expect(mocks.listingCreate).toHaveBeenCalledWith(expect.objectContaining({ prices: [{ currency: 'usd', amount: 25 }, { currency: 'asia', amount: 40000 }] }));
+  });
+
+  it('rejects sale posts without a valid payment method', async () => {
     await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', price: '5', currency: 'euro' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    await createListing(user, 'developer', { mode: 'both', details: 'Level 70 account', price: '5', currency: 'zain' }, [img]);
-    expect(mocks.listingCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'both', price: 5, currency: 'zain' }));
+    await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', prices: '[{"currency":"euro","amount":5}]' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', prices: '[{"currency":"usd","amount":5},{"currency":"usd","amount":6}]' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('puts the chosen cover photo first', async () => {
+    const a = { ...img, buffer: Buffer.from('a') };
+    const b = { ...img, buffer: Buffer.from('b') };
+    const c = { ...img, buffer: Buffer.from('c') };
+    await createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account', cover: '2' }, [a, b, c]);
+    expect(mocks.imageInsert.mock.calls[0][0].map((d: { data: Buffer }) => d.data.toString())).toEqual(['c', 'a', 'b']);
   });
 
   it('needs at least one photo and respects the active-post limit', async () => {
@@ -110,6 +131,37 @@ describe('createListing', () => {
     mocks.settings.mockResolvedValue({ exchangePublic: true });
     mocks.listingCount.mockResolvedValue(5);
     await expect(createListing(user, null, { mode: 'trade', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'EXCHANGE_LIMIT' });
+  });
+
+  it('reads the single price of older posts as one payment method', () => {
+    expect(listingPrices({ prices: [], price: 10, currency: 'zain' } as never)).toEqual([{ currency: 'zain', amount: 10 }]);
+  });
+});
+
+describe('expireOldListings', () => {
+  it('removes posts past their 4 days and tells the owner', async () => {
+    const doc = listing();
+    mocks.listingFind.mockReturnValue({ limit: () => Promise.resolve([doc]) });
+    mocks.listingUpdateOne.mockResolvedValue({ modifiedCount: 1 });
+    expect(await expireOldListings()).toBe(1);
+    expect(mocks.listingUpdateOne).toHaveBeenCalledWith({ _id: doc._id, status: 'active' }, expect.anything());
+    expect(mocks.imageDelete).toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 99 }));
+  });
+});
+
+describe('makeOffer', () => {
+  it("can't be sent on your own post or twice while one is waiting", async () => {
+    mocks.listingFindById.mockResolvedValue(listing({ ownerTelegramId: 77 }));
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { message: '20$' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    mocks.listingFindById.mockResolvedValue(listing());
+    mocks.offerExists.mockResolvedValue({ _id: 1 });
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { message: '20$' })).rejects.toMatchObject({ code: 'OFFER_PENDING' });
+  });
+
+  it('refuses expired posts', async () => {
+    mocks.listingFindById.mockResolvedValue(listing({ expiresAt: new Date(Date.now() - 1000) }));
+    await expect(makeOffer(user, 'developer', String(new mongoose.Types.ObjectId()), { message: '20$' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 

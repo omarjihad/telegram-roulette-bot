@@ -1,11 +1,15 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../config/logger';
 import { getAdminRole } from '../services/admin.service';
-import { banListingOwner, removeListing, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
+import { banListingOwner, decideOffer, removeListing, reportButtons, resolveReport, setListingPinned } from '../services/exchange.service';
+import { User } from '../models/User';
+import { pick, userLang } from '../i18n';
 import { ExchangeReport } from '../models/ExchangeReport';
 
 /** Buttons under an exchange report alert: remove post, pin, ban owner, mark handled. */
 export function registerExchangeActions(bot: TelegramBot) {
+  registerOfferActions(bot);
+
   bot.on('callback_query', async (query) => {
     const data = query.data;
     if (!data || !data.startsWith('exr_')) return;
@@ -58,6 +62,47 @@ export function registerExchangeActions(bot: TelegramBot) {
       await bot
         .answerCallbackQuery(query.id, { text: `⚠️ ${err instanceof Error ? err.message : 'تعذر تنفيذ العملية'}`, show_alert: true })
         .catch(() => undefined);
+    }
+  });
+}
+
+/** Accept / decline buttons under an offer the bot delivered to a post's owner. */
+function registerOfferActions(bot: TelegramBot) {
+  bot.on('callback_query', async (query) => {
+    const data = query.data;
+    if (!data || !data.startsWith('exo_')) return;
+    const [, action, offerId] = data.split('_');
+    const lang = userLang(await User.findOne({ telegramId: query.from.id }).select('language').lean());
+    try {
+      const result = await decideOffer(offerId, query.from.id, action === 'acc');
+      if (!result) {
+        await bot.answerCallbackQuery(query.id, { text: pick({ ar: 'تم الرد على هذا العرض مسبقاً', en: 'This offer was already answered' }, lang) });
+        return;
+      }
+      const { offer, buyer, group } = result;
+      const who = buyer?.username ? '@' + buyer.username : `tg://user?id=${offer.fromTelegramId}`;
+      const note =
+        action === 'acc'
+          ? pick({
+              ar: `✅ قبلت العرض. تواصل مع صاحب العرض: ${who}\n🛡️ كمّلوا التبادل عن طريق وسطاء MF فقط: https://t.me/${group}`,
+              en: `✅ You accepted. Contact the buyer: ${who}\n🛡️ Finish the deal through MF middlemen only: https://t.me/${group}`,
+            }, lang)
+          : pick({ ar: '❌ رفضت هذا العرض.', en: '❌ You declined this offer.' }, lang);
+      await bot.answerCallbackQuery(query.id);
+      const msg = query.message;
+      if (msg?.text) {
+        await bot
+          .editMessageText(`${msg.text}\n\n━━━━━━━━━━\n${note}`, {
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            disable_web_page_preview: true,
+            reply_markup: { inline_keyboard: [] },
+          })
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      logger.warn({ err, data }, 'exchange offer action failed');
+      await bot.answerCallbackQuery(query.id, { text: '⚠️', show_alert: false }).catch(() => undefined);
     }
   });
 }

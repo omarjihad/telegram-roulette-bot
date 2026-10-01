@@ -20,6 +20,7 @@ import {
   getMyExchangeListings,
   postExchangeListing,
   postExchangeReport,
+  postExchangeOffer,
 } from '../controllers/exchange.controller';
 import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
@@ -65,6 +66,7 @@ router.get('/exchange/listings/mine', getMyExchangeListings);
 router.get('/exchange/listings/:id', getExchangeListing);
 router.post('/exchange/listings', purchaseLimiter, uploadExchangeImages, postExchangeListing);
 router.delete('/exchange/listings/:id', deleteExchangeListing);
+router.post('/exchange/listings/:id/offer', purchaseLimiter, postExchangeOffer);
 router.post('/exchange/listings/:id/report', purchaseLimiter, uploadReportMedia, postExchangeReport);
 
 router.get('/contest', getContest);

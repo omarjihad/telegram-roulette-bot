@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Repeat, DollarSign, ShoppingCart, ClipboardList } from 'lucide-react';
+import { LayoutGrid, PlusCircle, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
 import { locale, tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp, haptic } from '../hooks/useTelegramWebApp';
@@ -12,7 +12,8 @@ import {
   ReportReason,
 } from '../types';
 
-type ExTab = 'swap' | 'sell' | 'buy' | 'mine';
+type ExTab = 'browse' | 'post' | 'mine';
+type Price = { currency: ExchangeCurrency; amount: number };
 type Flash = (text: string) => void;
 
 const LOADING_MS = 2000;
@@ -20,8 +21,8 @@ const MAX_REPORT_MEDIA = 4;
 
 function modeLabel(mode: ExchangeMode) {
   if (mode === 'trade') return tr('تبديل فقط', 'Trade only');
-  if (mode === 'sell') return tr('للبيع', 'For sale');
-  return tr('يقبل بدل وبيع', 'Trade or sale');
+  if (mode === 'sell') return tr('بيع فقط', 'Sale only');
+  return tr('يقبل بيع وتبديل', 'Sale or trade');
 }
 
 function currencyLabel(c: ExchangeCurrency | null) {
@@ -47,8 +48,37 @@ function reasonLabel(r: ReportReason) {
   }
 }
 
-function priceText(l: { price: number | null; currency: ExchangeCurrency | null }) {
-  return l.price === null ? null : `${l.price.toLocaleString(locale())} ${currencyLabel(l.currency)}`;
+function priceText(p: Price) {
+  return `${p.amount.toLocaleString(locale())} ${currencyLabel(p.currency)}`;
+}
+
+/** "3 days 4 hours" until a post is removed automatically. */
+function timeLeft(iso: string) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return tr('انتهى', 'expired');
+  const h = Math.floor(ms / 3600e3);
+  const d = Math.floor(h / 24);
+  const hh = h % 24;
+  if (d > 0) return tr(`${d} يوم و ${hh} ساعة`, `${d}d ${hh}h`);
+  if (h > 0) return tr(`${h} ساعة`, `${h}h`);
+  return tr(`${Math.max(1, Math.floor(ms / 60e3))} دقيقة`, `${Math.max(1, Math.floor(ms / 60e3))}m`);
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand('copy');
+    el.remove();
+    return ok;
+  }
 }
 
 function errText(err: unknown) {
@@ -94,6 +124,7 @@ function rules(): { icon: string; text: string }[] {
     { icon: '🛡️', text: tr('لا تثق بأي أحد غير وسطاء MF المعتمدين.', "Don't trust anyone except the approved MF middlemen.") },
     { icon: '⛔', text: tr('ممنوع التبادل بدون وسيط، وإذا تمت سرقتك ستُحظر من البوت لأن البوت نبّهك مسبقاً.', 'Trading without a middleman is forbidden. If you get scammed you will be banned from the bot, because the bot warned you beforehand.') },
     { icon: '🗑️', text: tr('عند بيع الحساب أو تبديله يجب حذفه من القسم.', 'Once the account is sold or traded you must delete it from the section.') },
+    { icon: '⏰', text: tr('كل منشور ينحذف تلقائياً بعد 4 أيام من عرضه، وتقدر تعرضه من جديد.', 'Every post is removed automatically 4 days after it goes up; you can post it again.') },
     { icon: '✅', text: tr('يجب أن يكون الحساب ملكك، والصور والمعلومات حقيقية.', 'The account must be yours, with real photos and info.') },
     { icon: '🔐', text: tr('لا تعطِ إيميل أو باسورد حسابك لأي أحد قبل حضور الوسيط.', "Don't give your account email or password to anyone before the middleman is there.") },
     { icon: '📵', text: tr('ممنوع تكرار نشر نفس الحساب أو نشر روابط وإعلانات.', 'No reposting the same account, links or ads.') },
@@ -104,8 +135,7 @@ function rules(): { icon: string; text: string }[] {
 export function ExchangePage({ onBack, initialListingId }: { onBack: () => void; initialListingId?: string | null }) {
   const [stage, setStage] = useState<'loading' | 'intro' | 'main' | 'locked' | 'error'>('loading');
   const [status, setStatus] = useState<ExchangeStatus | null>(null);
-  const [tab, setTab] = useState<ExTab>('swap');
-  const [swapView, setSwapView] = useState<'browse' | 'post'>('browse');
+  const [tab, setTab] = useState<ExTab>('browse');
   const [openId, setOpenId] = useState<string | null>(initialListingId ?? null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -140,7 +170,7 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [stage, tab, swapView]);
+  }, [stage, tab]);
 
   if (stage === 'loading') {
     return (
@@ -191,35 +221,24 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
   const goTab = (t: ExTab) => {
     setOpenId(null);
     setTab(t);
-    if (t === 'swap') setSwapView('browse');
+  };
+  const posted = () => {
+    setRefreshKey((k) => k + 1);
+    void loadStatus();
+    goTab('mine');
   };
 
   return (
     <div className="ex-page ex-main">
       <ExHeader
-        title={tab === 'swap' ? tr('🔄 التبديل', '🔄 Trade') : tab === 'sell' ? tr('💰 البيع', '💰 Sell') : tab === 'buy' ? tr('🛒 الشراء', '🛒 Buy') : tr('📋 منشوراتي', '📋 My posts')}
+        title={tab === 'browse' ? tr('🔄 قسم التبادل', '🔄 Exchange') : tab === 'post' ? tr('➕ اعرض حسابك', '➕ Post your account') : tr('📋 منشوراتي', '📋 My posts')}
         onBack={onBack}
       />
       {s.comingSoon && <div className="games-soon-banner">{tr('🧪 وضع الاختبار: القسم ظاهر للمطورين فقط.', '🧪 Test mode: only developers can see this section.')}</div>}
 
-      {tab === 'swap' && (
-        <>
-          <div className="ex-segment">
-            <button className={swapView === 'browse' ? 'active' : ''} onClick={() => setSwapView('browse')}>{tr('🔁 تبديل حسابي', '🔁 Trade my account')}</button>
-            <button className={swapView === 'post' ? 'active' : ''} onClick={() => setSwapView('post')}>{tr('➕ عرض حسابي', '➕ Post my account')}</button>
-          </div>
-          {swapView === 'browse' ? (
-            <ListingGrid section="trade" refreshKey={refreshKey} onOpen={setOpenId} emptyAction={() => setSwapView('post')} />
-          ) : (
-            <PostForm status={s} defaultMode="trade" flash={flash} onPosted={() => { setRefreshKey((k) => k + 1); void loadStatus(); goTab('mine'); }} />
-          )}
-        </>
-      )}
-      {tab === 'sell' && (
-        <PostForm status={s} defaultMode="sell" flash={flash} onPosted={() => { setRefreshKey((k) => k + 1); void loadStatus(); goTab('mine'); }} />
-      )}
-      {tab === 'buy' && <ListingGrid section="buy" refreshKey={refreshKey} onOpen={setOpenId} emptyAction={() => goTab('sell')} />}
-      {tab === 'mine' && <MyListings refreshKey={refreshKey} status={s} onOpen={setOpenId} onNew={() => goTab('sell')} />}
+      {tab === 'browse' && <ListingGrid refreshKey={refreshKey} onOpen={setOpenId} emptyAction={() => goTab('post')} />}
+      {tab === 'post' && <PostForm status={s} flash={flash} onPosted={posted} />}
+      {tab === 'mine' && <MyListings refreshKey={refreshKey} status={s} onOpen={setOpenId} onNew={() => goTab('post')} />}
 
       {openId && (
         <ListingDetail
@@ -233,9 +252,8 @@ export function ExchangePage({ onBack, initialListingId }: { onBack: () => void;
 
       <nav className="bottom-nav ex-nav">
         {([
-          ['swap', tr('التبديل', 'Trade'), <Repeat size={22} key="i" />],
-          ['sell', tr('البيع', 'Sell'), <DollarSign size={22} key="i" />],
-          ['buy', tr('الشراء', 'Buy'), <ShoppingCart size={22} key="i" />],
+          ['browse', tr('الحسابات', 'Accounts'), <LayoutGrid size={22} key="i" />],
+          ['post', tr('اعرض حسابك', 'Post'), <PlusCircle size={22} key="i" />],
           ['mine', tr('منشوراتي', 'My posts'), <ClipboardList size={22} key="i" />],
         ] as [ExTab, string, React.ReactNode][]).map(([key, label, icon]) => (
           <button key={key} className={`nav-item ${tab === key ? 'active' : ''}`} onClick={() => { haptic('light'); goTab(key); }}>
@@ -263,8 +281,8 @@ function ModeBadge({ mode }: { mode: ExchangeMode }) {
   return <span className={`ex-badge ex-badge-${mode}`}>{modeLabel(mode)}</span>;
 }
 
-function ListingCard({ l, onOpen }: { l: ExchangeListingSummary; onOpen: (id: string) => void }) {
-  const price = priceText(l);
+function ListingCard({ l, onOpen, showExpiry = false }: { l: ExchangeListingSummary; onOpen: (id: string) => void; showExpiry?: boolean }) {
+  const first = l.prices[0];
   return (
     <button className={`ex-card ${l.pinned ? 'ex-card-pinned' : ''}`} onClick={() => { haptic('light'); onOpen(l.id); }}>
       <div className="ex-card-img">
@@ -274,14 +292,18 @@ function ListingCard({ l, onOpen }: { l: ExchangeListingSummary; onOpen: (id: st
       </div>
       <div className="ex-card-body">
         <ModeBadge mode={l.mode} />
-        <div className="ex-card-price">{price ?? tr('🔁 تبديل', '🔁 Trade')}</div>
+        <div className="ex-card-price">
+          {first ? priceText(first) : tr('🔁 تبديل', '🔁 Trade')}
+          {l.prices.length > 1 && <span className="ex-more-prices" dir="ltr">+{l.prices.length - 1}</span>}
+        </div>
         <div className="ex-card-details" dir="auto">{l.details}</div>
+        {showExpiry && <div className="ex-card-expiry">⏰ {timeLeft(l.expiresAt)}</div>}
       </div>
     </button>
   );
 }
 
-function ListingGrid({ section, refreshKey, onOpen, emptyAction }: { section: 'trade' | 'buy'; refreshKey: number; onOpen: (id: string) => void; emptyAction: () => void }) {
+function ListingGrid({ refreshKey, onOpen, emptyAction }: { refreshKey: number; onOpen: (id: string) => void; emptyAction: () => void }) {
   const [items, setItems] = useState<ExchangeListingSummary[] | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -289,11 +311,11 @@ function ListingGrid({ section, refreshKey, onOpen, emptyAction }: { section: 't
   const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async (p: number) => {
-    const res = await api.get<{ items: ExchangeListingSummary[]; hasMore: boolean }>(`/exchange/listings?section=${section}&page=${p}`);
+    const res = await api.get<{ items: ExchangeListingSummary[]; hasMore: boolean }>(`/exchange/listings?page=${p}`);
     setItems((cur) => (p === 1 || !cur ? res.items : [...cur, ...res.items]));
     setHasMore(res.hasMore);
     setPage(p);
-  }, [section]);
+  }, []);
 
   useEffect(() => {
     setItems(null);
@@ -307,7 +329,7 @@ function ListingGrid({ section, refreshKey, onOpen, emptyAction }: { section: 't
     return (
       <div className="card ex-empty">
         <div style={{ fontSize: 44 }}>📭</div>
-        <p>{section === 'trade' ? tr('لا توجد حسابات للتبديل حالياً.', 'No accounts up for trade yet.') : tr('لا توجد حسابات للبيع حالياً.', 'No accounts for sale yet.')}</p>
+        <p>{tr('لا توجد حسابات معروضة حالياً.', 'No accounts posted yet.')}</p>
         <button className="btn btn-primary" onClick={emptyAction}>{tr('➕ اعرض حسابك أول واحد', '➕ Be the first to post')}</button>
       </div>
     );
@@ -347,18 +369,19 @@ function MyListings({ refreshKey, status, onOpen, onNew }: { refreshKey: number;
       ) : items.length === 0 ? (
         <div className="card ex-empty"><div style={{ fontSize: 44 }}>🗂️</div><p>{tr('لم تعرض أي حساب بعد.', "You haven't posted an account yet.")}</p></div>
       ) : (
-        <div className="ex-grid">{items.map((l) => <ListingCard key={l.id} l={l} onOpen={onOpen} />)}</div>
+        <div className="ex-grid">{items.map((l) => <ListingCard key={l.id} l={l} onOpen={onOpen} showExpiry />)}</div>
       )}
     </>
   );
 }
 
-function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeStatus; defaultMode: ExchangeMode; flash: Flash; onPosted: () => void }) {
-  const [mode, setMode] = useState<ExchangeMode>(defaultMode);
+function PostForm({ status, flash, onPosted }: { status: ExchangeStatus; flash: Flash; onPosted: () => void }) {
+  const [mode, setMode] = useState<ExchangeMode>('both');
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [cover, setCover] = useState(0);
   const [details, setDetails] = useState('');
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState<ExchangeCurrency | null>(null);
+  // Selected payment methods, in the order they were picked, each with its own price.
+  const [prices, setPrices] = useState<{ currency: ExchangeCurrency; amount: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -372,25 +395,36 @@ function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeSt
     setPhotos((cur) => [...cur, ...picked.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) }))]);
   }
 
+  function removePhoto(i: number) {
+    URL.revokeObjectURL(photos[i].url);
+    setPhotos((cur) => cur.filter((_, j) => j !== i));
+    setCover((c) => (i === c ? 0 : i < c ? c - 1 : c));
+  }
+
+  function toggleCurrency(c: ExchangeCurrency) {
+    setPrices((cur) => (cur.some((p) => p.currency === c) ? cur.filter((p) => p.currency !== c) : [...cur, { currency: c, amount: '' }]));
+  }
+
   async function submit() {
     if (busy) return;
     if (photos.length === 0) return flash(tr('أضف صورة واحدة على الأقل', 'Add at least one photo'));
     if (details.trim().length < 10) return flash(tr('اكتب تفاصيل الحساب (10 أحرف على الأقل)', 'Write the account details (at least 10 characters)'));
-    if (mode !== 'trade' && (!Number(price) || Number(price) <= 0)) return flash(tr('اكتب السعر', 'Enter the price'));
-    if (mode !== 'trade' && !currency) return flash(tr('اختر العملة', 'Choose the currency'));
+    if (mode !== 'trade') {
+      if (prices.length === 0) return flash(tr('اختر طريقة دفع واحدة على الأقل', 'Choose at least one payment method'));
+      const missing = prices.find((p) => !(Number(p.amount) > 0));
+      if (missing) return flash(tr(`اكتب السعر بـ${currencyLabel(missing.currency)}`, `Enter the price in ${currencyLabel(missing.currency)}`));
+    }
     setBusy(true);
     try {
       const form = new FormData();
       form.append('mode', mode);
       form.append('details', details.trim());
-      if (mode !== 'trade') {
-        form.append('price', price);
-        form.append('currency', currency!);
-      }
+      form.append('cover', String(cover));
+      if (mode !== 'trade') form.append('prices', JSON.stringify(prices.map((p) => ({ currency: p.currency, amount: Number(p.amount) }))));
       for (const [i, p] of photos.entries()) form.append('images', await compressImage(p.file), `photo-${i + 1}.jpg`);
       await api.form('/exchange/listings', form);
       haptic('heavy');
-      flash(tr('✅ تم نشر حسابك بنجاح', '✅ Your account is posted'));
+      flash(tr('✅ تم نشر حسابك بنجاح، يبقى معروضاً 4 أيام', '✅ Your account is posted for 4 days'));
       onPosted();
     } catch (err) {
       flash(errText(err));
@@ -400,15 +434,15 @@ function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeSt
   }
 
   const modes: { key: ExchangeMode; icon: string; title: string; sub: string }[] = [
-    { key: 'trade', icon: '🔁', title: tr('تبديل فقط', 'Trade only'), sub: tr('يظهر في قسم التبديل', 'Shown in Trade') },
-    { key: 'sell', icon: '💰', title: tr('بيع', 'Sell'), sub: tr('يظهر في قسم الشراء', 'Shown in Buy') },
-    { key: 'both', icon: '⚖️', title: tr('بدل وبيع', 'Both'), sub: tr('يظهر في القسمين', 'Shown in both') },
+    { key: 'both', icon: '⚖️', title: tr('بيع وتبديل', 'Sale & trade'), sub: tr('يقبل الاثنين', 'Accepts both') },
+    { key: 'sell', icon: '💰', title: tr('بيع فقط', 'Sale only'), sub: tr('بسعر', 'For a price') },
+    { key: 'trade', icon: '🔁', title: tr('تبديل فقط', 'Trade only'), sub: tr('بدون سعر', 'No price') },
   ];
 
   return (
     <div className="ex-form">
       <div className="card ex-form-card">
-        <label className="ex-label">{tr('📍 أين تريد عرض حسابك؟', '📍 Where do you want to show it?')}</label>
+        <label className="ex-label">{tr('📍 شنو تريد تسوي بحسابك؟', '📍 What do you want to do with it?')}</label>
         <div className="ex-modes">
           {modes.map((m) => (
             <button key={m.key} className={`ex-mode ${mode === m.key ? 'active' : ''}`} onClick={() => setMode(m.key)}>
@@ -422,12 +456,13 @@ function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeSt
 
       <div className="card ex-form-card">
         <label className="ex-label">{tr(`🖼️ صور الحساب (${photos.length}/${status.maxImages})`, `🖼️ Account photos (${photos.length}/${status.maxImages})`)}</label>
+        {photos.length > 1 && <p className="card-sub ex-hint" style={{ textAlign: 'start' }}>{tr('⭐ اضغط على أي صورة حتى تخليها الغلاف', '⭐ Tap any photo to make it the cover')}</p>}
         <div className="ex-photos">
           {photos.map((p, i) => (
-            <div key={p.url} className="ex-photo">
+            <div key={p.url} className={`ex-photo ${i === cover ? 'ex-photo-cover' : ''}`} onClick={() => setCover(i)}>
               <img src={p.url} alt="" />
-              <button aria-label={tr('حذف', 'Remove')} onClick={() => { URL.revokeObjectURL(p.url); setPhotos((cur) => cur.filter((_, j) => j !== i)); }}>✕</button>
-              {i === 0 && <span className="ex-cover-tag">{tr('الغلاف', 'Cover')}</span>}
+              <button aria-label={tr('حذف', 'Remove')} onClick={(e) => { e.stopPropagation(); removePhoto(i); }}>✕</button>
+              {i === cover && <span className="ex-cover-tag">⭐ {tr('الغلاف', 'Cover')}</span>}
             </div>
           ))}
           {photos.length < status.maxImages && (
@@ -454,17 +489,35 @@ function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeSt
 
       {mode !== 'trade' && (
         <div className="card ex-form-card">
-          <label className="ex-label">{tr('💵 السعر والعملة', '💵 Price and currency')}</label>
-          <input className="ex-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ''))} placeholder={tr('السعر', 'Price')} />
+          <label className="ex-label">{tr('💵 طرق الدفع والسعر', '💵 Payment methods and price')}</label>
+          <p className="card-sub ex-hint" style={{ textAlign: 'start' }}>{tr('تكدر تختار أكثر من طريقة، ولكل وحدة سعرها', 'Pick as many as you accept, each with its own price')}</p>
           <div className="ex-currencies">
             {status.currencies.map((c) => (
-              <button key={c} className={`ex-chip ${currency === c ? 'active' : ''}`} onClick={() => setCurrency(c)}>{currencyLabel(c)}</button>
+              <button key={c} className={`ex-chip ${prices.some((p) => p.currency === c) ? 'active' : ''}`} onClick={() => toggleCurrency(c)}>
+                {prices.some((p) => p.currency === c) ? '✓ ' : ''}{currencyLabel(c)}
+              </button>
             ))}
           </div>
+          {prices.map((p) => (
+            <div key={p.currency} className="ex-price-row">
+              <span className="ex-price-cur">{currencyLabel(p.currency)}</span>
+              <input
+                className="ex-input"
+                inputMode="decimal"
+                value={p.amount}
+                onChange={(e) => {
+                  const amount = e.target.value.replace(/[^\d.]/g, '');
+                  setPrices((cur) => cur.map((x) => (x.currency === p.currency ? { ...x, amount } : x)));
+                }}
+                placeholder={tr('السعر', 'Price')}
+              />
+              <button className="ex-price-x" onClick={() => toggleCurrency(p.currency)} aria-label={tr('حذف', 'Remove')}>✕</button>
+            </div>
+          ))}
         </div>
       )}
 
-      <p className="card-sub ex-hint">{tr('⚠️ بنشرك للحساب أنت توافق على التعامل عن طريق وسيط فقط.', '⚠️ By posting you agree to deal through a middleman only.')}</p>
+      <p className="card-sub ex-hint">{tr('⚠️ بنشرك للحساب أنت توافق على التعامل عن طريق وسيط فقط. ⏰ المنشور ينحذف تلقائياً بعد 4 أيام.', '⚠️ By posting you agree to deal through a middleman only. ⏰ Posts are removed automatically after 4 days.')}</p>
       <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
         {busy ? tr('جاري النشر...', 'Posting...') : tr('🚀 نشر الحساب', '🚀 Post the account')}
       </button>
@@ -472,13 +525,104 @@ function PostForm({ status, defaultMode, flash, onPosted }: { status: ExchangeSt
   );
 }
 
+/** Photo carousel: swipe either way, and it wraps around at both ends. */
+function Gallery({ images, onZoom }: { images: string[]; onZoom: (src: string) => void }) {
+  const [index, setIndex] = useState(0);
+  const [drag, setDrag] = useState(0);
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const moved = useRef(false);
+  const n = images.length;
+  const go = (step: number) => setIndex((i) => (i + step + n) % n);
+  // The strip is laid out left-to-right in both languages, so a swipe toward the left
+  // always brings the next photo and a swipe toward the right the previous one.
+  return (
+    <div className="ex-gallery" dir="ltr">
+      <div
+        className="ex-gallery-view"
+        onTouchStart={(e) => { start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }; moved.current = false; }}
+        onTouchMove={(e) => {
+          if (!start.current || n < 2) return;
+          const dx = e.touches[0].clientX - start.current.x;
+          if (Math.abs(dx) > 8) moved.current = true;
+          setDrag(dx);
+        }}
+        onTouchEnd={() => {
+          if (start.current && n > 1) {
+            const fast = Date.now() - start.current.t < 250 && Math.abs(drag) > 20;
+            if (drag < -50 || (fast && drag < 0)) go(1);
+            else if (drag > 50 || (fast && drag > 0)) go(-1);
+          }
+          start.current = null;
+          setDrag(0);
+        }}
+      >
+        <div className="ex-gallery-strip" style={{ transform: `translateX(calc(${-index * 100}% + ${drag}px))`, transition: drag ? 'none' : 'transform 0.28s ease' }}>
+          {images.map((src) => (
+            <img key={src} src={src} alt="" draggable={false} onClick={() => { if (!moved.current) onZoom(src); }} />
+          ))}
+        </div>
+      </div>
+      {n > 1 && (
+        <>
+          <button className="ex-gallery-arrow ex-gallery-prev" onClick={() => go(-1)} aria-label={tr('السابقة', 'Previous')}><ChevronLeft size={22} /></button>
+          <button className="ex-gallery-arrow ex-gallery-next" onClick={() => go(1)} aria-label={tr('التالية', 'Next')}><ChevronRight size={22} /></button>
+          <div className="ex-gallery-dots">
+            {images.map((src, i) => <span key={src} className={i === index ? 'on' : ''} onClick={() => setIndex(i)} />)}
+          </div>
+          <span className="ex-gallery-index">{index + 1}/{n}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function OfferModal({ listingId, flash, onClose }: { listingId: string; flash: Flash; onClose: () => void }) {
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function send() {
+    if (busy) return;
+    if (message.trim().length < 2) return flash(tr('اكتب عرضك', 'Write your offer'));
+    setBusy(true);
+    try {
+      await api.post(`/exchange/listings/${listingId}/offer`, { message: message.trim() });
+      haptic('heavy');
+      flash(tr('✅ وصل عرضك لصاحب الحساب عن طريق البوت، راح يوصلك رده', '✅ Your offer was sent through the bot; you will get the reply'));
+      onClose();
+    } catch (err) {
+      flash(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card ex-report" onClick={(e) => e.stopPropagation()}>
+        <h3>{tr('💌 قدّم عرضك', '💌 Make an offer')}</h3>
+        <p className="card-sub">{tr('البوت يوصل عرضك لصاحب الحساب، وإذا قبله يوصلك إشعار ويّا يوزره.', 'The bot delivers your offer to the owner. If they accept, you get notified with their username.')}</p>
+        <textarea
+          className="ex-input ex-textarea"
+          maxLength={500}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={tr('مثال: أشتريه بـ 20 دولار، أو أبدلك بحسابي لفل 90...', 'e.g. I’ll buy it for $20, or trade my level 90 account...')}
+        />
+        <div className="ex-counter">{message.length}/500</div>
+        <div className="ex-row-btns">
+          <button className="btn btn-secondary" onClick={onClose}>{tr('إلغاء', 'Cancel')}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>{busy ? tr('جاري الإرسال...', 'Sending...') : tr('📤 إرسال العرض', '📤 Send offer')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; status: ExchangeStatus; flash: Flash; onClose: () => void; onChanged: () => void }) {
   const [listing, setListing] = useState<ExchangeListingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [imgIndex, setImgIndex] = useState(0);
   const [zoom, setZoom] = useState<string | null>(null);
   const [warning, setWarning] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [offering, setOffering] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -514,42 +658,48 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
           <div className="ex-empty" style={{ padding: 40 }}>{error ?? tr('يتم التحميل...', 'Loading...')}</div>
         ) : (
           <>
-            {listing.images.length > 0 && (
-              <div className="ex-gallery">
-                <div
-                  className="ex-gallery-track"
-                  onScroll={(e) => {
-                    const el = e.currentTarget;
-                    setImgIndex(Math.round(Math.abs(el.scrollLeft) / el.clientWidth));
-                  }}
-                >
-                  {listing.images.map((src) => (
-                    <img key={src} src={src} alt="" onClick={() => setZoom(src)} />
-                  ))}
-                </div>
-                {listing.images.length > 1 && <span className="ex-gallery-index">{imgIndex + 1}/{listing.images.length}</span>}
-              </div>
-            )}
+            {listing.images.length > 0 && <Gallery images={listing.images} onZoom={setZoom} />}
             <div className="ex-detail-body">
               <div className="ex-detail-row">
                 <ModeBadge mode={listing.mode} />
                 {listing.pinned && <span className="ex-badge ex-badge-pin">📌 {tr('مثبت', 'Pinned')}</span>}
                 {listing.status === 'removed' && <span className="ex-badge ex-badge-removed">{tr('محذوف', 'Removed')}</span>}
               </div>
-              <div className="ex-detail-price">{priceText(listing) ?? tr('🔁 تبديل فقط', '🔁 Trade only')}</div>
+              {listing.prices.length > 0 ? (
+                <div className="ex-detail-prices">
+                  {listing.prices.map((p) => <span key={p.currency} className="ex-detail-price">{priceText(p)}</span>)}
+                </div>
+              ) : (
+                <div className="ex-detail-price">{tr('🔁 تبديل فقط', '🔁 Trade only')}</div>
+              )}
               <p className="ex-detail-text" dir="auto">{listing.details}</p>
               <div className="ex-detail-meta">
                 <span>👤 <bdi>{listing.ownerName ?? tr('مستخدم', 'User')}</bdi></span>
                 <span>🕒 {new Date(listing.createdAt).toLocaleDateString(locale())}</span>
                 {listing.canModerate && listing.reportsCount !== undefined && <span>🚩 {listing.reportsCount}</span>}
               </div>
+              {listing.status === 'active' && <div className="ex-expiry">⏰ {tr('ينحذف تلقائياً بعد', 'Removed automatically in')} {timeLeft(listing.expiresAt)}</div>}
 
               {!listing.isMine && listing.status === 'active' && (
                 <div className="ex-actions">
-                  <button className="btn btn-primary" onClick={() => setWarning(true)}>{tr('💬 تواصل مع صاحب الحساب', '💬 Contact the owner')}</button>
+                  <button className="btn btn-primary" onClick={() => setOffering(true)}>{tr('💌 تقديم عرض عن طريق البوت', '💌 Make an offer through the bot')}</button>
+                  <button className="btn btn-secondary" onClick={() => setWarning(true)}>{tr('💬 تواصل مع صاحب الحساب', '💬 Contact the owner')}</button>
                   <button className="btn btn-secondary" onClick={() => openTgLink(middlemen)}>{tr('🛡️ وسطاء MF', '🛡️ MF middlemen')}</button>
                   <button className="btn ex-report-btn" onClick={() => setReporting(true)}>{tr('🚩 إبلاغ عن المنشور', '🚩 Report this post')}</button>
                 </div>
+              )}
+
+              {listing.shareLink && listing.status === 'active' && (
+                <button
+                  className="btn btn-secondary ex-copy-btn"
+                  onClick={() => {
+                    void copyText(listing.shareLink!).then((ok) =>
+                      flash(ok ? tr('🔗 تم نسخ رابط المنشور، دزه لأي شخص', '🔗 Post link copied, send it to anyone') : listing.shareLink!)
+                    );
+                  }}
+                >
+                  {tr('🔗 نسخ رابط المنشور', '🔗 Copy post link')}
+                </button>
               )}
 
               {listing.isMine && listing.status === 'active' && (
@@ -625,6 +775,8 @@ function ListingDetail({ id, status, flash, onClose, onChanged }: { id: string; 
             </div>
           </div>
         )}
+
+        {offering && listing && <OfferModal listingId={listing.id} flash={flash} onClose={() => setOffering(false)} />}
 
         {reporting && listing && (
           <ReportFlow listingId={listing.id} reasons={status.reasons} flash={flash} onClose={() => setReporting(false)} />

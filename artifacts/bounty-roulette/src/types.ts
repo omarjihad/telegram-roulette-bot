@@ -263,9 +263,9 @@ export interface ExchangeListingSummary {
   id: string;
   mode: ExchangeMode;
   details: string;
-  price: number | null;
-  currency: ExchangeCurrency | null;
+  prices: { currency: ExchangeCurrency; amount: number }[];
   pinned: boolean;
+  expiresAt: string;
   status: 'active' | 'removed';
   coverUrl: string | null;
   imageCount: number;
@@ -278,5 +278,6 @@ export interface ExchangeListingDetail extends ExchangeListingSummary {
   owner: { telegramId: number; username: string | null; name: string | null; profileLink: string };
   isMine: boolean;
   canModerate: boolean;
+  shareLink: string | null;
   reportsCount?: number;
 }

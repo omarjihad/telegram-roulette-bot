@@ -18,6 +18,7 @@ import {
   updateExchangeAdminSettings,
   UploadedFile,
   banListingOwner,
+  makeOffer,
 } from '../services/exchange.service';
 
 const files = (req: Request) => ((req.files as UploadedFile[] | undefined) ?? []);
@@ -29,7 +30,7 @@ export const getExchange = asyncHandler(async (req: Request, res: Response) => {
 
 export const getExchangeListings = asyncHandler(async (req: Request, res: Response) => {
   const q = req.query as Record<string, string | undefined>;
-  res.json({ ok: true, ...(await listListings(req.adminRole ?? null, String(q.section ?? ''), Number(q.page ?? 1))) });
+  res.json({ ok: true, ...(await listListings(req.adminRole ?? null, Number(q.page ?? 1))) });
 });
 
 export const getMyExchangeListings = asyncHandler(async (req: Request, res: Response) => {
@@ -42,6 +43,10 @@ export const getExchangeListing = asyncHandler(async (req: Request, res: Respons
 
 export const postExchangeListing = asyncHandler(async (req: Request, res: Response) => {
   res.json({ ok: true, ...(await createListing(req.dbUser!, req.adminRole ?? null, req.body ?? {}, files(req))) });
+});
+
+export const postExchangeOffer = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await makeOffer(req.dbUser!, req.adminRole ?? null, req.params.id, req.body ?? {})) });
 });
 
 export const deleteExchangeListing = asyncHandler(async (req: Request, res: Response) => {

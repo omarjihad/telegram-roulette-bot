@@ -11,6 +11,7 @@ import { UserTask } from '../models/UserTask';
 import { User } from '../models/User';
 import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
 import { processSpinReadyReminders } from './spinReady.worker';
+import { expireOldListings } from '../services/exchange.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -33,6 +34,11 @@ export function startExpirationWorker() {
       await processProfileTaskVerification();
     } catch (err) {
       logger.error({ err }, 'expiration worker tick failed');
+    }
+    try {
+      await expireOldListings();
+    } catch (err) {
+      logger.error({ err }, 'exchange listing expiry failed');
     }
     try {
       await processSpinReadyReminders();

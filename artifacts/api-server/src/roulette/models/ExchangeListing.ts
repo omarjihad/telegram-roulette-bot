@@ -4,6 +4,14 @@ export type ExchangeMode = 'trade' | 'sell' | 'both';
 export const EXCHANGE_CURRENCIES = ['usd', 'asia', 'zain', 'master', 'ton', 'pound', 'riyal'] as const;
 export type ExchangeCurrency = (typeof EXCHANGE_CURRENCIES)[number];
 
+export interface ExchangePrice {
+  currency: ExchangeCurrency;
+  amount: number;
+}
+
+/** How long a post stays up before it's removed automatically. */
+export const LISTING_LIFETIME_MS = 4 * 24 * 60 * 60 * 1000;
+
 /** A Bounty Rush account offered in the exchange section (trade, sale, or both). */
 export interface IExchangeListing extends Document {
   owner: Types.ObjectId;
@@ -12,8 +20,12 @@ export interface IExchangeListing extends Document {
   ownerName?: string | null;
   mode: ExchangeMode;
   details: string;
+  // One price per accepted payment method. (`price`/`currency` are the single price of
+  // posts made before several methods were allowed.)
+  prices: ExchangePrice[];
   price: number | null;
   currency: ExchangeCurrency | null;
+  expiresAt?: Date | null;
   images: Types.ObjectId[];
   status: 'active' | 'removed';
   pinned: boolean;
@@ -33,8 +45,13 @@ const listingSchema = new Schema<IExchangeListing>(
     ownerName: { type: String, default: null },
     mode: { type: String, enum: ['trade', 'sell', 'both'], required: true },
     details: { type: String, required: true, maxlength: 1500 },
+    prices: {
+      type: [{ _id: false, currency: { type: String, enum: [...EXCHANGE_CURRENCIES], required: true }, amount: { type: Number, required: true } }],
+      default: [],
+    },
     price: { type: Number, default: null },
     currency: { type: String, enum: [...EXCHANGE_CURRENCIES, null], default: null },
+    expiresAt: { type: Date, default: null, index: true },
     images: [{ type: Schema.Types.ObjectId, ref: 'ExchangeImage' }],
     status: { type: String, enum: ['active', 'removed'], default: 'active', index: true },
     pinned: { type: Boolean, default: false },
