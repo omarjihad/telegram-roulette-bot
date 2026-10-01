@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api, ApiError } from '../services/api';
 import { GamesResponse, SnakeRound } from '../types';
 import { LoadingScreen } from '../components/Common';
@@ -24,6 +24,12 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // The play buttons sit lower on the page; start each round scrolled to the top so the
+  // score bar and the whole board are in view.
+  useEffect(() => {
+    if (round) window.scrollTo(0, 0);
+  }, [round]);
 
   function flash(text: string) {
     setToast(text);

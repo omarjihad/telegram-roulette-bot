@@ -1685,6 +1685,10 @@ button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
 .snake-board {
   width: 100%;
   max-width: 360px;
+  /* On short screens the board shrinks so the whole arrow pad stays above the bottom nav
+     (345px ≈ score bar + arrow pad + bottom nav + gaps). Telegram exposes the real
+     viewport height as --tg-viewport-stable-height; 100vh is the fallback. */
+  max-width: max(200px, min(360px, calc(var(--tg-viewport-stable-height, 100vh) - 345px)));
   aspect-ratio: 1;
   border-radius: 16px;
   border: 2px solid rgba(74, 222, 128, 0.5);
