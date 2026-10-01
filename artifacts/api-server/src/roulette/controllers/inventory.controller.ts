@@ -10,6 +10,7 @@ import { env } from '../config/env';
 import { logger } from '../config/logger';
 import { AppError } from '../utils/AppError';
 import { getDeliveryContactLink } from '../services/deliveryAccount.service';
+import { t } from '../i18n';
 
 export const listMyInventory = asyncHandler(async (req: Request, res: Response) => {
   const items = await UserPrize.find({ telegramId: req.telegramId, status: { $ne: 'expired' } })
@@ -60,8 +61,8 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
       const deliveryContact = await getDeliveryContactLink();
       throw new AppError(
         deliveryContact.link
-            ? `قبل الاستلام أضف حساب التسليم إلى جهات اتصالك: ${deliveryContact.link}، ثم اضغط تحقق.`
-            : 'قبل الاستلام أضف حساب التسليم إلى جهات اتصالك، ثم اضغط تحقق.',
+            ? t(`قبل الاستلام أضف حساب التسليم إلى جهات اتصالك: ${deliveryContact.link}، ثم اضغط تحقق.`, `Before claiming, add the delivery account to your contacts: ${deliveryContact.link}, then tap verify.`)
+            : t('قبل الاستلام أضف حساب التسليم إلى جهات اتصالك، ثم اضغط تحقق.', 'Before claiming, add the delivery account to your contacts, then tap verify.'),
         409,
         'DELIVERY_CONTACT_REQUIRED'
       );
@@ -99,11 +100,12 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
   if (!link) throw new AppError('BOT_USERNAME is not configured on the server', 500, 'CONFIG_ERROR');
 
   const caption =
-    `🎉 ربحت ${userPrize.prizeNameSnapshot} من بوت روليت MF\n\n` +
-    `سارع في الحصول على جائزتك قبل أن تذهب، الجوائز محدودة ⏳\n\n` +
-    `رابط البوت: ${link}`;
+    t(
+      `🎉 ربحت ${userPrize.prizeNameSnapshot} من بوت روليت MF\n\nسارع في الحصول على جائزتك قبل أن تذهب، الجوائز محدودة ⏳\n\nرابط البوت: ${link}`,
+      `🎉 I won ${userPrize.prizeNameSnapshot} on the MF Roulette bot\n\nGrab your prize before it’s gone — prizes are limited ⏳\n\nBot link: ${link}`
+    );
 
-  const replyMarkup = { inline_keyboard: [[{ text: '🚀 ابدأ الربح الآن', url: link }]] };
+  const replyMarkup = { inline_keyboard: [[{ text: t('🚀 ابدأ الربح الآن', '🚀 Start winning now'), url: link }]] };
   const settings = await getSettings();
 
   // Resolve the photo URL (if any) up front — a config problem here is distinct from an
@@ -128,7 +130,7 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
     : {
         type: 'article',
         id: '1',
-        title: `ربحت ${userPrize.prizeNameSnapshot} 🎉`,
+        title: t(`ربحت ${userPrize.prizeNameSnapshot} 🎉`, `I won ${userPrize.prizeNameSnapshot} 🎉`),
         input_message_content: { message_text: caption },
         reply_markup: replyMarkup,
       };
@@ -154,7 +156,7 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
     preparedMessageId = data.result.id;
   } catch (err) {
     logger.error({ err, telegramId: req.telegramId }, 'failed to prepare share card');
-    throw new AppError('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية', 502, 'SEND_FAILED');
+    throw new AppError(t('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية', 'Could not prepare the share card, please try again'), 502, 'SEND_FAILED');
   }
 
   res.json({ ok: true, preparedMessageId });

@@ -15,6 +15,11 @@ export function invalidateCache(key: string) {
   cache.delete(key);
 }
 
+/** Drops everything (e.g. after switching languages, since cached texts are in the old one). */
+export function clearCache() {
+  cache.clear();
+}
+
 /**
  * Fetches `fetcher()` and caches the result under `key`. On every mount:
  *  - if a cached value exists, it's returned immediately (no loading flash), and

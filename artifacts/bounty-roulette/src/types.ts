@@ -38,6 +38,8 @@ export interface MeResponse {
   contestEnabled?: boolean;
   // Snake game + ad task are open to everyone (otherwise only admins, others see "coming soon").
   gamesPublic?: boolean;
+  // The user's saved language (null until they pick one).
+  language?: 'ar' | 'en' | null;
 }
 
 export interface ForcedSubMissing {

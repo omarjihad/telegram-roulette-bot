@@ -6,6 +6,7 @@ import { getSettings, ISettings } from '../models/Settings';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { t } from '../i18n';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Points needed for one points-wheel spin (see performSpin). */
@@ -24,7 +25,7 @@ export function gamesAllowed(settings: Pick<ISettings, 'gamesPublic'>, adminRole
 }
 
 function assertAllowed(settings: ISettings, adminRole: string | null) {
-  if (!gamesAllowed(settings, adminRole)) throw new AppError('قريباً', 403, 'GAMES_COMING_SOON');
+  if (!gamesAllowed(settings, adminRole)) throw new AppError(t('قريباً', 'Coming soon'), 403, 'GAMES_COMING_SOON');
 }
 
 export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: string | null) {
@@ -72,7 +73,7 @@ async function consumeAdView(telegramId: number, purpose: 'ad_task' | 'snake_rou
     { $set: { consumedAt: new Date(), consumedFor: purpose } },
     { sort: { createdAt: 1 }, new: true }
   );
-  if (!view) throw new AppError('لم يتم تأكيد مشاهدة الإعلان بعد', 409, 'AD_NOT_CONFIRMED');
+  if (!view) throw new AppError(t('لم يتم تأكيد مشاهدة الإعلان بعد', 'The ad view is not confirmed yet'), 409, 'AD_NOT_CONFIRMED');
 }
 
 /** Adsgram's server-to-server Reward URL: one call per ad watched to the end. */
@@ -110,7 +111,7 @@ export async function startSnakeRound(user: HydratedDocument<IUser>, adminRole: 
       { _id: user._id, $or: [{ lastFreeGameAt: null }, { lastFreeGameAt: { $lte: cutoff } }] },
       { $set: { lastFreeGameAt: now } }
     );
-    if (claimed.modifiedCount !== 1) throw new AppError('الجولة المجانية غير متاحة الآن', 429, 'GAME_COOLDOWN');
+    if (claimed.modifiedCount !== 1) throw new AppError(t('الجولة المجانية غير متاحة الآن', 'The free round is not available yet'), 429, 'GAME_COOLDOWN');
   } else {
     await consumeAdView(user.telegramId, 'snake_round');
   }

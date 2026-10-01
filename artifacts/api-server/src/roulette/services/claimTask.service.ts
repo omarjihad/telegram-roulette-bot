@@ -94,8 +94,11 @@ export async function creditReferralToTask(taskId: mongoose.Types.ObjectId) {
       userId: task.user,
       telegramId: task.referrerTelegramId,
       type: 'referral_progress',
-      title: '🎉 اكتملت مهمة الدعوات',
-      body: 'أكملت عدد الدعوات المطلوب لهذه الجائزة. تقدر الحين تروح للحقيبة وتضغط "استلام".',
+      title: { ar: '🎉 اكتملت مهمة الدعوات', en: '🎉 Invite task complete' },
+      body: {
+        ar: 'أكملت عدد الدعوات المطلوب لهذه الجائزة. تقدر الحين تروح للحقيبة وتضغط "استلام".',
+        en: 'You reached the invites needed for this prize. Go to your inventory and tap "Claim".',
+      },
     });
   } else {
     await task.save();
@@ -104,8 +107,11 @@ export async function creditReferralToTask(taskId: mongoose.Types.ObjectId) {
       userId: task.user,
       telegramId: task.referrerTelegramId,
       type: 'referral_progress',
-      title: '👍 إحالة مؤهلة لهذه الجائزة',
-      body: `باقي عليك ${remaining} إحالة مؤهلة عشان تكدر تسحب هذي الجائزة.`,
+      title: { ar: '👍 إحالة مؤهلة لهذه الجائزة', en: '👍 Qualified invite for this prize' },
+      body: {
+        ar: `باقي عليك ${remaining} إحالة مؤهلة عشان تكدر تسحب هذي الجائزة.`,
+        en: `${remaining} more qualified invites and you can withdraw this prize.`,
+      },
     });
   }
 

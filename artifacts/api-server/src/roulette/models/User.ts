@@ -28,6 +28,8 @@ export interface IUser extends Document {
   contestJoinedAt?: Date | null;
   // Snake game: when the last free round was started (12h cooldown by default).
   lastFreeGameAt?: Date | null;
+  // Language picked in the Mini App or with /language (null = not chosen, Arabic).
+  language?: 'ar' | 'en' | null;
   totalSpins: number;
   // What the user's most recent spin actually resulted in. Purely informational (never used
   // to decide anything) — its only job is letting the client show "آخر نتيجة: ..." when the
@@ -84,6 +86,7 @@ const userSchema = new Schema<IUser>(
     contestToken: { type: String },
     contestJoinedAt: { type: Date, default: null },
     lastFreeGameAt: { type: Date, default: null },
+    language: { type: String, enum: ['ar', 'en', null], default: null },
     totalSpins: { type: Number, default: 0 },
     lastSpinWon: { type: Boolean, default: null },
     lastSpinPrizeName: { type: String, default: null },

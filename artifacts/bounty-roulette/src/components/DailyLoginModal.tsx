@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { DailyLoginResponse, DailyLoginStatusResponse } from '../types';
 import { ApiError } from '../services/api';
 import { haptic } from '../hooks/useTelegramWebApp';
 
-const rewards = [
-  { day: 1, label: '0.5 نقطة', icon: '🪙' },
-  { day: 2, label: '1 نقطة', icon: '🪙' },
-  { day: 3, label: '2 نقطة', icon: '🪙' },
-  { day: 4, label: '3 نقاط', icon: '🪙' },
-  { day: 5, label: 'حساب 3000 جوهرة', icon: '💎' },
-  { day: 6, label: '5 نقاط', icon: '🪙' },
-  { day: 7, label: 'حساب 5000 جوهرة', icon: '💎' },
-];
+function rewardDays() {
+  return [
+    { day: 1, label: tr('0.5 نقطة', '0.5 pts'), icon: '🪙' },
+    { day: 2, label: tr('1 نقطة', '1 pt'), icon: '🪙' },
+    { day: 3, label: tr('2 نقطة', '2 pts'), icon: '🪙' },
+    { day: 4, label: tr('3 نقاط', '3 pts'), icon: '🪙' },
+    { day: 5, label: tr('حساب 3000 جوهرة', '3000-gem account'), icon: '💎' },
+    { day: 6, label: tr('5 نقاط', '5 pts'), icon: '🪙' },
+    { day: 7, label: tr('حساب 5000 جوهرة', '5000-gem account'), icon: '💎' },
+  ];
+}
 
 type Status = DailyLoginStatusResponse['status'];
 type Result = DailyLoginResponse['result'];
@@ -25,7 +28,7 @@ function useRemaining(target: string | null) {
       const h = Math.floor(seconds / 3600);
       const m = Math.floor((seconds % 3600) / 60);
       const s = seconds % 60;
-      setRemaining(`${h}س ${m}د ${s}ث`);
+      setRemaining(tr(`${h}س ${m}د ${s}ث`, `${h}h ${m}m ${s}s`));
     };
     tick();
     const id = window.setInterval(tick, 1000);
@@ -35,8 +38,8 @@ function useRemaining(target: string | null) {
 }
 
 function rewardLabel(reward: Result['reward']) {
-  if (reward.type === 'points') return `${reward.points} نقطة`;
-  return reward.prizeName ?? 'جائزة';
+  if (reward.type === 'points') return tr(`${reward.points} نقطة`, `${reward.points} pts`);
+  return reward.prizeName ?? tr('جائزة', 'Prize');
 }
 
 export function DailyLoginModal({
@@ -67,26 +70,26 @@ export function DailyLoginModal({
       setCollected(result);
       haptic('medium');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'صار خطأ، حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
     } finally {
       setCollecting(false);
     }
   }
 
   let subtitle: string;
-  if (collected) subtitle = `✅ استلمت جائزة اليوم ${collected.streakDay}: ${rewardLabel(collected.reward)}`;
-  else if (canCollect && status.streakReset) subtitle = 'فاتك يوم، فالستريك رجع من البداية 😢 اجمع اليوم 1 وابدأ من جديد';
-  else if (canCollect) subtitle = `جائزة اليوم ${status.streakDay} جاهزة، اضغط جمع حتى تستلمها`;
-  else subtitle = `ستريك ${status.streakDay} من 7 — جمعت جائزة اليوم`;
+  if (collected) subtitle = tr(`✅ استلمت جائزة اليوم ${collected.streakDay}: ${rewardLabel(collected.reward)}`, `✅ Collected day ${collected.streakDay}: ${rewardLabel(collected.reward)}`);
+  else if (canCollect && status.streakReset) subtitle = tr('فاتك يوم، فالستريك رجع من البداية 😢 اجمع اليوم 1 وابدأ من جديد', 'You missed a day, so your streak restarted 😢 Collect day 1 and start again');
+  else if (canCollect) subtitle = tr(`جائزة اليوم ${status.streakDay} جاهزة، اضغط جمع حتى تستلمها`, `Day ${status.streakDay} reward is ready — tap collect`);
+  else subtitle = tr(`ستريك ${status.streakDay} من 7 — جمعت جائزة اليوم`, `Streak ${status.streakDay} of 7 — today’s reward collected`);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()} dir="rtl">
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div style={{ fontSize: 38 }}>🔥</div>
-        <h2 style={{ margin: '4px 0' }}>تسجيل الدخول اليومي</h2>
+        <h2 style={{ margin: '4px 0' }}>{tr('تسجيل الدخول اليومي', 'Daily login')}</h2>
         <p className="card-sub" style={{ marginTop: 6, lineHeight: 1.6 }}>{subtitle}</p>
         <div className="daily-grid">
-          {rewards.map((item) => {
+          {rewardDays().map((item) => {
             const claimed = claimedDays.includes(item.day);
             const active = item.day === streakDay;
             const ready = active && canCollect;
@@ -96,7 +99,7 @@ export function DailyLoginModal({
                 className={`daily-day ${claimed ? 'daily-day-claimed' : ''} ${active ? 'daily-day-active' : ''} ${ready ? 'daily-day-ready' : ''}`}
               >
                 <div style={{ fontSize: 20 }}>{claimed ? '✅' : item.icon}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>اليوم {item.day}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{tr(`اليوم ${item.day}`, `Day ${item.day}`)}</div>
                 <div style={{ fontSize: 10, fontWeight: 800, marginTop: 3 }}>{item.label}</div>
               </div>
             );
@@ -107,15 +110,15 @@ export function DailyLoginModal({
 
         {canCollect ? (
           <button className="btn btn-primary daily-collect" onClick={collect} disabled={collecting}>
-            {collecting ? 'جاري الجمع...' : `🎁 جمع (${rewardLabel(status.reward)})`}
+            {collecting ? tr('جاري الجمع...', 'Collecting...') : tr(`🎁 جمع (${rewardLabel(status.reward)})`, `🎁 Collect (${rewardLabel(status.reward)})`)}
           </button>
         ) : (
           <>
-            {nextClaimAt && <div className="countdown">الجائزة القادمة بعد {remaining}</div>}
+            {nextClaimAt && <div className="countdown">{tr('الجائزة القادمة بعد', 'Next reward in')} {remaining}</div>}
             <p className="card-sub" style={{ fontSize: 12, marginTop: 10 }}>
-              ⚠️ إذا فوّتت يوم كامل بدون جمع، الستريك يرجع من البداية.
+              {tr('⚠️ إذا فوّتت يوم كامل بدون جمع، الستريك يرجع من البداية.', '⚠️ Miss a whole day without collecting and your streak restarts.')}
             </p>
-            <button className="btn btn-primary" style={{ width: '100%', marginTop: 12 }} onClick={onClose}>حسناً</button>
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: 12 }} onClick={onClose}>{tr('حسناً', 'OK')}</button>
           </>
         )}
       </div>

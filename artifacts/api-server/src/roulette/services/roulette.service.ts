@@ -354,12 +354,19 @@ export async function performSpin(telegramId: number, mode: 'daily' | 'points' =
       userId: notification.userId,
       telegramId: notification.telegramId,
       type: 'prize_won',
-      title: '🎉 مبروك!',
-      body:
-        `ربحت: ${notification.prizeName}\n` +
-        'لديك 24 ساعة لاستلامها من الحقيبة.\n\n' +
-        `⚠️ عشان تكدر تسحبها لازم تدعو ${notification.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة (تلقاه بالحقيبة).` +
-        (taskLink ? `\n\n${taskLink}` : ''),
+      title: { ar: '🎉 مبروك!', en: '🎉 Congratulations!' },
+      body: {
+        ar:
+          `ربحت: ${notification.prizeName}\n` +
+          'لديك 24 ساعة لاستلامها من الحقيبة.\n\n' +
+          `⚠️ عشان تكدر تسحبها لازم تدعو ${notification.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة (تلقاه بالحقيبة).` +
+          (taskLink ? `\n\n${taskLink}` : ''),
+        en:
+          `You won: ${notification.prizeName}\n` +
+          'You have 24 hours to claim it from your inventory.\n\n' +
+          `⚠️ To withdraw it, invite ${notification.requiredCount} people with this prize’s own link (it’s in your inventory).` +
+          (taskLink ? `\n\n${taskLink}` : ''),
+      },
     }).catch((err) => logger.error({ err, telegramId }, 'failed to create prize-won notification'));
   }
 

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
+import { AppError } from '../utils/AppError';
 import { checkAllForcedChats } from '../services/forcedSub.service';
 import { checkCooldown } from '../services/roulette.service';
 import { getBotInstance } from '../bot/instance';
@@ -39,6 +40,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     wheel: { ready, nextSpinAt, lastSpin },
     contestEnabled: await isContestEnabled(),
     gamesPublic: (await getSettings()).gamesPublic,
+    language: user.language ?? null,
     isAdmin: req.adminRole !== null,
     adminRole: req.adminRole,
   });
@@ -56,4 +58,13 @@ export const getForcedSubStatus = asyncHandler(async (req: Request, res: Respons
   }
 
   res.json({ ok: true, allOk, missing });
+});
+
+/** Saves the language picked in the Mini App, so the bot's own messages use it too. */
+export const postLanguage = asyncHandler(async (req: Request, res: Response) => {
+  const language = (req.body as { language?: string }).language;
+  if (language !== 'ar' && language !== 'en') throw new AppError('language must be ar or en', 422, 'VALIDATION_ERROR');
+  req.dbUser!.language = language;
+  await req.dbUser!.save();
+  res.json({ ok: true, language });
 });

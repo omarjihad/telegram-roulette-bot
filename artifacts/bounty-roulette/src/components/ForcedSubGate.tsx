@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
 import { ForcedSubMissing } from '../types';
@@ -22,7 +23,7 @@ export function ForcedSubGate({ onPassed }: { onPassed: () => void }) {
         setMissing(res.missing);
       }
     } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : 'تعذر التحقق من الاشتراك، حاول مرة أخرى.');
+      setError(err instanceof ApiError ? err.message : tr('تعذر التحقق من الاشتراك، حاول مرة أخرى.', 'Could not check your subscriptions, please try again.'));
     } finally {
       setLoading(false);
       setChecking(false);
@@ -48,9 +49,9 @@ export function ForcedSubGate({ onPassed }: { onPassed: () => void }) {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <Megaphone size={56} color="var(--accent)" />
           </div>
-          <h2 className="card-title" style={{ textAlign: 'center', fontSize: 24 }}>اشترك عشان تكمل</h2>
+          <h2 className="card-title" style={{ textAlign: 'center', fontSize: 24 }}>{tr('اشترك عشان تكمل', 'Subscribe to continue')}</h2>
           <p className="card-sub" style={{ textAlign: 'center', marginBottom: 24, fontSize: 16, lineHeight: 1.6 }}>
-            لازم تشترك بالقنوات التالية قبل ما تكدر تستخدم البوت
+            {tr('لازم تشترك بالقنوات التالية قبل ما تكدر تستخدم البوت', 'Join the following channels before using the bot')}
           </p>
 
           {error && <p style={{ color: 'var(--danger)', marginBottom: 20, textAlign: 'center', fontWeight: 700, padding: '10px', background: 'rgba(229, 57, 53, 0.1)', borderRadius: 8, border: '1px solid rgba(229, 57, 53, 0.3)' }}>{error}</p>}
@@ -60,14 +61,14 @@ export function ForcedSubGate({ onPassed }: { onPassed: () => void }) {
               <div className="channel-row" key={chan.chatId} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px 16px', borderRadius: 12 }}>
                 <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-main)' }}>{chan.title}</span>
                 <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', fontSize: 14 }} onClick={() => openChannel(chan.inviteLink)}>
-                  <ExternalLink size={16} /> انضمام
+                  <ExternalLink size={16} /> {tr('انضمام', 'Join')}
                 </button>
               </div>
             ))}
           </div>
 
           <button className="btn btn-primary" style={{ padding: '14px 20px', fontSize: 16 }} disabled={checking} onClick={check}>
-            {checking ? '...جاري التحقق' : <><CheckCircle size={18} /> تم الانضمام</>}
+            {checking ? tr('...جاري التحقق', 'Checking...') : <><CheckCircle size={18} /> {tr('تم الانضمام', 'I’ve joined')}</>}
           </button>
         </div>
       </div>

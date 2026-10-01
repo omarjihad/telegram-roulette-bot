@@ -13,6 +13,7 @@ import { writeAudit } from '../models/AuditLog';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
 import { getDeliveryAccountStatus, getDeliveryContactLink, hasVerifiedDeliveryContact } from './deliveryAccount.service';
+import { t } from '../i18n';
 
 /**
  * User presses "استلام" on a won/bonus prize sitting in their inventory.
@@ -26,7 +27,7 @@ export async function requestClaim(telegramId: number, userPrizeId: string) {
   const deliveryAccount = await getDeliveryAccountStatus();
   if (deliveryAccount.configured && !(await hasVerifiedDeliveryContact(telegramId))) {
     throw new AppError(
-      'قبل الاستلام أضف حساب التسليم إلى جهات اتصالك، ثم اضغط تحقق حتى نرسل لك رسالة التأكيد.',
+      t('قبل الاستلام أضف حساب التسليم إلى جهات اتصالك، ثم اضغط تحقق حتى نرسل لك رسالة التأكيد.', 'Before claiming, add the delivery account to your contacts, then tap verify so we can send you a confirmation.'),
       409,
       'DELIVERY_CONTACT_REQUIRED'
     );
@@ -106,8 +107,11 @@ export async function requestClaim(telegramId: number, userPrizeId: string) {
     userId: user._id as mongoose.Types.ObjectId,
     telegramId: user.telegramId,
     type: 'claim_pending',
-    title: '⏳ طلبك قيد المراجعة',
-    body: 'تم تقديم طلب سحبك إلى دعم التسليم.\nإذا تأخر الطلب أكثر من 24 ساعة راسل الدعم.',
+    title: { ar: '⏳ طلبك قيد المراجعة', en: '⏳ Your request is under review' },
+    body: {
+      ar: 'تم تقديم طلب سحبك إلى دعم التسليم.\nإذا تأخر الطلب أكثر من 24 ساعة راسل الدعم.',
+      en: 'Your withdrawal request was sent to delivery support.\nIf it takes more than 24 hours, contact support.',
+    },
   });
 
   await notifyAdminsNewWithdrawal({
@@ -180,8 +184,11 @@ export async function markWithdrawalDelivered(
     userId: updated.user,
     telegramId: updated.telegramId,
     type: 'claim_approved',
-    title: '✅ تم تسليم جائزتك',
-    body: `تم تسليم طلبك #${updated._id}\nتهنّى بـ ${updated.prizeNameSnapshot} 🎉`,
+    title: { ar: '✅ تم تسليم جائزتك', en: '✅ Your prize was delivered' },
+    body: {
+      ar: `تم تسليم طلبك #${updated._id}\nتهنّى بـ ${updated.prizeNameSnapshot} 🎉`,
+      en: `Request #${updated._id} was delivered\nEnjoy your ${updated.prizeNameSnapshot} 🎉`,
+    },
   });
   return updated;
 }
@@ -276,11 +283,17 @@ export async function approveWithdrawal(
     userId: updated.user,
     telegramId: updated.telegramId,
     type: 'claim_approved',
-    title: '✅ تم قبول طلب سحبك',
-    body:
-      `أضف حساب التسليم ${deliveryHandle} إلى جهات اتصالك لتسليم حسابك.\n\n` +
-      `إذا تأخر بالرد انتظر، ربما لديه أعمال.\n` +
-      `إذا طال انتظارك أكثر من اللازم، قم بمنشنته في قروب MF ${escalationGroupHandle}.`,
+    title: { ar: '✅ تم قبول طلب سحبك', en: '✅ Your withdrawal was approved' },
+    body: {
+      ar:
+        `أضف حساب التسليم ${deliveryHandle} إلى جهات اتصالك لتسليم حسابك.\n\n` +
+        `إذا تأخر بالرد انتظر، ربما لديه أعمال.\n` +
+        `إذا طال انتظارك أكثر من اللازم، قم بمنشنته في قروب MF ${escalationGroupHandle}.`,
+      en:
+        `Add the delivery account ${deliveryHandle} to your contacts to receive your account.\n\n` +
+        `If they’re slow to reply, please wait — they may be busy.\n` +
+        `If it takes too long, mention them in the MF group ${escalationGroupHandle}.`,
+    },
   });
   await notifyDeliveryAccountNewWithdrawal({
     withdrawalId: String(updated._id),
@@ -339,9 +352,12 @@ export async function rejectWithdrawal(
     userId: updated.user,
     telegramId: updated.telegramId,
     type: 'claim_rejected',
-    title: '❌ تم رفض طلبك',
+    title: { ar: '❌ تم رفض طلبك', en: '❌ Your request was rejected' },
     // Who rejected it is shown to the other admins only, never to the user.
-    body: `تم رفض طلبك.\n\nالسبب:\n${reason.trim()}`,
+    body: {
+      ar: `تم رفض طلبك.\n\nالسبب:\n${reason.trim()}`,
+      en: `Your request was rejected.\n\nReason:\n${reason.trim()}`,
+    },
   });
 
   await markWithdrawalDecidedForAdmins(updated, {

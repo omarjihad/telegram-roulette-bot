@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { ContestResponse } from '../types';
 import { LoadingScreen } from '../components/Common';
@@ -25,18 +26,18 @@ function RaceStatus({ data }: { data: ContestResponse }) {
   const { label: raw } = useCountdown(data.endsAt);
   const [hh, mm, ss] = raw.split(':');
   const units = [
-    { value: String(Math.floor(Number(hh) / 24)), label: 'يوم' },
-    { value: String(Number(hh) % 24).padStart(2, '0'), label: 'ساعة' },
-    { value: mm, label: 'دقيقة' },
-    { value: ss, label: 'ثانية' },
+    { value: String(Math.floor(Number(hh) / 24)), label: tr('يوم', 'days') },
+    { value: String(Number(hh) % 24).padStart(2, '0'), label: tr('ساعة', 'hours') },
+    { value: mm, label: tr('دقيقة', 'min') },
+    { value: ss, label: tr('ثانية', 'sec') },
   ];
   if (data.winner) {
     return (
       <div className="race-status race-status-ended">
-        <div className="race-status-title">🏁 انتهى السباق</div>
+        <div className="race-status-title">{tr('🏁 انتهى السباق', '🏁 The race is over')}</div>
         <div>
-          🏆 الفائز: <bdi>{data.winner.name}</bdi> بـ {data.winner.score} دعوة
-          {data.winner.isMe ? ' — مبروك، أنت الفائز! 🎉' : ''}
+          {tr('🏆 الفائز:', '🏆 Winner:')} <bdi>{data.winner.name}</bdi> {tr(`بـ ${data.winner.score} دعوة`, `with ${data.winner.score} invites`)}
+          {data.winner.isMe ? tr(' — مبروك، أنت الفائز! 🎉', ' — congratulations, you won! 🎉') : ''}
         </div>
       </div>
     );
@@ -44,11 +45,11 @@ function RaceStatus({ data }: { data: ContestResponse }) {
   if (data.noWinner) {
     return (
       <div className="race-status race-status-nowinner">
-        <div className="race-status-title">🏁 انتهى السباق دون فائز</div>
+        <div className="race-status-title">{tr('🏁 انتهى السباق دون فائز', '🏁 The race ended with no winner')}</div>
         <div>
           {data.noWinner.reason === 'min_not_reached'
-            ? `لم يصل مجموع الدعوات إلى الحد الأدنى: ${data.noWinner.totalInvites} من أصل ${data.minTotalInvites} دعوة.`
-            : 'تم إنهاء السباق من قبل الإدارة.'}
+            ? tr(`لم يصل مجموع الدعوات إلى الحد الأدنى: ${data.noWinner.totalInvites} من أصل ${data.minTotalInvites} دعوة.`, `Total invites didn’t reach the minimum: ${data.noWinner.totalInvites} of ${data.minTotalInvites}.`)
+            : tr('تم إنهاء السباق من قبل الإدارة.', 'The race was ended by the admins.')}
         </div>
       </div>
     );
@@ -56,15 +57,15 @@ function RaceStatus({ data }: { data: ContestResponse }) {
   if (data.closed) {
     return (
       <div className="race-status race-status-ended">
-        <div className="race-status-title">⏳ انتهى وقت السباق</div>
-        <div>توقّف احتساب الدعوات، وسيُعلن الفائز قريباً.</div>
+        <div className="race-status-title">{tr('⏳ انتهى وقت السباق', '⏳ Race time is up')}</div>
+        <div>{tr('توقّف احتساب الدعوات، وسيُعلن الفائز قريباً.', 'Invites no longer count; the winner will be announced soon.')}</div>
       </div>
     );
   }
   if (!data.endsAt) return null;
   return (
     <div className="race-status">
-      <div className="race-status-title">⏱️ ينتهي السباق بعد</div>
+      <div className="race-status-title">{tr('⏱️ ينتهي السباق بعد', '⏱️ The race ends in')}</div>
       {/* One box per unit, so Arabic labels and numbers never get reordered by RTL. */}
       <div className="race-countdown">
         {units.map((unit) => (
@@ -84,12 +85,12 @@ function TotalProgress({ data }: { data: ContestResponse }) {
   return (
     <div className="race-total">
       <div className="race-total-head">
-        <span>🎯 مجموع دعوات المتسابقين</span>
-        <strong>{data.totalInvites} من {data.minTotalInvites}</strong>
+        <span>{tr('🎯 مجموع دعوات المتسابقين', '🎯 Total invites, all contestants')}</span>
+        <strong>{data.totalInvites} {tr('من', 'of')} {data.minTotalInvites}</strong>
       </div>
       <div className="task-progress-track race-total-track"><div className="task-progress-fill" style={{ width: `${pct}%` }} /></div>
       <div className="race-total-note">
-        {reached ? '✅ تم بلوغ الحد الأدنى، وسيفوز صاحب المركز الأول.' : `يجب الوصول إلى ${data.minTotalInvites} دعوة على الأقل ليكون هناك فائز.`}
+        {reached ? tr('✅ تم بلوغ الحد الأدنى، وسيفوز صاحب المركز الأول.', '✅ Minimum reached — first place will win.') : tr(`يجب الوصول إلى ${data.minTotalInvites} دعوة على الأقل ليكون هناك فائز.`, `At least ${data.minTotalInvites} invites are needed for there to be a winner.`)}
       </div>
     </div>
   );
@@ -98,15 +99,15 @@ function TotalProgress({ data }: { data: ContestResponse }) {
 function NftCard({ prize }: { prize: ContestResponse['prize'] }) {
   return (
     <div className="nft-card">
-      <button className="nft-art" onClick={() => openLink(prize.nftUrl)} aria-label="عرض الهدية">
+      <button className="nft-art" onClick={() => openLink(prize.nftUrl)} aria-label={tr('عرض الهدية', 'View the gift')}>
         <img src={prize.imageUrl} alt={prize.name} />
-        <span className="nft-badge">🏆 جائزة المركز الأول</span>
+        <span className="nft-badge">{tr('🏆 جائزة المركز الأول', '🏆 First-place prize')}</span>
       </button>
       <div className="nft-body">
         <div className="nft-title">
           {prize.name} <span>{prize.number}</span>
         </div>
-        <div className="nft-sub">هدية NFT حقيقية على تيليجرام · القيمة <bdi>{prize.valueUsd}</bdi></div>
+        <div className="nft-sub">{tr('هدية NFT حقيقية على تيليجرام · القيمة', 'A real Telegram NFT gift · value')} <bdi>{prize.valueUsd}</bdi></div>
         <div className="nft-attrs">
           {prize.attributes.map((a) => (
             <div className="nft-attr" key={a.label}>
@@ -116,7 +117,7 @@ function NftCard({ prize }: { prize: ContestResponse['prize'] }) {
             </div>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => openLink(prize.nftUrl)}>🎁 عرض الهدية</button>
+        <button className="btn btn-primary" onClick={() => openLink(prize.nftUrl)}>{tr('🎁 عرض الهدية', '🎁 View the gift')}</button>
       </div>
     </div>
   );
@@ -141,7 +142,7 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
       haptic('medium');
       onJoined();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'صار خطأ، حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
       setJoining(false);
     }
   }
@@ -150,8 +151,8 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
     <div className="contest-page">
       <div className="contest-hero">
         <div className="contest-hero-icon">🏆</div>
-        <h2>سباق الدعوات</h2>
-        <p>ادعُ أصدقاءك، وتصدّر القائمة، واربح هدية NFT</p>
+        <h2>{tr('سباق الدعوات', 'Invite race')}</h2>
+        <p>{tr('ادعُ أصدقاءك، وتصدّر القائمة، واربح هدية NFT', 'Invite friends, top the leaderboard and win an NFT gift')}</p>
       </div>
 
       <RaceStatus data={data} />
@@ -160,18 +161,18 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
       <NftCard prize={data.prize} />
 
       <div className="card contest-explain">
-        <h3 className="card-title">كيف يعمل السباق؟</h3>
+        <h3 className="card-title">{tr('كيف يعمل السباق؟', 'How does the race work?')}</h3>
         <ol className="contest-steps">
-          <li><span>1</span><div><strong>سيتم إعطاؤك رابط خاص بك</strong>انشره في القنوات والمجموعات وبين أصدقائك.</div></li>
-          <li><span>2</span><div><strong>كل شخص ينضم عبر رابطك = +1</strong>بشرط أن يكون جديداً، وأن يشترك في القنوات الإجبارية ويُكمل التحقق (الكابتشا).</div></li>
-          <li><span>3</span><div><strong>إذا حظر البوت = −1</strong>تُحذف دعوته ويُخصم من نقاطك.</div></li>
-          <li><span>4</span><div><strong>كن المتصدر واربح 🏆</strong>يفوز بالهدية صاحب المركز الأول فقط، فاحرص على أن تكون الأول.</div></li>
-          <li><span>5</span><div><strong>الحد الأدنى {data.minTotalInvites} دعوة</strong>يجب أن يصل مجموع دعوات جميع المتسابقين إلى {data.minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.</div></li>
+          <li><span>1</span><div><strong>{tr('سيتم إعطاؤك رابط خاص بك', 'You’ll get your own link')}</strong>{tr('انشره في القنوات والمجموعات وبين أصدقائك.', 'Share it in channels, groups and with friends.')}</div></li>
+          <li><span>2</span><div><strong>{tr('كل شخص ينضم عبر رابطك = +1', 'Everyone who joins through your link = +1')}</strong>{tr('بشرط أن يكون جديداً، وأن يشترك في القنوات الإجبارية ويُكمل التحقق (الكابتشا).', 'As long as they’re new, join the required channels and pass the check (captcha).')}</div></li>
+          <li><span>3</span><div><strong>{tr('إذا حظر البوت = −1', 'If they block the bot = −1')}</strong>{tr('تُحذف دعوته ويُخصم من نقاطك.', 'Their invite is removed from your score.')}</div></li>
+          <li><span>4</span><div><strong>{tr('كن المتصدر واربح 🏆', 'Be first and win 🏆')}</strong>{tr('يفوز بالهدية صاحب المركز الأول فقط، فاحرص على أن تكون الأول.', 'Only first place wins the gift, so aim for the top.')}</div></li>
+          <li><span>5</span><div><strong>{tr(`الحد الأدنى ${data.minTotalInvites} دعوة`, `Minimum ${data.minTotalInvites} invites`)}</strong>{tr(`يجب أن يصل مجموع دعوات جميع المتسابقين إلى ${data.minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.`, `All contestants together must reach at least ${data.minTotalInvites} invites, otherwise the race ends with no winner.`)}</div></li>
         </ol>
       </div>
 
       <div className="card">
-        <h3 className="card-title">📋 شروط السباق</h3>
+        <h3 className="card-title">{tr('📋 شروط السباق', '📋 Race rules')}</h3>
         <ul className="contest-rules">
           {data.rules.map((r) => <li key={r}>{r}</li>)}
         </ul>
@@ -179,7 +180,7 @@ function Intro({ data, onJoined }: { data: ContestResponse; onJoined: () => void
 
       {error && <p className="wheel-error">{error}</p>}
       <button className="btn btn-primary contest-continue" disabled={left > 0 || joining} onClick={join}>
-        {left > 0 ? `اقرأ الشرح… المتابعة بعد ${left}` : joining ? 'جارٍ التحضير...' : '✅ متابعة'}
+        {left > 0 ? tr(`اقرأ الشرح… المتابعة بعد ${left}`, `Read the rules… continue in ${left}`) : joining ? tr('جارٍ التحضير...', 'Getting ready...') : tr('✅ متابعة', '✅ Continue')}
       </button>
     </div>
   );
@@ -198,14 +199,14 @@ function Board({ data }: { data: ContestResponse }) {
 
   function copy() {
     navigator.clipboard?.writeText(link).then(
-      () => setToast('✅ تم نسخ الرابط'),
-      () => setToast('انسخ الرابط يدوياً'),
+      () => setToast(tr('✅ تم نسخ الرابط', '✅ Link copied')),
+      () => setToast(tr('انسخ الرابط يدوياً', 'Copy the link manually')),
     );
     window.setTimeout(() => setToast(null), 2000);
   }
 
   function share() {
-    const text = `🏆 ادخل البوت من رابطي وساعدني أربح هدية ${data.prize.name} NFT!`;
+    const text = tr(`🏆 ادخل البوت من رابطي وساعدني أربح هدية ${data.prize.name} NFT!`, `🏆 Join the bot through my link and help me win a ${data.prize.name} NFT!`);
     openLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   }
 
@@ -215,8 +216,8 @@ function Board({ data }: { data: ContestResponse }) {
     <div className="contest-page">
       <div className="contest-hero contest-hero-small">
         <div className="contest-hero-icon">🏆</div>
-        <h2>سباق الدعوات</h2>
-        <p>{data.participants} متسابق · يفوز صاحب المركز الأول فقط</p>
+        <h2>{tr('سباق الدعوات', 'Invite race')}</h2>
+        <p>{tr(`${data.participants} متسابق · يفوز صاحب المركز الأول فقط`, `${data.participants} contestants · only first place wins`)}</p>
       </div>
 
       <RaceStatus data={data} />
@@ -226,35 +227,35 @@ function Board({ data }: { data: ContestResponse }) {
 
       <div className="card contest-me">
         <div className="contest-me-stats">
-          <div><span>نقاطك</span><strong>{data.myScore}</strong></div>
-          <div><span>ترتيبك</span><strong>{data.myRank ? `#${data.myRank}` : '—'}</strong></div>
-          <div><span>بالانتظار</span><strong>{data.myPending}</strong></div>
+          <div><span>{tr('نقاطك', 'Your score')}</span><strong>{data.myScore}</strong></div>
+          <div><span>{tr('ترتيبك', 'Your rank')}</span><strong>{data.myRank ? `#${data.myRank}` : '—'}</strong></div>
+          <div><span>{tr('بالانتظار', 'Pending')}</span><strong>{data.myPending}</strong></div>
         </div>
-        <div className="contest-link-label">🔗 رابطك الخاص</div>
-        <div className="contest-link">{link || 'الرابط غير متوفر حالياً'}</div>
+        <div className="contest-link-label">{tr('🔗 رابطك الخاص', '🔗 Your personal link')}</div>
+        <div className="contest-link">{link || tr('الرابط متاح داخل تيليجرام فقط', 'Your link is available inside Telegram only')}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={copy} disabled={!link}>📋 نسخ</button>
-          <button className="btn btn-primary" onClick={share} disabled={!link}>📤 مشاركة</button>
+          <button className="btn btn-secondary" onClick={copy} disabled={!link}>{tr('📋 نسخ', '📋 Copy')}</button>
+          <button className="btn btn-primary" onClick={share} disabled={!link}>{tr('📤 مشاركة', '📤 Share')}</button>
         </div>
         {data.myPending > 0 && (
-          <p className="contest-note">⏳ {data.myPending} شخص انضم عبر رابطك ولم يُكمل الاشتراك أو التحقق بعد.</p>
+          <p className="contest-note">⏳ {tr(`${data.myPending} شخص انضم عبر رابطك ولم يُكمل الاشتراك أو التحقق بعد.`, `${data.myPending} people joined through your link but haven’t finished the subscriptions or the check yet.`)}</p>
         )}
       </div>
 
       <div className="card leaderboard">
-        <h3 className="card-title">🏅 المتصدرين (أول 25)</h3>
-        <p className="card-sub" style={{ marginTop: 0 }}>اضغط على أي متسابق لفتح حسابه</p>
+        <h3 className="card-title">{tr('🏅 المتصدرين (أول 25)', '🏅 Leaderboard (top 25)')}</h3>
+        <p className="card-sub" style={{ marginTop: 0 }}>{tr('اضغط على أي متسابق لفتح حسابه', 'Tap a contestant to open their profile')}</p>
         {!first ? (
-          <p className="card-sub" style={{ textAlign: 'center', padding: '12px 0' }}>لا يوجد متسابقون بعد، كن أول من يتصدّر! 🚀</p>
+          <p className="card-sub" style={{ textAlign: 'center', padding: '12px 0' }}>{tr('لا يوجد متسابقون بعد، كن أول من يتصدّر! 🚀', 'No contestants yet — be the first to lead! 🚀')}</p>
         ) : (
           <>
             <button className={`lb-leader ${first.isMe ? 'lb-me' : ''}`} onClick={() => openProfile(first.profileLink)}>
               <div className="lb-crown">👑</div>
               <Avatar name={first.name} photoUrl={first.photoUrl} />
-              <div className="lb-leader-name"><bdi>{first.name}</bdi>{first.isMe ? ' (أنت)' : ''}</div>
-              <div className="lb-leader-score">{first.score} دعوة</div>
+              <div className="lb-leader-name"><bdi>{first.name}</bdi>{first.isMe ? tr(' (أنت)', ' (you)') : ''}</div>
+              <div className="lb-leader-score">{first.score} {tr('دعوة', 'invites')}</div>
               <div className="lb-leader-tag">
-                {data.winner ? `🏆 فاز بـ ${data.prize.name}` : data.noWinner ? '🥇 المركز الأول' : `🏆 في طريقه لربح ${data.prize.name}`}
+                {data.winner ? tr(`🏆 فاز بـ ${data.prize.name}`, `🏆 Won the ${data.prize.name}`) : data.noWinner ? tr('🥇 المركز الأول', '🥇 First place') : tr(`🏆 في طريقه لربح ${data.prize.name}`, `🏆 On track to win the ${data.prize.name}`)}
               </div>
             </button>
             <div className="lb-list">
@@ -262,7 +263,7 @@ function Board({ data }: { data: ContestResponse }) {
                 <button key={row.rank} className={`lb-row lb-rank-${row.rank} ${row.isMe ? 'lb-me' : ''}`} onClick={() => openProfile(row.profileLink)}>
                   <span className="lb-rank">{row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}</span>
                   <Avatar name={row.name} photoUrl={row.photoUrl} />
-                  <span className="lb-name"><bdi>{row.name}</bdi>{row.isMe ? ' (أنت)' : ''}</span>
+                  <span className="lb-name"><bdi>{row.name}</bdi>{row.isMe ? tr(' (أنت)', ' (you)') : ''}</span>
                   <span className="lb-score">{row.score}</span>
                 </button>
               ))}
@@ -272,7 +273,7 @@ function Board({ data }: { data: ContestResponse }) {
       </div>
 
       <div className="card">
-        <h3 className="card-title">📋 شروط السباق</h3>
+        <h3 className="card-title">{tr('📋 شروط السباق', '📋 Race rules')}</h3>
         <ul className="contest-rules">
           {data.rules.map((r) => <li key={r}>{r}</li>)}
         </ul>
@@ -286,7 +287,7 @@ function Board({ data }: { data: ContestResponse }) {
 export function ContestPage() {
   const { data, error, refetch } = useCachedFetch<ContestResponse>('contest', () => api.get<ContestResponse>('/contest'));
 
-  if (!data && error) return <LoadingScreen label="تعذر التحميل، حاول لاحقاً" />;
+  if (!data && error) return <LoadingScreen label={tr('تعذر التحميل، حاول لاحقاً', 'Could not load, try again later')} />;
   if (!data) return <LoadingScreen />;
   if (!data.joined) {
     return (

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { miniAppAuth } from '../middleware/miniAppAuth';
 import { spinLimiter, claimLimiter, purchaseLimiter } from '../middleware/rateLimit';
-import { getMe, getForcedSubStatus } from '../controllers/user.controller';
+import { getMe, getForcedSubStatus, postLanguage } from '../controllers/user.controller';
 import { requestCaptcha, submitCaptcha } from '../controllers/captcha.controller';
 import { getWheelStatus, spin, spinWithPoints, getWheelPrizes, getRecentDailyWins } from '../controllers/roulette.controller';
 import { listMyInventory, claimPrize, shareCard } from '../controllers/inventory.controller';
@@ -19,6 +19,7 @@ const router = Router();
 router.use(miniAppAuth);
 
 router.get('/me', getMe);
+router.post('/me/language', postLanguage);
 router.get('/forced-sub/status', getForcedSubStatus);
 router.get('/delivery-contact', getDeliveryContact);
 router.post('/delivery-contact/verify', verifyDeliveryContact);

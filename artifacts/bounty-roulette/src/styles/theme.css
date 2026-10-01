@@ -33,7 +33,6 @@ body {
   background-attachment: fixed;
   color: var(--text-main);
   font-family: 'Cairo', system-ui, sans-serif;
-  direction: rtl;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
 }
@@ -99,7 +98,7 @@ body {
   justify-content: center;
   gap: 10px;
   padding: 2px 0 6px;
-  text-align: right;
+  text-align: start;
 }
 
 .home-brand-mark {
@@ -204,7 +203,7 @@ body {
   color: var(--text-main);
   cursor: pointer;
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -279,7 +278,7 @@ body {
   color: var(--text-main);
   cursor: pointer;
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -361,7 +360,7 @@ body {
   color: var(--text-main);
   cursor: pointer;
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -1336,7 +1335,7 @@ select option {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3), 0 0 22px rgba(233, 196, 106, 0.18);
   color: var(--text-main);
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -1431,6 +1430,7 @@ select option {
 .nft-attr + .nft-attr { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .nft-attr-label { color: var(--text-dim); font-weight: 700; }
 .nft-attr-value { font-weight: 800; direction: ltr; text-align: right; }
+[dir='ltr'] .nft-attr-value { text-align: left; }
 .nft-attr-rarity {
   padding: 2px 8px;
   border-radius: 999px;
@@ -1455,7 +1455,7 @@ select option {
 }
 .contest-steps strong { display: block; color: var(--text-main); font-size: 14px; }
 
-.contest-rules { margin: 0; padding-right: 18px; color: var(--text-dim); font-size: 13px; line-height: 1.9; }
+.contest-rules { margin: 0; padding-inline-start: 18px; color: var(--text-dim); font-size: 13px; line-height: 1.9; }
 
 .contest-continue { position: sticky; bottom: 92px; font-size: 17px; padding: 16px; z-index: 5; }
 
@@ -1577,7 +1577,7 @@ button.lb-leader, button.lb-row {
   width: 100%;
   color: var(--text-main);
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   cursor: pointer;
   transition: transform 0.15s ease;
 }
@@ -1615,7 +1615,7 @@ button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3), 0 0 22px rgba(74, 222, 128, 0.14);
   color: var(--text-main);
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   cursor: pointer;
 }
 .home-games-icon {
@@ -1663,7 +1663,7 @@ button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
   background: rgba(255, 255, 255, 0.06);
   font-size: 30px;
 }
-.game-rules { margin: 0; padding-right: 18px; color: var(--text-dim); font-size: 13px; line-height: 1.9; }
+.game-rules { margin: 0; padding-inline-start: 18px; color: var(--text-dim); font-size: 13px; line-height: 1.9; }
 .game-actions { display: flex; flex-direction: column; gap: 8px; }
 .game-ad-btn { border-color: rgba(74, 222, 128, 0.5); }
 
@@ -1737,3 +1737,109 @@ button.lb-leader:active, button.lb-row:active { transform: scale(0.98); }
   cursor: pointer;
 }
 .home-history-btn:active { transform: scale(0.95); }
+
+/* ───────────── English (left-to-right) ───────────── */
+html[dir='ltr'] body { direction: ltr; }
+/* Arrows that point "forward" (left in Arabic) point right in English. */
+[dir='ltr'] .home-link-arrow,
+[dir='ltr'] .home-stat-arrow { display: inline-block; transform: scaleX(-1); }
+/* The developer panel stays Arabic, so it keeps right-to-left. */
+.admin-rtl { direction: rtl; text-align: right; }
+
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Website preview banner */
+.preview-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  font-size: 12px;
+}
+.preview-banner > div { display: flex; flex-direction: column; gap: 2px; flex: 1; color: var(--text-dim); }
+.preview-banner strong { color: var(--text-main); font-size: 14px; }
+.preview-banner .btn { width: auto; padding: 10px 14px; font-size: 13px; text-decoration: none; white-space: nowrap; }
+
+/* Home top row: brand + language switch */
+.home-top-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.home-top-row .home-brand { justify-content: flex-start; }
+
+/* Exchange section (coming soon). Background: /exchange-bg.jpg (Extreme Joy Boy Luffy);
+   until that image is added, the Gear 5 colors underneath show instead. */
+.home-exchange-card {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 150px;
+  padding: 16px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  border-radius: 22px;
+  background:
+    url('/exchange-bg.jpg') center 25% / cover,
+    radial-gradient(circle at 75% 30%, rgba(255, 255, 255, 0.95) 0 14%, transparent 40%),
+    radial-gradient(circle at 20% 80%, rgba(196, 181, 253, 0.85), transparent 55%),
+    linear-gradient(135deg, #f5f3ff 0%, #c4b5fd 35%, #7c3aed 75%, #4c1d95 100%);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), 0 0 26px rgba(196, 181, 253, 0.35);
+  color: #fff;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.home-exchange-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(15, 10, 40, 0.92) 0%, rgba(15, 10, 40, 0.55) 45%, rgba(15, 10, 40, 0.05) 100%);
+  pointer-events: none;
+}
+.home-exchange-copy { position: relative; display: flex; flex-direction: column; gap: 3px; }
+.home-exchange-copy strong { font-size: 18px; font-weight: 950; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.home-exchange-copy > span:last-child { font-size: 12px; color: #e9d5ff; }
+.home-exchange-card .home-section-label { color: #f5f3ff; }
+.exchange-soon-pill {
+  position: relative;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #4c1d95;
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.6);
+}
+
+/* Ads section on the home screen */
+.home-ads-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px dashed rgba(74, 222, 128, 0.6);
+  background: rgba(74, 222, 128, 0.05);
+}
+.home-ads-section .card { margin-bottom: 0; }
+.home-ads-label { font-size: 13px; font-weight: 900; color: #86efac; padding-inline-start: 4px; }
+
+.nav-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[dir='ltr'] .nav-item { font-size: 11px; }

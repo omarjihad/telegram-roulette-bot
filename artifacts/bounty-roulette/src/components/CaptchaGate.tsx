@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { ShieldQuestion } from 'lucide-react';
 
@@ -25,7 +26,7 @@ export function CaptchaGate({ onPassed }: { onPassed: () => void }) {
       }
       setChallenge(res.challenge ?? null);
     } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : 'تعذر تحميل التحقق، حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('تعذر تحميل التحقق، حاول مرة ثانية.', 'Could not load the check, please try again.'));
     } finally {
       setLoading(false);
     }
@@ -44,7 +45,7 @@ export function CaptchaGate({ onPassed }: { onPassed: () => void }) {
       await api.post('/captcha/submit', { sessionId: challenge.sessionId, answer });
       onPassed();
     } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : 'إجابة خاطئة، حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('إجابة خاطئة، حاول مرة ثانية.', 'Wrong answer, please try again.'));
       loadChallenge();
     } finally {
       setSubmitting(false);
@@ -58,8 +59,8 @@ export function CaptchaGate({ onPassed }: { onPassed: () => void }) {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <ShieldQuestion size={56} color="var(--accent)" />
           </div>
-          <h2 className="card-title" style={{ fontSize: 24 }}>تحقق سريع</h2>
-          <p className="card-sub" style={{ fontSize: 16, lineHeight: 1.6 }}>حل المسألة البسيطة عشان نتأكد إنك مو بوت</p>
+          <h2 className="card-title" style={{ fontSize: 24 }}>{tr('تحقق سريع', 'Quick check')}</h2>
+          <p className="card-sub" style={{ fontSize: 16, lineHeight: 1.6 }}>{tr('حل المسألة البسيطة عشان نتأكد إنك مو بوت', 'Solve this simple sum so we know you’re not a bot')}</p>
 
           {loading && <div className="spinner" style={{ margin: '30px auto' }} />}
           {!loading && challenge && (

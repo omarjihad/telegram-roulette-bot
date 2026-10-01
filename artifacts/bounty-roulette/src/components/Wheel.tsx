@@ -1,4 +1,5 @@
 import React, { useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { tr } from '../i18n';
 import { WheelSlot } from './wheelSlots';
 import { runSpinAnimation } from './spinEasing';
 import { ReelMetrics, reelSpinPlan, reelTranslateX, normalizeSlotIndex } from './reelGeometry';
@@ -152,7 +153,7 @@ export const Wheel = React.forwardRef<
                 ) : (
                   <div className="reel-card-icon">{slot.icon}</div>
                 )}
-                <div className="reel-card-label">{slot.label}</div>
+                <div className="reel-card-label">{slot.key === '__empty__' ? tr('حظ أوفر', 'Better luck') : slot.label}</div>
               </div>
             );
           })}

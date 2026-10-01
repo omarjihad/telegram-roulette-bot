@@ -4,6 +4,7 @@ import { claimReferralMilestone, getGeneralReferralLink, getReferralStats } from
 import { AppError } from '../utils/AppError';
 import { buildTaskLink } from '../services/claimTask.service';
 import { listTasksForUser } from '../services/task.service';
+import { t } from '../i18n';
 
 export const getMyReferrals = asyncHandler(async (req: Request, res: Response) => {
   const stats = await getReferralStats(req.telegramId!);
@@ -29,7 +30,7 @@ export const getMyReferrals = asyncHandler(async (req: Request, res: Response) =
         qualifiedAt: r.qualifiedAt,
         invitee: invitee
           ? {
-              name: invitee.username ? '@' + invitee.username : invitee.firstName || 'مستخدم',
+              name: invitee.username ? '@' + invitee.username : invitee.firstName || t('مستخدم', 'User'),
               photoUrl: invitee.photoUrl ?? null,
               // Opens their Telegram profile directly — by @username when they have one
               // (most reliable), otherwise by numeric ID via Telegram's tg://user scheme.
@@ -42,7 +43,7 @@ export const getMyReferrals = asyncHandler(async (req: Request, res: Response) =
       const userPrize = task.userPrize as unknown as { prizeNameSnapshot?: string } | null;
       return {
         id: task._id,
-        prizeName: userPrize?.prizeNameSnapshot ?? 'جائزة',
+        prizeName: userPrize?.prizeNameSnapshot ?? t('جائزة', 'Prize'),
         link: buildTaskLink(task.token),
         requiredCount: task.requiredCount,
         creditedCount: task.creditedCount,
@@ -70,13 +71,13 @@ export const getMyReferrals = asyncHandler(async (req: Request, res: Response) =
       availableMilestones: 0,
     },
     rules: [
-      'كل جائزة تربحها من العجلة لها رابط دعوة خاص فيها بس، تلقاه في حقيبتك.',
-      'ممنوع دعوة أشخاص من غير محتوى Bounty.',
-      'ممنوع استخدام أرقام أو حسابات وهمية.',
-      'أي إحالة مخالفة قد يتم إلغاؤها.',
-      'يجب على الشخص المدعو إكمال الاشتراك الإجباري والكابتشا حتى تُحتسب.',
-      'كل شخص مدعو يُحتسب لجائزة واحدة فقط طوال الوقت.',
-      'ممنوع حظر البوت: إذا الشخص المدعو حظر البوت تنحذف دعوته وما تنحسب.',
+      t('كل جائزة تربحها من العجلة لها رابط دعوة خاص فيها بس، تلقاه في حقيبتك.', 'Every prize you win on the wheel has its own invite link, in your inventory.'),
+      t('ممنوع دعوة أشخاص من غير محتوى Bounty.', 'Only invite people interested in Bounty Rush.'),
+      t('ممنوع استخدام أرقام أو حسابات وهمية.', 'Fake numbers or accounts are not allowed.'),
+      t('أي إحالة مخالفة قد يتم إلغاؤها.', 'Any invite that breaks the rules may be cancelled.'),
+      t('يجب على الشخص المدعو إكمال الاشتراك الإجباري والكابتشا حتى تُحتسب.', 'The invited person must complete the required subscriptions and the captcha to count.'),
+      t('كل شخص مدعو يُحتسب لجائزة واحدة فقط طوال الوقت.', 'Each invited person counts toward one prize only, ever.'),
+      t('ممنوع حظر البوت: إذا الشخص المدعو حظر البوت تنحذف دعوته وما تنحسب.', 'No blocking the bot: if the invited person blocks it, their invite is removed.'),
     ],
   });
 });
@@ -87,7 +88,7 @@ export const postClaimReferralMilestone = asyncHandler(async (req: Request, res:
     res.json({ ok: true, result });
   } catch (err: any) {
     if (err?.code === 'REFERRAL_MILESTONE_NOT_READY') {
-      throw new AppError('تحتاج 20 إحالة مؤهلة حتى تستلم المكافأة', 409, 'REFERRAL_MILESTONE_NOT_READY');
+      throw new AppError(t('تحتاج 20 إحالة مؤهلة حتى تستلم المكافأة', 'You need 20 qualified invites to collect the reward'), 409, 'REFERRAL_MILESTONE_NOT_READY');
     }
     throw err;
   }

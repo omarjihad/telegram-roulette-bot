@@ -87,14 +87,18 @@ describe('invite race', () => {
     mocks.findUserById.mockResolvedValue({ telegramId: 22, username: 'x', forcedSubOk: true, captchaPassed: true, captchaPassedAt: new Date() });
     expect(await tryCountContestReferral(new mongoose.Types.ObjectId())).toBe(true);
     expect(mocks.updateEntry).toHaveBeenCalledWith({ _id: entry._id, status: 'pending' }, expect.objectContaining({ $set: expect.objectContaining({ status: 'counted' }) }));
-    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 10, title: expect.stringContaining('+1') }));
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ telegramId: 10, title: { ar: expect.stringContaining('+1'), en: expect.stringContaining('+1') } })
+    );
   });
 
   it('takes -1 when a counted invitee blocks the bot', async () => {
     mocks.removeEntry.mockResolvedValue({ status: 'counted', contestant: contestant._id, contestantTelegramId: 10 });
     mocks.findUser.mockReturnValue({ select: vi.fn().mockResolvedValue({ username: 'x' }) });
     expect(await removeContestReferralForBlockedInvitee(22)).toBe(true);
-    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining('-1') }));
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ title: { ar: expect.stringContaining('-1'), en: expect.stringContaining('-1') } })
+    );
   });
 
   it('does not notify when a still-pending invitee blocks the bot', async () => {
@@ -152,7 +156,9 @@ describe('race end date and winner', () => {
     expect(winner).toEqual(expect.objectContaining({ telegramId: 77, name: '@champ', score: 12, round: 1 }));
     expect(settings.contestEndsAt).toBeInstanceOf(Date);
     expect(settings.save).toHaveBeenCalled();
-    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 77, title: expect.stringContaining('فزت') }));
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ telegramId: 77, title: { ar: expect.stringContaining('فزت'), en: expect.stringContaining('won') } })
+    );
   });
 
   it('ends without a winner when total invites are below the minimum (default 120)', async () => {

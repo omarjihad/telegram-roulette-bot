@@ -1,22 +1,25 @@
 import React from 'react';
 import { haptic } from '../hooks/useTelegramWebApp';
+import { tr } from '../i18n';
 import { Home, Target, Aperture, Backpack, Users, Trophy } from 'lucide-react';
 
 export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games' | 'referrals';
 
-const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'home', label: 'الرئيسية', icon: <Home size={22} /> },
-  { key: 'tasks', label: 'المهام', icon: <Target size={22} /> },
-  { key: 'wheel', label: 'الدوران', icon: <Aperture size={22} /> },
-  { key: 'contest', label: 'السباق', icon: <Trophy size={22} /> },
-  { key: 'inventory', label: 'المخزون', icon: <Backpack size={22} /> },
-  { key: 'referrals', label: 'إحالاتي', icon: <Users size={22} /> },
-];
+function tabs(): { key: TabKey; label: string; icon: React.ReactNode }[] {
+  return [
+    { key: 'home', label: tr('الرئيسية', 'Home'), icon: <Home size={22} /> },
+    { key: 'tasks', label: tr('المهام', 'Tasks'), icon: <Target size={22} /> },
+    { key: 'wheel', label: tr('الدوران', 'Spin'), icon: <Aperture size={22} /> },
+    { key: 'contest', label: tr('السباق', 'Race'), icon: <Trophy size={22} /> },
+    { key: 'inventory', label: tr('المخزون', 'Bag'), icon: <Backpack size={22} /> },
+    { key: 'referrals', label: tr('إحالاتي', 'Invites'), icon: <Users size={22} /> },
+  ];
+}
 
 export function BottomNav({ active, onChange, hideContest = false }: { active: TabKey; onChange: (t: TabKey) => void; hideContest?: boolean }) {
   return (
     <nav className="bottom-nav">
-      {TABS.filter((tab) => !(hideContest && tab.key === 'contest')).map((tab) => (
+      {tabs().filter((tab) => !(hideContest && tab.key === 'contest')).map((tab) => (
         <button
           key={tab.key}
           className={`nav-item ${active === tab.key ? 'active' : ''}`}
@@ -26,7 +29,7 @@ export function BottomNav({ active, onChange, hideContest = false }: { active: T
           }}
         >
           <span className="nav-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tab.icon}</span>
-          <span>{tab.label}</span>
+          <span className="nav-label">{tab.label}</span>
         </button>
       ))}
     </nav>

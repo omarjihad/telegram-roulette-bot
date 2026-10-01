@@ -16,10 +16,13 @@ import { StorePage } from './pages/StorePage';
 import { ContestPage } from './pages/ContestPage';
 import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
-import { ShowcasePage } from './pages/ShowcasePage';
+import { PreviewBanner } from './components/PreviewBanner';
+import { hasStoredLang, setLang, tr, useLang } from './i18n';
+import { isPreviewMode } from './services/preview';
+import { clearCache } from './hooks/useCachedFetch';
 import { DailyLoginModal } from './components/DailyLoginModal';
 
-type Stage = 'loading' | 'forced_sub' | 'captcha' | 'ready' | 'error' | 'showcase';
+type Stage = 'loading' | 'forced_sub' | 'captcha' | 'ready' | 'error';
 
 // The race section link (startapp=race), race invite links (startapp=race_<token>) and the
 // bot's "enter the race" button (?tab=race) all open the app straight on the race tab.
@@ -33,6 +36,9 @@ function initialTab(): TabKey {
 
 export default function App() {
   const { ready: tgReady } = useTelegramWebApp();
+  // Re-render the whole app when the language changes.
+  const { lang } = useLang();
+  const preview = isPreviewMode();
   const [stage, setStage] = useState<Stage>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
   const [tab, setTab] = useState<TabKey>(initialTab);
@@ -55,12 +61,9 @@ export default function App() {
 
   const loadMe = useCallback(async () => {
     try {
-      const initData = getTelegramWebApp()?.initData;
-      if (!initData) {
-        setStage('showcase');
-        return;
-      }
       const res = await api.get<MeResponse>('/me');
+      // The language saved on the server applies until this device picks one itself.
+      if (!hasStoredLang() && (res.language === 'en' || res.language === 'ar')) setLang(res.language);
       setMe(res);
       if (!res.user.forcedSubOk) setStage('forced_sub');
       else if (!res.user.captchaPassed) setStage('captcha');
@@ -74,9 +77,9 @@ export default function App() {
       }
     } catch (err: any) {
       if (err.status === 503) {
-        setErrorMsg(err.message || 'التطبيق في وضع المعاينة.');
+        setErrorMsg(err.message || tr('التطبيق في وضع المعاينة.', 'The app is in preview mode.'));
       } else {
-        setErrorMsg(err instanceof Error && 'code' in err ? err.message : 'تعذر الاتصال بالخادم. تأكد إنك فاتح البوت من داخل تيليجرام.');
+        setErrorMsg(err instanceof Error && 'code' in err ? err.message : tr('تعذر الاتصال بالخادم. تأكد أنك فتحت البوت من داخل تيليجرام.', 'Could not reach the server. Make sure you opened the bot inside Telegram.'));
       }
       setStage('error');
     }
@@ -86,27 +89,32 @@ export default function App() {
     if (tgReady) loadMe();
   }, [tgReady, loadMe]);
 
+  // Data that came back in the old language (sample data on the website, the server's own
+  // texts in the app) is fetched again after switching languages.
+  useEffect(() => {
+    if (stage !== 'ready') return;
+    clearCache();
+    void loadMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
   // A stopped race is hidden: links or taps that land on its tab fall back to home.
   useEffect(() => {
     if (me && me.contestEnabled === false && tab === 'contest') setTab('home');
   }, [me, tab]);
 
-  if (stage === 'loading' || !tgReady) return <LoadingScreen label="جاري التحضير..." />;
-
-  if (stage === 'showcase') {
-    return <ShowcasePage />;
-  }
+  if (stage === 'loading' || !tgReady) return <LoadingScreen label={tr('جاري التحضير...', 'Getting ready...')} />;
 
   if (stage === 'error') {
     return (
       <div className="app-shell">
         <div className="app-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 20 }}>
           <img src="/logo-skull.png" alt="Skull" style={{ width: 120, filter: 'drop-shadow(0 0 20px rgba(243, 198, 35, 0.4))' }} />
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>عذراً!</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{tr('عذراً!', 'Sorry!')}</div>
           <p style={{ textAlign: 'center', fontSize: 16, lineHeight: 1.6, color: 'var(--text-main)', background: 'rgba(0,0,0,0.5)', padding: '16px', borderRadius: 12, border: '1px solid var(--danger)' }}>
             {errorMsg}
           </p>
-          <button className="btn btn-primary" onClick={loadMe}>إعادة المحاولة</button>
+          <button className="btn btn-primary" onClick={loadMe}>{tr('إعادة المحاولة', 'Try again')}</button>
         </div>
       </div>
     );
@@ -123,11 +131,13 @@ export default function App() {
   if (!me) return <LoadingScreen />;
   const contestOn = me.contestEnabled !== false;
 
-  if (showAdmin) return <AdminPage onClose={() => setShowAdmin(false)} />;
+  // The developer panel stays in Arabic, right-to-left, whatever the user's language.
+  if (showAdmin) return <div className="admin-rtl" dir="rtl"><AdminPage onClose={() => setShowAdmin(false)} /></div>;
 
   return (
     <div className="app-shell">
       <div className="app-content">
+        {preview && <PreviewBanner />}
         {dailyLogin && <DailyLoginModal status={dailyLogin} onCollect={collectDailyLogin} onClose={() => setDailyLogin(null)} />}
         {me.isAdmin && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -136,7 +146,7 @@ export default function App() {
               style={{ cursor: 'pointer', border: '1px solid var(--accent)' }}
               onClick={() => setShowAdmin(true)}
             >
-              لوحة المطور 👑
+              {tr('لوحة المطور 👑', 'Developer panel 👑')}
             </button>
           </div>
         )}
@@ -152,7 +162,7 @@ export default function App() {
           <>
             <div className="header-row" style={{ marginBottom: 12 }}>
               <span />
-              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setTab('home')}>رجوع</button>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setTab('home')}>{tr('رجوع', 'Back')}</button>
             </div>
             <HistoryPage />
           </>

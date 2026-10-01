@@ -10,6 +10,7 @@ import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 import { logger } from '../config/logger';
 import { handleDeliveryCommand } from './deliveryCommand.service';
+import { t } from '../i18n';
 
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 const pendingLogins = new Map<
@@ -246,11 +247,11 @@ export async function getDeliveryContactLink() {
 
 export async function verifyDeliveryContactBySending(telegramId: number) {
   if (!activeClient || activeAccountId === null) {
-    throw new AppError('حساب التسليم غير متصل حالياً. حاول بعد قليل.', 503, 'DELIVERY_ACCOUNT_OFFLINE');
+    throw new AppError(t('حساب التسليم غير متصل حالياً. حاول بعد قليل.', 'The delivery account is offline right now. Please try again shortly.'), 503, 'DELIVERY_ACCOUNT_OFFLINE');
   }
 
   const user = await User.findOne({ telegramId });
-  if (!user) throw new AppError('المستخدم غير موجود.', 404, 'USER_NOT_FOUND');
+  if (!user) throw new AppError(t('المستخدم غير موجود.', 'User not found.'), 404, 'USER_NOT_FOUND');
 
   const username = user.username?.trim();
   let target: string | number = telegramId;
@@ -260,12 +261,12 @@ export async function verifyDeliveryContactBySending(telegramId: number) {
     // delivery session (for example after a previous Telegram interaction).
     target = username ? `@${username.replace(/^@/, '')}` : telegramId;
     await activeClient.sendMessage(target, {
-      message: '✅ تم التحقق من إضافة حساب التسليم إلى جهات اتصالك. يمكنك الآن الرجوع إلى البوت وإكمال استلام الجائزة.',
+      message: t('✅ تم التحقق من إضافة حساب التسليم إلى جهات اتصالك. يمكنك الآن الرجوع إلى البوت وإكمال استلام الجائزة.', '✅ Verified: the delivery account is in your contacts. You can go back to the bot and finish claiming your prize.'),
     });
   } catch (err) {
     logger.info({ err, telegramId }, 'delivery verification message failed');
     throw new AppError(
-      'فشل إرسال رسالة التحقق. أضف حساب التسليم إلى جهات اتصالك أولاً ثم اضغط تحقق مرة ثانية.',
+      t('فشل إرسال رسالة التحقق. أضف حساب التسليم إلى جهات اتصالك أولاً ثم اضغط تحقق مرة ثانية.', 'Could not send the check message. Add the delivery account to your contacts first, then tap verify again.'),
       409,
       'DELIVERY_CONTACT_NOT_VERIFIED'
     );

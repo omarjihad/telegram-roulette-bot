@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tr } from '../i18n';
 import { haptic } from '../hooks/useTelegramWebApp';
 
 const GRID = 15;
@@ -228,7 +229,7 @@ export function SnakeGame({
       <div className="snake-hud">
         <span>🍎 {eaten}/{maxFood}</span>
         <span className="snake-hud-points">+{(eaten * pointsPerFood).toFixed(2)}</span>
-        <span className={left <= 5 ? 'snake-hud-urgent' : ''}>⏱️ {left}ث</span>
+        <span className={left <= 5 ? 'snake-hud-urgent' : ''}>⏱️ {left}{tr('ث', 's')}</span>
       </div>
       <canvas
         ref={canvasRef}
@@ -239,12 +240,12 @@ export function SnakeGame({
         onTouchEnd={onTouchEnd}
       />
       <div className="snake-pad" dir="ltr">
-        <button className="snake-key snake-key-up" onClick={() => turn('up')} aria-label="أعلى">▲</button>
-        <button className="snake-key snake-key-left" onClick={() => turn('left')} aria-label="يسار">◀</button>
-        <button className="snake-key snake-key-right" onClick={() => turn('right')} aria-label="يمين">▶</button>
-        <button className="snake-key snake-key-down" onClick={() => turn('down')} aria-label="أسفل">▼</button>
+        <button className="snake-key snake-key-up" onClick={() => turn('up')} aria-label={tr('أعلى', 'Up')}>▲</button>
+        <button className="snake-key snake-key-left" onClick={() => turn('left')} aria-label={tr('يسار', 'Left')}>◀</button>
+        <button className="snake-key snake-key-right" onClick={() => turn('right')} aria-label={tr('يمين', 'Right')}>▶</button>
+        <button className="snake-key snake-key-down" onClick={() => turn('down')} aria-label={tr('أسفل', 'Down')}>▼</button>
       </div>
-      <p className="snake-tip">اسحب على الشاشة أو استخدم الأسهم · لا تصطدم بنفسك! 🐍</p>
+      <p className="snake-tip">{tr('اسحب على الشاشة أو استخدم الأسهم · لا تصطدم بنفسك! 🐍', 'Swipe on the board or use the arrows · don’t bite yourself! 🐍')}</p>
     </div>
   );
 }

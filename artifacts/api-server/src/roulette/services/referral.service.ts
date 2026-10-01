@@ -73,8 +73,11 @@ export async function registerReferralIfNew(params: {
     userId: referrer._id as mongoose.Types.ObjectId,
     telegramId: referrer.telegramId,
     type: 'referral_progress',
-    title: '👋 دعوة جديدة',
-    body: `دخل ${newUser.username ? '@' + newUser.username : newUser.firstName || 'مستخدم'} إلى رابطك. راح تُحتسب بعد إكمال الاشتراك الإجباري والتحقق.`,
+    title: { ar: '👋 دعوة جديدة', en: '👋 New invite' },
+    body: {
+      ar: `دخل ${newUser.username ? '@' + newUser.username : newUser.firstName || 'مستخدم'} إلى رابطك. راح تُحتسب بعد إكمال الاشتراك الإجباري والتحقق.`,
+      en: `${newUser.username ? '@' + newUser.username : newUser.firstName || 'Someone'} joined through your link. It will count once they finish the required subscriptions and the check.`,
+    },
   });
 
   const wonPrize = await UserPrize.findById(task.userPrize).select('prizeNameSnapshot');
@@ -126,8 +129,11 @@ export async function tryQualifyReferral(inviteeUserId: mongoose.Types.ObjectId)
     userId: referral.referrer,
     telegramId: referral.referrerTelegramId,
     type: 'referral_progress',
-    title: '✅ إحالة مؤهلة',
-    body: `أصبحت إحالتك من ${invitee.username ? '@' + invitee.username : invitee.firstName || 'المستخدم'} مؤهلة!`,
+    title: { ar: '✅ إحالة مؤهلة', en: '✅ Qualified invite' },
+    body: {
+      ar: `أصبحت إحالتك من ${invitee.username ? '@' + invitee.username : invitee.firstName || 'المستخدم'} مؤهلة!`,
+      en: `Your invite of ${invitee.username ? '@' + invitee.username : invitee.firstName || 'the user'} is now qualified!`,
+    },
   });
 
   if (referral.creditedTaskId) {
@@ -155,15 +161,16 @@ export async function revokeReferralForBlockedInvitee(inviteeTelegramId: number)
   }
 
   const invitee = await User.findOne({ telegramId: inviteeTelegramId }).select('username firstName');
-  const name = invitee?.username ? '@' + invitee.username : invitee?.firstName || 'المستخدم';
+  const name = invitee?.username ? '@' + invitee.username : invitee?.firstName || null;
   await createNotification({
     userId: referral.referrer,
     telegramId: referral.referrerTelegramId,
     type: 'referral_progress',
-    title: '🚫 انحذفت دعوة',
-    body:
-      `${name} حظر البوت، فراحت دعوته وما تنحسب إلك.` +
-      (remaining !== null ? `\nباقي عليك ${remaining} دعوة مؤهلة لهذه الجائزة.` : ''),
+    title: { ar: '🚫 انحذفت دعوة', en: '🚫 Invite removed' },
+    body: {
+      ar: `${name ?? 'المستخدم'} حظر البوت، فراحت دعوته وما تنحسب إلك.` + (remaining !== null ? `\nباقي عليك ${remaining} دعوة مؤهلة لهذه الجائزة.` : ''),
+      en: `${name ?? 'The user'} blocked the bot, so their invite no longer counts for you.` + (remaining !== null ? `\n${remaining} more qualified invites needed for this prize.` : ''),
+    },
   });
   logger.info({ inviteeTelegramId, referralId: referral._id, wasQualified: referral.status === 'qualified' }, 'referral revoked: invitee blocked the bot');
   return { wasQualified: referral.status === 'qualified', remaining };
@@ -245,8 +252,11 @@ export async function registerGeneralReferralIfNew(params: {
     userId: referrer._id as mongoose.Types.ObjectId,
     telegramId: referrer.telegramId,
     type: 'referral_progress',
-    title: '👋 دعوة جديدة',
-    body: `دخل ${newUser.username ? '@' + newUser.username : newUser.firstName || 'مستخدم'} إلى رابط إحالتك العامة. راح تُحتسب بعد إكمال الاشتراك الإجباري والتحقق.`,
+    title: { ar: '👋 دعوة جديدة', en: '👋 New invite' },
+    body: {
+      ar: `دخل ${newUser.username ? '@' + newUser.username : newUser.firstName || 'مستخدم'} إلى رابط إحالتك العامة. راح تُحتسب بعد إكمال الاشتراك الإجباري والتحقق.`,
+      en: `${newUser.username ? '@' + newUser.username : newUser.firstName || 'Someone'} joined through your referral link. It will count once they finish the required subscriptions and the check.`,
+    },
   });
   return 'registered';
 }

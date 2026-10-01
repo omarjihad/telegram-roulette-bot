@@ -198,7 +198,10 @@ describe('invitee blocks the bot', () => {
     );
     expect(mocks.uncreditTask).toHaveBeenCalledWith(taskId);
     expect(mocks.createNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ telegramId: referrer.telegramId, body: expect.stringContaining('حظر البوت') })
+      expect.objectContaining({
+        telegramId: referrer.telegramId,
+        body: { ar: expect.stringContaining('حظر البوت'), en: expect.stringContaining('blocked the bot') },
+      })
     );
   });
 

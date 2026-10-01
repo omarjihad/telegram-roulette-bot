@@ -5,6 +5,8 @@ import { listAllAdminTelegramIds } from './admin.service';
 import { logger } from '../config/logger';
 import type TelegramBot from 'node-telegram-bot-api';
 import { DeliveryAccount } from '../models/DeliveryAccount';
+import { User } from '../models/User';
+import { Bilingual, pick, userLang } from '../i18n';
 
 let botRef: TelegramBot | null = null;
 
@@ -17,21 +19,26 @@ export async function createNotification(params: {
   userId: Types.ObjectId;
   telegramId: number;
   type: NotificationType;
-  title: string;
-  body: string;
+  title: Bilingual;
+  body: Bilingual;
   pushToTelegram?: boolean;
 }) {
+  // Written in the user's own language, both in the app's history and in the bot chat.
+  const user = await User.findOne({ telegramId: params.telegramId }).select('language').lean();
+  const lang = userLang(user);
+  const title = pick(params.title, lang);
+  const body = pick(params.body, lang);
   const notif = await Notification.create({
     user: params.userId,
     telegramId: params.telegramId,
     type: params.type,
-    title: params.title,
-    body: params.body,
+    title,
+    body,
   });
 
   if (params.pushToTelegram !== false && botRef) {
     try {
-      await botRef.sendMessage(params.telegramId, `${params.title}\n\n${params.body}`);
+      await botRef.sendMessage(params.telegramId, `${title}\n\n${body}`);
     } catch (err) {
       logger.warn({ err, telegramId: params.telegramId }, 'failed to push telegram notification');
     }

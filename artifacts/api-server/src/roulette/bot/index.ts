@@ -42,6 +42,24 @@ export function createBot(enablePolling = false): TelegramBot {
       .then(() => logger.info({ url: env.MINI_APP_URL }, 'chat menu button synced'))
       .catch((err) => logger.warn({ err }, 'failed to sync chat menu button'));
   }
+  if (enablePolling) {
+    // Command list in the chat's "/" menu; Telegram shows the English one to English apps.
+    bot
+      .setMyCommands([
+        { command: 'start', description: 'فتح البوت' },
+        { command: 'language', description: 'تغيير اللغة / Change language' },
+      ])
+      .catch((err) => logger.warn({ err }, 'failed to set bot commands'));
+    bot
+      .setMyCommands(
+        [
+          { command: 'start', description: 'Open the bot' },
+          { command: 'language', description: 'Change language / تغيير اللغة' },
+        ],
+        { language_code: 'en' } as never
+      )
+      .catch((err) => logger.warn({ err }, 'failed to set English bot commands'));
+  }
 
   logger.info({ polling: enablePolling }, 'Telegram client initialized');
   return bot;

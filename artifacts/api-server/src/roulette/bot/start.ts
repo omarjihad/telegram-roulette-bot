@@ -11,9 +11,11 @@ import { getAdminRole } from '../services/admin.service';
 import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo.service';
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
 import { isContestEnabled, parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
+import { Lang, runWithLang, t, userLang } from '../i18n';
 
-export function buildMiniAppKeyboard(label = '🚀 فتح البوت', tab?: string): TelegramBot.SendMessageOptions {
+export function buildMiniAppKeyboard(label?: string, tab?: string): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
+  label = label ?? t('🚀 فتح البوت', '🚀 Open the bot');
   const url = tab ? `${env.MINI_APP_URL.replace(/\/$/, '')}/?tab=${tab}` : env.MINI_APP_URL;
   return {
     reply_markup: {
@@ -22,7 +24,55 @@ export function buildMiniAppKeyboard(label = '🚀 فتح البوت', tab?: str
   };
 }
 
+function welcomeName(u: TelegramBot.User, fallback: string) {
+  const name = u.username ? '@' + u.username : u.first_name || fallback;
+  return u.username && u.first_name ? `${name} (${u.first_name})` : name;
+}
+
+const LANG_LABEL: Record<Lang, string> = { ar: 'العربية 🇮🇶', en: 'English 🇬🇧' };
+
+/** /language (or /lang): pick the bot's language with two buttons. */
+function registerLanguageHandler(bot: TelegramBot) {
+  bot.onText(/^\/(language|lang)(@\w+)?$/, async (msg) => {
+    try {
+      const user = await User.findOne({ telegramId: msg.from?.id }).select('language').lean();
+      const lang = userLang(user);
+      await bot.sendMessage(msg.chat.id, t('🌐 اختر لغة البوت:', '🌐 Choose the bot language:', lang), {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: LANG_LABEL.ar, callback_data: 'set_lang_ar' },
+            { text: LANG_LABEL.en, callback_data: 'set_lang_en' },
+          ]],
+        },
+      });
+    } catch (err) {
+      logger.error({ err }, 'error handling /language');
+    }
+  });
+
+  bot.on('callback_query', async (query) => {
+    if (query.data !== 'set_lang_ar' && query.data !== 'set_lang_en') return;
+    try {
+      const lang: Lang = query.data === 'set_lang_en' ? 'en' : 'ar';
+      await User.updateOne({ telegramId: query.from.id }, { $set: { language: lang } });
+      const done = t('✅ تم تغيير اللغة إلى العربية', '✅ Language changed to English', lang);
+      await bot.answerCallbackQuery(query.id, { text: done });
+      if (query.message) {
+        await bot.editMessageText(done, {
+          chat_id: query.message.chat.id,
+          message_id: query.message.message_id,
+          reply_markup: runWithLang(lang, () => buildMiniAppKeyboard()).reply_markup as TelegramBot.InlineKeyboardMarkup | undefined,
+        });
+      }
+    } catch (err) {
+      logger.error({ err }, 'error handling language choice');
+    }
+  });
+}
+
 export function registerStartHandler(bot: TelegramBot) {
+  registerLanguageHandler(bot);
+
   bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     try {
       const telegramUser = msg.from;
@@ -36,8 +86,10 @@ export function registerStartHandler(bot: TelegramBot) {
         language_code: telegramUser.language_code,
       });
 
+      // Everything below (including errors thrown by services) uses the user's language.
+      await runWithLang(userLang(user), async () => {
       if (user.isBanned) {
-        await bot.sendMessage(msg.chat.id, '🚫 أنت محظور من استخدام هذا البوت.');
+        await bot.sendMessage(msg.chat.id, t('🚫 أنت محظور من استخدام هذا البوت.', '🚫 You are banned from using this bot.'));
         return;
       }
 
@@ -46,7 +98,7 @@ export function registerStartHandler(bot: TelegramBot) {
       const startParam = match?.[1]?.trim();
       const demoAccess = await grantDemoAccess(user, parseDemoToken(startParam));
       if (settings.maintenanceMode && !role && !demoAccess && !hasDemoAccess(user)) {
-        await bot.sendMessage(msg.chat.id, '🔧 البوت في وضع الصيانة حالياً. حاول لاحقاً.');
+        await bot.sendMessage(msg.chat.id, t('🔧 البوت في وضع الصيانة حالياً. حاول لاحقاً.', '🔧 The bot is under maintenance. Please try again later.'));
         return;
       }
 
@@ -87,11 +139,11 @@ export function registerStartHandler(bot: TelegramBot) {
         const buttons: TelegramBot.InlineKeyboardButton[][] = missing.map((c) => [
           { text: `📢 ${c.title}`, url: c.inviteLink || `https://t.me/${c.chatId.replace('@', '')}` },
         ]);
-        buttons.push([{ text: '✅ تحقق من الاشتراك', callback_data: 'check_forced_sub' }]);
+        buttons.push([{ text: t('✅ تحقق من الاشتراك', '✅ Check my subscriptions'), callback_data: 'check_forced_sub' }]);
 
         await bot.sendMessage(
           msg.chat.id,
-          'قبل ما تكدر تستخدم البوت، لازم تشترك بالقنوات/الكروبات التالية:',
+          t('قبل ما تكدر تستخدم البوت، لازم تشترك بالقنوات/الكروبات التالية:', 'Before using the bot, please join the following channels/groups:'),
           { reply_markup: { inline_keyboard: buttons } }
         );
         return;
@@ -106,10 +158,10 @@ export function registerStartHandler(bot: TelegramBot) {
           const gift = await redeemGiftLink(giftToken, user.telegramId);
           const text = 'isSpin' in gift && gift.isSpin
             ? gift.message
-            : `${gift.message}\n\nاضغط الزر حتى تفتح البوت وتشوف الهدية بحسابك 🎁`;
-          await bot.sendMessage(msg.chat.id, text, buildMiniAppKeyboard('isSpin' in gift && gift.isSpin ? '🎡 أدر العجلة الآن' : undefined));
+            : `${gift.message}\n\n${t('اضغط الزر حتى تفتح البوت وتشوف الهدية بحسابك 🎁', 'Tap the button to open the bot and see the gift in your account 🎁')}`;
+          await bot.sendMessage(msg.chat.id, text, buildMiniAppKeyboard('isSpin' in gift && gift.isSpin ? t('🎡 أدر العجلة الآن', '🎡 Spin the wheel now') : undefined));
         } catch (err) {
-          await bot.sendMessage(msg.chat.id, err instanceof Error ? `⚠️ ${err.message}` : '⚠️ رابط الهدية غير صالح.');
+          await bot.sendMessage(msg.chat.id, err instanceof Error ? `⚠️ ${err.message}` : t('⚠️ رابط الهدية غير صالح.', '⚠️ This gift link is not valid.'));
         }
         return;
       }
@@ -118,17 +170,21 @@ export function registerStartHandler(bot: TelegramBot) {
       if ((startParam === 'race' || contestToken) && (await isContestEnabled())) {
         await bot.sendMessage(
           msg.chat.id,
-          '🏆 سباق الدعوات\n\nادعُ أصدقاءك، تصدّر القائمة، واربح هدية Santa Hat NFT 🎁\n\n👇 اضغط الزر وادخل السباق',
-          buildMiniAppKeyboard('🏆 ادخل السباق', 'race')
+          t('🏆 سباق الدعوات\n\nادعُ أصدقاءك، تصدّر القائمة، واربح هدية Santa Hat NFT 🎁\n\n👇 اضغط الزر وادخل السباق', '🏆 Invite race\n\nInvite friends, top the leaderboard and win a Santa Hat NFT gift 🎁\n\n👇 Tap the button to join the race'),
+          buildMiniAppKeyboard(t('🏆 ادخل السباق', '🏆 Join the race'), 'race')
         );
         return;
       }
 
       await bot.sendMessage(
         msg.chat.id,
-        `أهلا بك ${telegramUser.username ? '@' + telegramUser.username : telegramUser.first_name || 'صديقنا'}${telegramUser.username && telegramUser.first_name ? ` (${telegramUser.first_name})` : ''} في بوت روليت MF\n\nافتح البوت واربح الجوائز 👇`,
+        t(
+          `أهلا بك ${welcomeName(telegramUser, 'صديقنا')} في بوت روليت MF\n\nافتح البوت واربح الجوائز 👇\n\n🌐 English: /language`,
+          `Welcome ${welcomeName(telegramUser, 'friend')} to the MF Roulette bot\n\nOpen the bot and win prizes 👇\n\n🌐 العربية: /language`
+        ),
         buildMiniAppKeyboard()
       );
+      });
     } catch (err) {
       logger.error({ err }, 'error handling /start');
     }
@@ -138,17 +194,18 @@ export function registerStartHandler(bot: TelegramBot) {
     if (query.data !== 'check_forced_sub') return;
     try {
       const telegramId = query.from.id;
+      const lang = userLang(await User.findOne({ telegramId }).select('language').lean());
       const { allOk, missing } = await checkAllForcedChats(bot, telegramId);
 
       if (allOk) {
         await User.updateOne({ telegramId }, { forcedSubOk: true });
-        await bot.answerCallbackQuery(query.id, { text: '✅ تم التحقق! تقدر تفتح البوت الحين.' });
+        await bot.answerCallbackQuery(query.id, { text: t('✅ تم التحقق! تقدر تفتح البوت الحين.', '✅ Verified! You can open the bot now.', lang) });
         if (query.message) {
-          await bot.sendMessage(query.message.chat.id, 'تم التحقق من اشتراكك ✅', buildMiniAppKeyboard());
+          await bot.sendMessage(query.message.chat.id, t('تم التحقق من اشتراكك ✅', 'Your subscriptions are verified ✅', lang), runWithLang(lang, () => buildMiniAppKeyboard()));
         }
       } else {
         await bot.answerCallbackQuery(query.id, {
-          text: '❌ لسا ناقصك اشتراك ببعض القنوات.',
+          text: t('❌ لسا ناقصك اشتراك ببعض القنوات.', '❌ You still need to join some channels.', lang),
           show_alert: true,
         });
       }

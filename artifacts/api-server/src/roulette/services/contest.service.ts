@@ -9,6 +9,7 @@ import { logger } from '../config/logger';
 import { env } from '../config/env';
 import { getSettings, ISettings } from '../models/Settings';
 import { AppError } from '../utils/AppError';
+import { Bilingual, pick, t, userLang } from '../i18n';
 
 export const LEADERBOARD_SIZE = 25;
 
@@ -19,23 +20,31 @@ export const CONTEST_PRIZE = {
   nftUrl: 'https://t.me/nft/SantaHat-38438',
   imageUrl: '/nft-santa-hat.jpg',
   attributes: [
-    { label: 'الموديل', value: 'Cold Autumn', rarity: '2%' },
-    { label: 'الرمز', value: "New Year's Eve", rarity: '2.4%' },
-    { label: 'الخلفية', value: 'Satin Gold', rarity: '1.5%' },
+    { label: { ar: 'الموديل', en: 'Model' }, value: 'Cold Autumn', rarity: '2%' },
+    { label: { ar: 'الرمز', en: 'Symbol' }, value: "New Year's Eve", rarity: '2.4%' },
+    { label: { ar: 'الخلفية', en: 'Backdrop' }, value: 'Satin Gold', rarity: '1.5%' },
   ],
   valueUsd: '~$17',
 };
+
+/** The prize as the Mini App shows it, with labels in the request's language. */
+function localizedPrize() {
+  return {
+    ...CONTEST_PRIZE,
+    attributes: CONTEST_PRIZE.attributes.map((a) => ({ ...a, label: t(a.label.ar, a.label.en) })),
+  };
+}
 
 export const DEFAULT_MIN_TOTAL_INVITES = 120;
 
 export function contestRules(minTotalInvites: number) {
   return [
-    'يُحتسب لك +1 عن كل شخص يدخل البوت لأول مرة من رابطك، ويشترك في القنوات الإجبارية، ويُكمل التحقق (الكابتشا).',
-    'إذا حظر الشخص المدعو البوت، تُحذف دعوته ويُخصم من نقاطك -1.',
-    'يُحتسب كل شخص لمتسابق واحد فقط، ولا يُحتسب من كان مسجلاً في البوت مسبقاً.',
-    'يُمنع استخدام الحسابات الوهمية أو الأرقام المزيفة، وتُلغى أي دعوة مخالفة.',
-    `يجب أن يصل مجموع دعوات جميع المتسابقين إلى ${minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.`,
-    'يفوز بالجائزة صاحب المركز الأول فقط.',
+    t('يُحتسب لك +1 عن كل شخص يدخل البوت لأول مرة من رابطك، ويشترك في القنوات الإجبارية، ويُكمل التحقق (الكابتشا).', 'You get +1 for everyone who opens the bot for the first time through your link, joins the required channels and passes the check (captcha).'),
+    t('إذا حظر الشخص المدعو البوت، تُحذف دعوته ويُخصم من نقاطك -1.', 'If an invited person blocks the bot, their invite is removed (-1).'),
+    t('يُحتسب كل شخص لمتسابق واحد فقط، ولا يُحتسب من كان مسجلاً في البوت مسبقاً.', 'Each person counts for one contestant only; people who already used the bot don’t count.'),
+    t('يُمنع استخدام الحسابات الوهمية أو الأرقام المزيفة، وتُلغى أي دعوة مخالفة.', 'Fake accounts or numbers are not allowed; any such invite is cancelled.'),
+    t(`يجب أن يصل مجموع دعوات جميع المتسابقين إلى ${minTotalInvites} دعوة على الأقل، وإلا ينتهي السباق دون فائز.`, `All contestants together must reach at least ${minTotalInvites} invites, otherwise the race ends with no winner.`),
+    t('يفوز بالجائزة صاحب المركز الأول فقط.', 'Only first place wins the prize.'),
   ];
 }
 
@@ -86,13 +95,13 @@ function profileLink(user: { username?: string; telegramId: number }) {
 }
 
 function displayName(user: { username?: string; firstName?: string }) {
-  return user.username ? '@' + user.username : user.firstName || 'مستخدم';
+  return user.username ? '@' + user.username : user.firstName || t('مستخدم', 'User');
 }
 
 /** Called after the user read the intro and pressed "continue": gives them their link. */
 export async function joinContest(user: HydratedDocument<IUser>) {
   const settings = await getSettings();
-  if (settings.contestEnabled === false) throw new AppError('سباق الدعوات متوقف حالياً', 404, 'CONTEST_DISABLED');
+  if (settings.contestEnabled === false) throw new AppError(t('سباق الدعوات متوقف حالياً', 'The invite race is paused right now'), 404, 'CONTEST_DISABLED');
   if (!user.contestToken) user.contestToken = nanoid(12);
   if (!user.contestJoinedAt) user.contestJoinedAt = new Date();
   await user.save();
@@ -159,8 +168,11 @@ export async function tryCountContestReferral(inviteeUserId: mongoose.Types.Obje
     userId: entry.contestant,
     telegramId: entry.contestantTelegramId,
     type: 'referral_progress',
-    title: '🏆 سباق الدعوات: +1',
-    body: `انضم ${displayName(invitee)} عن طريق رابطك وأكمل الشروط.\nنقاطك الحالية: ${score} 🔥`,
+    title: { ar: '🏆 سباق الدعوات: +1', en: '🏆 Invite race: +1' },
+    body: {
+      ar: `انضم ${displayName(invitee)} عن طريق رابطك وأكمل الشروط.\nنقاطك الحالية: ${score} 🔥`,
+      en: `${displayName(invitee)} joined through your link and completed the steps.\nYour score: ${score} 🔥`,
+    },
   }).catch((err) => logger.warn({ err }, 'failed to notify contestant'));
   return true;
 }
@@ -184,8 +196,11 @@ export async function removeContestReferralForBlockedInvitee(inviteeTelegramId: 
     userId: entry.contestant,
     telegramId: entry.contestantTelegramId,
     type: 'referral_progress',
-    title: '🏆 سباق الدعوات: -1',
-    body: `${invitee ? displayName(invitee) : 'مستخدم'} حظر البوت، فانحذفت دعوته من السباق.\nنقاطك الحالية: ${score}`,
+    title: { ar: '🏆 سباق الدعوات: -1', en: '🏆 Invite race: -1' },
+    body: {
+      ar: `${invitee ? displayName(invitee) : 'مستخدم'} حظر البوت، فانحذفت دعوته من السباق.\nنقاطك الحالية: ${score}`,
+      en: `${invitee ? displayName(invitee) : 'A user'} blocked the bot, so their invite was removed from the race.\nYour score: ${score}`,
+    },
   }).catch((err) => logger.warn({ err }, 'failed to notify contestant'));
   return true;
 }
@@ -223,7 +238,7 @@ async function buildLeaderboard(rows: Array<{ _id: mongoose.Types.ObjectId; scor
 
 export async function getContestOverview(user: HydratedDocument<IUser>) {
   const settings = await getSettings();
-  if (settings.contestEnabled === false) throw new AppError('سباق الدعوات متوقف حالياً', 404, 'CONTEST_DISABLED');
+  if (settings.contestEnabled === false) throw new AppError(t('سباق الدعوات متوقف حالياً', 'The invite race is paused right now'), 404, 'CONTEST_DISABLED');
   const round = settings.contestRound ?? 1;
   const rows = await rankRound(round);
   const myIndex = rows.findIndex((r) => String(r._id) === String(user._id));
@@ -246,7 +261,7 @@ export async function getContestOverview(user: HydratedDocument<IUser>) {
     noWinner: noWinner ? { reason: noWinner.reason, totalInvites: noWinner.totalInvites } : null,
     totalInvites: totalOf(rows),
     minTotalInvites,
-    prize: CONTEST_PRIZE,
+    prize: localizedPrize(),
     rules: contestRules(minTotalInvites),
   };
 }
@@ -284,14 +299,14 @@ export async function setContestEndsAt(endsAt: Date | null) {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Tells everyone who joined the race who won, throttled for Telegram's rate limits. */
-async function broadcastWinner(text: string, skipTelegramId: number) {
+async function broadcastWinner(text: Bilingual, skipTelegramId: number) {
   const bot = getBotInstance();
   const cursor = User.find({ contestJoinedAt: { $ne: null }, botBlocked: { $ne: true }, isBanned: { $ne: true } })
-    .select('telegramId')
+    .select('telegramId language')
     .cursor();
   for await (const person of cursor) {
     if (person.telegramId === skipTelegramId) continue;
-    await bot.sendMessage(person.telegramId, text).catch(() => undefined);
+    await bot.sendMessage(person.telegramId, pick(text, userLang(person))).catch(() => undefined);
     await sleep(50);
   }
 }
@@ -315,9 +330,15 @@ async function endRoundWithoutWinner(settings: ISettings, round: number, reason:
   const min = settings.contestMinTotalInvites ?? DEFAULT_MIN_TOTAL_INVITES;
   const why =
     reason === 'min_not_reached'
-      ? `لم يصل مجموع الدعوات إلى الحد الأدنى المطلوب: ${totalInvites} من أصل ${min} دعوة.`
-      : 'تم إنهاء السباق من قبل الإدارة.';
-  const text = `🏁 انتهى سباق الدعوات دون فائز\n\n${why}\n\nشكراً لجميع المشاركين، ترقّبوا السباق القادم 👀`;
+      ? {
+          ar: `لم يصل مجموع الدعوات إلى الحد الأدنى المطلوب: ${totalInvites} من أصل ${min} دعوة.`,
+          en: `Total invites didn’t reach the minimum: ${totalInvites} of ${min}.`,
+        }
+      : { ar: 'تم إنهاء السباق من قبل الإدارة.', en: 'The race was ended by the admins.' };
+  const text = {
+    ar: `🏁 انتهى سباق الدعوات دون فائز\n\n${why.ar}\n\nشكراً لجميع المشاركين، ترقّبوا السباق القادم 👀`,
+    en: `🏁 The invite race ended with no winner\n\n${why.en}\n\nThanks to everyone who took part — stay tuned for the next race 👀`,
+  };
   void broadcastWinner(text, 0).catch((err) => logger.warn({ err }, 'race result broadcast failed'));
   logger.info({ round, reason, totalInvites }, 'invite race ended without a winner');
 }
@@ -364,13 +385,21 @@ export async function announceContestWinner() {
     userId: person._id as mongoose.Types.ObjectId,
     telegramId: person.telegramId,
     type: 'referral_reward',
-    title: '🏆 مبروك! فزت بسباق الدعوات',
-    body: `أنت المركز الأول بـ ${first.score} دعوة 🔥\nربحت هدية ${prizeTitle} NFT 🎁\n${CONTEST_PRIZE.nftUrl}\n\nتواصل مع الإدارة لاستلام هديتك.`,
+    title: { ar: '🏆 مبروك! فزت بسباق الدعوات', en: '🏆 Congratulations! You won the invite race' },
+    body: {
+      ar: `أنت المركز الأول بـ ${first.score} دعوة 🔥\nربحت هدية ${prizeTitle} NFT 🎁\n${CONTEST_PRIZE.nftUrl}\n\nتواصل مع الإدارة لاستلام هديتك.`,
+      en: `You’re first with ${first.score} invites 🔥\nYou won the ${prizeTitle} NFT gift 🎁\n${CONTEST_PRIZE.nftUrl}\n\nContact the admins to receive your gift.`,
+    },
   }).catch((err) => logger.warn({ err }, 'failed to notify race winner'));
 
-  const text =
-    `🏁 انتهى سباق الدعوات!\n\n🏆 الفائز: ${name}\n🔥 عدد الدعوات: ${first.score}\n🎁 الجائزة: ${prizeTitle} NFT\n\n` +
-    'شكراً لجميع المشاركين، ترقّبوا السباق القادم 👀';
+  const text = {
+    ar:
+      `🏁 انتهى سباق الدعوات!\n\n🏆 الفائز: ${name}\n🔥 عدد الدعوات: ${first.score}\n🎁 الجائزة: ${prizeTitle} NFT\n\n` +
+      'شكراً لجميع المشاركين، ترقّبوا السباق القادم 👀',
+    en:
+      `🏁 The invite race is over!\n\n🏆 Winner: ${name}\n🔥 Invites: ${first.score}\n🎁 Prize: ${prizeTitle} NFT\n\n` +
+      'Thanks to everyone who took part — stay tuned for the next race 👀',
+  };
   void broadcastWinner(text, person.telegramId).catch((err) => logger.warn({ err }, 'race winner broadcast failed'));
 
   logger.info({ round, winner: person.telegramId, score: first.score }, 'invite race winner announced');

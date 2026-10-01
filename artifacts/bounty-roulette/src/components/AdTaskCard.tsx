@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { GamesResponse } from '../types';
 import { useCachedFetch } from '../hooks/useCachedFetch';
-import { AdSkippedError, AdUnavailableError, claimAfterAd, showRewardedAd } from '../services/adsgram';
+import { AdPreviewError, AdSkippedError, AdUnavailableError, claimAfterAd, showRewardedAd } from '../services/adsgram';
+import { isPreviewMode } from '../services/preview';
 
 export function adErrorMessage(err: unknown) {
-  if (err instanceof AdUnavailableError) return '📭 لا يوجد إعلان حالياً، حاول بعد قليل.';
-  if (err instanceof AdSkippedError) return '⚠️ يجب مشاهدة الإعلان حتى النهاية للحصول على المكافأة.';
-  if (err instanceof ApiError && err.code === 'AD_NOT_CONFIRMED') return 'لم يتم تأكيد مشاهدة الإعلان، حاول مرة أخرى.';
+  if (err instanceof AdPreviewError) return tr('📺 الإعلانات تعمل داخل تيليجرام فقط. افتح البوت لمشاهدة الإعلان وربح النقاط.', '📺 Ads work only inside Telegram. Open the bot to watch ads and earn points.');
+  if (err instanceof AdUnavailableError) return tr('📭 لا يوجد إعلان حالياً، حاول بعد قليل.', '📭 No ad available right now, try again shortly.');
+  if (err instanceof AdSkippedError) return tr('⚠️ يجب مشاهدة الإعلان حتى النهاية للحصول على المكافأة.', '⚠️ Watch the ad to the end to get the reward.');
+  if (err instanceof ApiError && err.code === 'AD_NOT_CONFIRMED') return tr('لم يتم تأكيد مشاهدة الإعلان، حاول مرة أخرى.', 'The ad view was not confirmed, please try again.');
   if (err instanceof ApiError) return err.message;
-  return 'حدث خطأ، حاول مرة أخرى.';
+  return tr('حدث خطأ، حاول مرة أخرى.', 'Something went wrong, please try again.');
 }
 
 /** "Watch an ad, earn points" — shown first on the Tasks page and on the games page. */
@@ -25,11 +28,15 @@ export function AdTaskCard({ onEarned }: { onEarned?: () => void }) {
 
   async function watch() {
     if (!data || busy) return;
+    if (isPreviewMode()) {
+      flash(tr('📺 الإعلانات تعمل داخل تيليجرام فقط. افتح البوت لمشاهدة الإعلان وربح النقاط.', '📺 Ads work only inside Telegram. Open the bot to watch ads and earn points.'));
+      return;
+    }
     setBusy(true);
     try {
       await showRewardedAd(data.blockId);
       const res = await claimAfterAd<{ ok: true; reward: number }>('/games/ad-task/claim');
-      flash(`✅ ربحت ${res.reward} نقطة!`);
+      flash(tr(`✅ ربحت ${res.reward} نقطة!`, `✅ You earned ${res.reward} points!`));
       onEarned?.();
       void refetch().catch(() => {});
     } catch (err) {
@@ -45,16 +52,16 @@ export function AdTaskCard({ onEarned }: { onEarned?: () => void }) {
       <div className="game-card-head">
         <div className="game-card-icon">📺</div>
         <div>
-          <h3 className="card-title" style={{ margin: 0 }}>شاهد إعلان واربح</h3>
-          <p className="card-sub" style={{ margin: 0 }}>تربح {data.adTask.reward} نقطة عن كل إعلان تشاهده للنهاية</p>
+          <h3 className="card-title" style={{ margin: 0 }}>{tr('شاهد إعلان واربح', 'Watch an ad & earn')}</h3>
+          <p className="card-sub" style={{ margin: 0 }}>{tr(`تربح ${data.adTask.reward} نقطة عن كل إعلان تشاهده للنهاية`, `Earn ${data.adTask.reward} points for every ad you watch to the end`)}</p>
         </div>
       </div>
       {data.allowed ? (
         <button className="btn btn-primary" disabled={busy} onClick={() => void watch()}>
-          {busy ? 'جارٍ التحميل...' : '📺 شاهد إعلان'}
+          {busy ? tr('جارٍ التحميل...', 'Loading...') : tr('📺 شاهد إعلان', '📺 Watch an ad')}
         </button>
       ) : (
-        <button className="btn btn-secondary" disabled>🔜 قريباً</button>
+        <button className="btn btn-secondary" disabled>{tr('🔜 قريباً', '🔜 Soon')}</button>
       )}
       {toast && <div className="toast">{toast}</div>}
     </div>

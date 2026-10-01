@@ -5,6 +5,7 @@ import { User } from '../models/User';
 import { UserPrize } from '../models/UserPrize';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
+import { t } from '../i18n';
 
 export function parseGiftToken(value?: string | null): string | null {
   if (!value) return null;
@@ -100,15 +101,15 @@ export async function redeemGiftLink(token: string, telegramId: number) {
     const expired = await GiftLink.findOne({ token, status: 'unused' });
     if (expired?.expiresAt && expired.expiresAt <= now) {
       await GiftLink.updateOne({ _id: expired._id, status: 'unused' }, { $set: { status: 'expired' } });
-      throw new AppError('انتهت صلاحية رابط الهدية أو تم استخدامه.', 409, 'GIFT_NOT_AVAILABLE');
+      throw new AppError(t('انتهت صلاحية رابط الهدية أو تم استخدامه.', 'This gift link has expired or was already used.'), 409, 'GIFT_NOT_AVAILABLE');
     }
     if (expired && expired.redeemedByTelegramIds.includes(telegramId)) {
-      throw new AppError('استلمت هذه الهدية مسبقاً.', 409, 'GIFT_ALREADY_REDEEMED');
+      throw new AppError(t('استلمت هذه الهدية مسبقاً.', 'You already received this gift.'), 409, 'GIFT_ALREADY_REDEEMED');
     }
     if (expired && expired.redemptionCount >= expired.maxRedemptions) {
-      throw new AppError('اكتمل عدد مستخدمي رابط الهدية.', 409, 'GIFT_NOT_AVAILABLE');
+      throw new AppError(t('اكتمل عدد مستخدمي رابط الهدية.', 'This gift link has reached its user limit.'), 409, 'GIFT_NOT_AVAILABLE');
     }
-    throw new AppError('رابط الهدية غير صالح أو تم استخدامه مسبقاً.', 409, 'GIFT_NOT_AVAILABLE');
+    throw new AppError(t('رابط الهدية غير صالح أو تم استخدامه مسبقاً.', 'This gift link is invalid or was already used.'), 409, 'GIFT_NOT_AVAILABLE');
   }
 
   if (claimed.redemptionCount >= claimed.maxRedemptions) {
@@ -121,11 +122,11 @@ export async function redeemGiftLink(token: string, telegramId: number) {
   try {
     if (claimed.rewardType === 'points') {
       await User.updateOne({ _id: user._id }, { $inc: { spinPoints: claimed.pointsAmount ?? 0 } });
-       return { message: `🎁 مبروك! استلمت هدية بقيمة ${claimed.pointsAmount} نقطة.\nتلقاها مضافة بحسابك، افتح البوت حتى تستخدمها.` };
+       return { message: t(`🎁 مبروك! استلمت هدية بقيمة ${claimed.pointsAmount} نقطة.\nتلقاها مضافة بحسابك، افتح البوت حتى تستخدمها.`, `🎁 Congrats! You received a gift of ${claimed.pointsAmount} points.\nIt’s in your account — open the bot to use it.`) };
     }
     if (claimed.rewardType === 'daily_spin') {
       await User.updateOne({ _id: user._id }, { $inc: { bonusDailySpins: 1 } });
-       return { message: '🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', isSpin: true };
+       return { message: t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), isSpin: true };
     }
 
     if (!claimed.prize) throw new AppError('Gift prize is missing', 500, 'GIFT_INVALID');
@@ -137,12 +138,12 @@ export async function redeemGiftLink(token: string, telegramId: number) {
         { $inc: { bonusDailySpins: 1 }, $push: { guaranteedDailyPrizes: prize._id } },
       );
       // The prize stays a surprise: the message only announces the extra daily spin.
-      return { message: '🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', isSpin: true };
+      return { message: t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), isSpin: true };
     }
 
     if (!prize.isUnlimited) {
       const reserved = await Prize.updateOne({ _id: prize._id, stock: { $gt: 0 } }, { $inc: { stock: -1, pendingCount: 1 } });
-      if (reserved.modifiedCount !== 1) throw new AppError('الجائزة نفدت حالياً.', 409, 'GIFT_OUT_OF_STOCK');
+      if (reserved.modifiedCount !== 1) throw new AppError(t('الجائزة نفدت حالياً.', 'This prize is out of stock.'), 409, 'GIFT_OUT_OF_STOCK');
     } else {
       await Prize.updateOne({ _id: prize._id }, { $inc: { pendingCount: 1 } });
     }
@@ -156,7 +157,7 @@ export async function redeemGiftLink(token: string, telegramId: number) {
       expiresAt: null,
       status: 'active',
     });
-     return { message: `🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.` };
+     return { message: t(`🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.`, `🎁 Congrats! You received: ${prize.name}.\nYou’ll find it in your inventory.`) };
   } catch (err) {
     await GiftLink.updateOne(
       { _id: claimed._id },

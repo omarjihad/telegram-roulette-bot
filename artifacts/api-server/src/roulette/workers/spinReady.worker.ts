@@ -3,6 +3,7 @@ import { getSettings } from '../models/Settings';
 import { getBotInstance } from '../bot/instance';
 import { buildMiniAppKeyboard } from '../bot/start';
 import { logger } from '../config/logger';
+import { runWithLang, t, userLang } from '../i18n';
 
 const HOUR_MS = 60 * 60 * 1000;
 // Only remind people who spun recently, so a first deploy doesn't message every dormant user.
@@ -10,10 +11,12 @@ const ACTIVE_WINDOW_MS = 7 * 24 * HOUR_MS;
 const BATCH_SIZE = 200;
 const SEND_GAP_MS = 50; // stays well under Telegram's ~30 messages/second limit
 
-export const SPIN_READY_MESSAGE =
-  '🎡 عادت إليك العجلة اليومية!\n\n' +
-  'فرتك المجانية صارت جاهزة، جرّب حظك الآن وممكن تربح جائزة 🎁\n\n' +
-  '👇 قم بإدارتها الآن';
+export function spinReadyMessage() {
+  return t(
+    '🎡 عادت إليك العجلة اليومية!\n\nفرتك المجانية صارت جاهزة، جرّب حظك الآن وممكن تربح جائزة 🎁\n\n👇 قم بإدارتها الآن',
+    '🎡 Your daily wheel is back!\n\nYour free spin is ready — try your luck now, you could win a prize 🎁\n\n👇 Spin it now'
+  );
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -33,7 +36,7 @@ export async function processSpinReadyReminders() {
     lastSpinAt: { $ne: null, $lte: cooldownCutoff, $gte: activeCutoff },
     $or: [{ spinReadyNotifiedAt: null }, { $expr: { $lt: ['$spinReadyNotifiedAt', '$lastSpinAt'] } }],
   })
-    .select('telegramId lastSpinAt')
+    .select('telegramId lastSpinAt language')
     .limit(BATCH_SIZE);
   if (due.length === 0) return;
 
@@ -47,7 +50,9 @@ export async function processSpinReadyReminders() {
     );
     if (marked.modifiedCount !== 1) continue;
     try {
-      await bot.sendMessage(user.telegramId, SPIN_READY_MESSAGE, buildMiniAppKeyboard('🎡 أدر العجلة الآن'));
+      await runWithLang(userLang(user), () =>
+        bot.sendMessage(user.telegramId, spinReadyMessage(), buildMiniAppKeyboard(t('🎡 أدر العجلة الآن', '🎡 Spin the wheel now')))
+      );
       sent += 1;
     } catch (err) {
       const code = (err as { response?: { statusCode?: number } }).response?.statusCode;

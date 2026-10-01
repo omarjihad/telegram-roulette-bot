@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { InventoryItem } from '../types';
 import { LoadingScreen, EmptyState, StatusBadge } from '../components/Common';
@@ -10,7 +11,7 @@ import { DeliveryContactGate } from '../components/DeliveryContactGate';
 function ExpiryLabel({ expiresAt }: { expiresAt: string | null }) {
   const { label, isReady } = useCountdown(expiresAt);
   if (!expiresAt) return null;
-  if (isReady) return <span className="expiry-chip expiry-chip-over">⌛ انتهت الصلاحية</span>;
+  if (isReady) return <span className="expiry-chip expiry-chip-over">{tr('⌛ انتهت الصلاحية', '⌛ Expired')}</span>;
   const urgent = new Date(expiresAt).getTime() - Date.now() < 3 * 60 * 60 * 1000;
   return <span className={`expiry-chip ${urgent ? 'expiry-chip-urgent' : ''}`}>⏳ {label}</span>;
 }
@@ -24,20 +25,19 @@ function TaskProgress({ task, onCopy, onShare, sharing }: {
   if (task.status === 'completed') {
     return (
       <div style={{ marginTop: 10, fontSize: 13, color: 'var(--accent-2)' }}>
-        ✅ أكملت {task.creditedCount}/{task.requiredCount} دعوات — تكدر تستلم الجائزة الحين
+        {tr(`✅ أكملت ${task.creditedCount}/${task.requiredCount} دعوات — تكدر تستلم الجائزة الحين`, `✅ ${task.creditedCount}/${task.requiredCount} invites done — you can claim the prize now`)}
       </div>
     );
   }
   if (task.status === 'expired') {
-    return <div style={{ marginTop: 10, fontSize: 13, color: 'var(--danger)' }}>⌛ انتهت مهلة مهمة الدعوات</div>;
+    return <div style={{ marginTop: 10, fontSize: 13, color: 'var(--danger)' }}>{tr('⌛ انتهت مهلة مهمة الدعوات', '⌛ The invite task has expired')}</div>;
   }
   return (
     <div style={{ marginTop: 10 }}>
       <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.6 }}>
-        🎯 ادعُ {task.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة عشان تكدر تستلمها.
-        إذا ما كملت قبل ما يخلص الوقت، الجائزة ترجع لمخزون البوت.
+        {tr(`🎯 ادعُ ${task.requiredCount} أشخاص عن طريق رابطك الخاص بهذي الجائزة عشان تكدر تستلمها. إذا ما كملت قبل ما يخلص الوقت، الجائزة ترجع لمخزون البوت.`, `🎯 Invite ${task.requiredCount} people with this prize’s own link to claim it. If you don’t finish before time runs out, the prize goes back to the bot.`)}
       </div>
-      <div className="task-progress" aria-label={`${task.creditedCount} من ${task.requiredCount}`}>
+      <div className="task-progress" aria-label={`${task.creditedCount} / ${task.requiredCount}`}>
         <div className="task-progress-track">
           <div
             className="task-progress-fill"
@@ -64,10 +64,10 @@ function TaskProgress({ task, onCopy, onShare, sharing }: {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: 13 }} onClick={onCopy}>
-              📋 نسخ
+              {tr('📋 نسخ', '📋 Copy')}
             </button>
             <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: 13 }} onClick={onShare} disabled={sharing}>
-              {sharing ? '📤 جاري الإرسال...' : '📤 مشاركة'}
+              {sharing ? tr('📤 جاري الإرسال...', '📤 Sending...') : tr('📤 مشاركة', '📤 Share')}
             </button>
           </div>
         </>
@@ -89,7 +89,7 @@ export function InventoryPage() {
 
   function copyLink(link: string) {
     navigator.clipboard?.writeText(link).then(() => {
-      setToast('تم نسخ الرابط ✅');
+      setToast(tr('تم نسخ الرابط ✅', 'Link copied ✅'));
       haptic('light');
     });
   }
@@ -101,17 +101,17 @@ export function InventoryPage() {
       const res = await api.post<{ ok: true; preparedMessageId: string }>('/inventory/share-card', { userPrizeId });
       const tg = getTelegramWebApp();
       if (!tg?.shareMessage) {
-        setToast('نسخة تيليجرام عندك قديمة وما تدعم المشاركة المباشرة، حدّث التطبيق وجرب مرة ثانية.');
+        setToast(tr('نسخة تيليجرام عندك قديمة وما تدعم المشاركة المباشرة، حدّث التطبيق وجرب مرة ثانية.', 'Your Telegram version is too old for direct sharing. Update the app and try again.'));
         return;
       }
       tg.shareMessage(res.preparedMessageId, (sent) => {
         if (sent) {
-          setToast('تم إرسال الجائزة ✅');
+          setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
           haptic('light');
         }
       });
     } catch {
-      setToast('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.');
+      setToast(tr('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.', 'Could not prepare the share card, please try again.'));
     } finally {
       setSharingId(null);
     }
@@ -122,26 +122,27 @@ export function InventoryPage() {
     haptic('light');
     try {
       await api.post('/inventory/claim', { userPrizeId: item.id });
-      setToast('تم إرسال طلب الاستلام، بانتظار المراجعة ⏳');
+      setToast(tr('تم إرسال طلب الاستلام، بانتظار المراجعة ⏳', 'Claim request sent, awaiting review ⏳'));
       await refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === 'EXPIRED') setToast('عذراً، انتهت صلاحية هذه الجائزة.');
-        else if (err.code === 'ALREADY_REQUESTED') setToast('تم إرسال الطلب مسبقاً.');
-        else if (err.code === 'REFERRALS_REQUIRED') setToast('لازم تكمل عدد الدعوات المطلوب أولاً.');
+        if (err.code === 'EXPIRED') setToast(tr('عذراً، انتهت صلاحية هذه الجائزة.', 'Sorry, this prize has expired.'));
+        else if (err.code === 'ALREADY_REQUESTED') setToast(tr('تم إرسال الطلب مسبقاً.', 'The request was already sent.'));
+        else if (err.code === 'REFERRALS_REQUIRED') setToast(tr('لازم تكمل عدد الدعوات المطلوب أولاً.', 'You need to complete the required invites first.'));
+        else if (err.code === 'TELEGRAM_ONLY') setToast(err.message);
         else if (err.code === 'DELIVERY_CONTACT_REQUIRED') {
           setDeliveryItem(item);
         }
-        else setToast('صار خطأ، حاول مرة ثانية.');
+        else setToast(tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
       } else {
-        setToast('صار خطأ، حاول مرة ثانية.');
+        setToast(tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
       }
     } finally {
       setClaimingId(null);
     }
   }
 
-  if (!items && error) return <LoadingScreen label="تعذر التحميل، حاول لاحقاً" />;
+  if (!items && error) return <LoadingScreen label={tr('تعذر التحميل، حاول لاحقاً', 'Could not load, try again later')} />;
   if (!items) return <LoadingScreen />;
   if (deliveryItem) {
     return (
@@ -158,10 +159,10 @@ export function InventoryPage() {
 
   return (
     <div>
-      <h2 className="page-title">🎒 المخزون</h2>
+      <h2 className="page-title">{tr('🎒 المخزون', '🎒 Inventory')}</h2>
 
       {items.length === 0 && (
-        <EmptyState icon="🎒" title="حقيبتك فارغة حالياً" subtitle="روح للفرة المجانية ودور عشان تربح جوائز" />
+        <EmptyState icon="🎒" title={tr('حقيبتك فارغة حالياً', 'Your inventory is empty')} subtitle={tr('روح للفرة المجانية ودور عشان تربح جوائز', 'Go to the free spin and spin to win prizes')} />
       )}
 
       {items.map((item) => {
@@ -184,10 +185,10 @@ export function InventoryPage() {
                   <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{item.prizeName}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                     {item.source === 'referral'
-                      ? '🎁 مكافأة إحالة'
+                      ? tr('🎁 مكافأة إحالة', '🎁 Referral reward')
                       : item.source === 'store'
-                      ? '🏪 من المتجر'
-                      : '🎰 من الفرة المجانية'}
+                      ? tr('🏪 من المتجر', '🏪 From the store')
+                      : tr('🎰 من الفرة المجانية', '🎰 From the free spin')}
                   </div>
                 </div>
               </div>
@@ -212,7 +213,7 @@ export function InventoryPage() {
                   disabled={claimingId === item.id}
                   onClick={() => claim(item)}
                 >
-                  {claimingId === item.id ? '...' : '📦 استلام'}
+                  {claimingId === item.id ? '...' : tr('📦 استلام', '📦 Claim')}
                 </button>
               )}
             </div>

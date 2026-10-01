@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { ArrowLeft, CheckCircle, ExternalLink, ShieldCheck } from 'lucide-react';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
@@ -30,7 +31,7 @@ export function DeliveryContactGate({ onVerified, onBack }: DeliveryContactGateP
       setContact(res.deliveryContact);
       if (res.deliveryContact.verified) onVerified();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'تعذر تحميل حساب التسليم، حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('تعذر تحميل حساب التسليم، حاول مرة ثانية.', 'Could not load the delivery account, please try again.'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ export function DeliveryContactGate({ onVerified, onBack }: DeliveryContactGateP
 
   function openDeliveryAccount() {
     if (!contact?.link) {
-      setError('حساب التسليم غير مهيأ حالياً.');
+      setError(tr('حساب التسليم غير مهيأ حالياً.', 'The delivery account is not set up yet.'));
       return;
     }
     getTelegramWebApp()?.openTelegramLink?.(contact.link);
@@ -55,13 +56,13 @@ export function DeliveryContactGate({ onVerified, onBack }: DeliveryContactGateP
       await api.post<{ ok: true; verified: true }>('/delivery-contact/verify');
       onVerified();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'فشل التحقق. أضف الحساب إلى جهات اتصالك ثم حاول مرة ثانية.');
+      setError(err instanceof ApiError ? err.message : tr('فشل التحقق. أضف الحساب إلى جهات اتصالك ثم حاول مرة ثانية.', 'Check failed. Add the account to your contacts and try again.'));
     } finally {
       setChecking(false);
     }
   }
 
-  if (loading) return <LoadingScreen label="جاري تحميل حساب التسليم..." />;
+  if (loading) return <LoadingScreen label={tr('جاري تحميل حساب التسليم...', 'Loading the delivery account...')} />;
 
   return (
     <div className="app-shell">
@@ -70,27 +71,27 @@ export function DeliveryContactGate({ onVerified, onBack }: DeliveryContactGateP
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
             <ShieldCheck size={58} color="var(--accent)" />
           </div>
-          <h2 className="card-title" style={{ fontSize: 24, marginBottom: 10 }}>أضف حساب التسليم</h2>
+          <h2 className="card-title" style={{ fontSize: 24, marginBottom: 10 }}>{tr('أضف حساب التسليم', 'Add the delivery account')}</h2>
           <p className="card-sub" style={{ fontSize: 15, lineHeight: 1.8, marginBottom: 22 }}>
-            حتى نكدر نسلّمك الجائزة، أضف حساب التسليم إلى جهات اتصالك أولاً.
+            {tr('حتى نكدر نسلّمك الجائزة، أضف حساب التسليم إلى جهات اتصالك أولاً.', 'To deliver your prize, first add the delivery account to your contacts.')}
             <br />
-            بعدها ارجع واضغط زر التحقق. سيحاول الحساب إرسال رسالة تأكيد لك.
+            {tr('بعدها ارجع واضغط زر التحقق. سيحاول الحساب إرسال رسالة تأكيد لك.', 'Then come back and tap verify. The account will try to send you a confirmation message.')}
           </p>
 
           {contact?.username && (
             <div style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 }}>
-              حساب التسليم: <strong style={{ color: 'var(--text-main)' }}>@{contact.username.replace(/^@/, '')}</strong>
+              {tr('حساب التسليم:', 'Delivery account:')} <strong style={{ color: 'var(--text-main)' }}>@{contact.username.replace(/^@/, '')}</strong>
             </div>
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button className="btn btn-primary" style={{ minHeight: 54, fontSize: 17 }} onClick={openDeliveryAccount}>
               <ExternalLink size={20} />
-              إضافة حساب التسليم إلى جهات الاتصال
+              {tr('إضافة حساب التسليم إلى جهات الاتصال', 'Add the delivery account to contacts')}
             </button>
             <button className="btn btn-secondary" style={{ minHeight: 54, fontSize: 16 }} disabled={checking} onClick={verifyContact}>
               <CheckCircle size={19} />
-              {checking ? 'جاري التحقق...' : 'تحقق من الإضافة'}
+              {checking ? tr('جاري التحقق...', 'Checking...') : tr('تحقق من الإضافة', 'Verify')}
             </button>
           </div>
 
@@ -102,7 +103,7 @@ export function DeliveryContactGate({ onVerified, onBack }: DeliveryContactGateP
 
           <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={onBack}>
             <ArrowLeft size={17} />
-            رجوع للمخزون
+            {tr('رجوع للمخزون', 'Back to inventory')}
           </button>
         </div>
       </div>

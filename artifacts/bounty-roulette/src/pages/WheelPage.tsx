@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { tr } from '../i18n';
 import { Wheel, WheelHandle } from '../components/Wheel';
 import { buildWheelSlots, findSlotIndexForKey, PublicPrize } from '../components/wheelSlots';
 import { useCountdown } from '../hooks/useCountdown';
@@ -129,7 +130,7 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
       setPendingAnimation(null);
       spinningRef.current = false;
       setSpinning(false);
-      setError('تعذر عرض النتيجة المؤكدة. حدّث الصفحة لرؤية جائزتك في الحقيبة.');
+      setError(tr('تعذر عرض النتيجة المؤكدة. حدّث الصفحة لرؤية جائزتك في الحقيبة.', 'Could not show the confirmed result. Refresh to see your prize in the inventory.'));
       return;
     }
     const spinResult = pendingAnimation.result;
@@ -181,13 +182,14 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
       spinningRef.current = false;
       setSpinning(false);
       if (err instanceof ApiError) {
-        if (err.code === 'SPIN_COOLDOWN') setError('الفرة مو جاهزة بعد.');
-        else if (err.code === 'INSUFFICIENT_POINTS') setError('تحتاج 5 نقاط حتى تدور عجلة النقاط.');
-        else if (err.code === 'FORCED_SUB_REQUIRED') setError('لازم تكمل الاشتراك الإجباري أولاً.');
-        else if (err.code === 'CAPTCHA_REQUIRED') setError('لازم تكمل التحقق أولاً.');
-        else setError('صار خطأ، حاول مرة ثانية.');
+        if (err.code === 'SPIN_COOLDOWN') setError(tr('الفرة مو جاهزة بعد.', 'Your spin is not ready yet.'));
+        else if (err.code === 'INSUFFICIENT_POINTS') setError(tr('تحتاج 5 نقاط حتى تدور عجلة النقاط.', 'You need 5 points to spin the points wheel.'));
+        else if (err.code === 'TELEGRAM_ONLY') setError(err.message);
+        else if (err.code === 'FORCED_SUB_REQUIRED') setError(tr('لازم تكمل الاشتراك الإجباري أولاً.', 'Complete the required subscriptions first.'));
+        else if (err.code === 'CAPTCHA_REQUIRED') setError(tr('لازم تكمل التحقق أولاً.', 'Complete the verification first.'));
+        else setError(tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
       } else {
-        setError('صار خطأ، حاول مرة ثانية.');
+        setError(tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
       }
     }
   }
@@ -198,18 +200,18 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
         <div className="wheel-hero-heading">
           <span className="wheel-kicker">BOUNTY SPIN • MF</span>
           <h2>
-            🎰 عجلة حظ باونتي <span className="brand-mf">MF</span>
+            {tr('🎰 عجلة حظ باونتي', '🎰 Bounty Spin Wheel')} <span className="brand-mf">MF</span>
           </h2>
-           <p>{mode === 'daily' ? 'دورك المجاني اليومي واربح جوائز باونتي راش' : 'كل دورة تكلف 5 نقاط — جوائز عجلة النقاط مستقلة'}</p>
+           <p>{mode === 'daily' ? tr('دورك المجاني اليومي واربح جوائز باونتي راش', 'Your free daily spin — win Bounty Rush prizes') : tr('كل دورة تكلف 5 نقاط — جوائز عجلة النقاط مستقلة', 'Each spin costs 5 points — the points wheel has its own prizes')}</p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
-            <button className={`pill ${mode === 'daily' ? 'pill-admin' : ''}`} onClick={() => setMode('daily')}>🎰 العجلة اليومية</button>
-            <button className={`pill ${mode === 'points' ? 'pill-admin' : ''}`} onClick={() => setMode('points')}>🪙 عجلة النقاط</button>
+            <button className={`pill ${mode === 'daily' ? 'pill-admin' : ''}`} onClick={() => setMode('daily')}>{tr('🎰 العجلة اليومية', '🎰 Daily wheel')}</button>
+            <button className={`pill ${mode === 'points' ? 'pill-admin' : ''}`} onClick={() => setMode('points')}>{tr('🪙 عجلة النقاط', '🪙 Points wheel')}</button>
           </div>
-          {mode === 'points' && <div className="pill" style={{ justifyContent: 'center', marginTop: 10 }}>رصيدك: {me.user.spinPoints} نقطة · السعر: 5</div>}
+          {mode === 'points' && <div className="pill" style={{ justifyContent: 'center', marginTop: 10 }}>{tr(`رصيدك: ${me.user.spinPoints} نقطة · السعر: 5`, `Balance: ${me.user.spinPoints} pts · Price: 5`)}</div>}
         </div>
 
          {recentWins?.wins && recentWins.wins.length > 0 && (
-           <div className="recent-wins-ticker" aria-label="آخر الجوائز الفائزة">
+           <div className="recent-wins-ticker" aria-label={tr('آخر الجوائز الفائزة', 'Latest winning prizes')}>
              <div className="recent-wins-track">
                {[...recentWins.wins, ...recentWins.wins].map((win, index) => (
                  <div className="recent-win" key={`${win.id}-${index}`}>
@@ -223,9 +225,9 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
         {slots.length === 0 ? (
           prizesError ? (
             <div className="card" style={{ textAlign: 'center', marginTop: 20 }}>
-              <p style={{ color: 'var(--danger)', marginTop: 0 }}>تعذر تحميل قائمة الجوائز.</p>
+              <p style={{ color: 'var(--danger)', marginTop: 0 }}>{tr('تعذر تحميل قائمة الجوائز.', 'Could not load the prizes.')}</p>
               <button className="btn btn-primary" onClick={() => void refetchPrizes().catch(() => {})}>
-                إعادة المحاولة
+                {tr('إعادة المحاولة', 'Try again')}
               </button>
             </div>
           ) : (
@@ -241,7 +243,7 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
           {mode === 'daily' && !isReady && !spinning && (
             <>
               <div className="countdown wheel-countdown">
-                ⏳ الفرة القادمة بعد: {label}
+                ⏳ {tr('الفرة القادمة بعد:', 'Next spin in:')} {label}
               </div>
               {/* The reel's visual position has no memory of a past spin once this page
                   remounts — this text is the only thing that reliably shows what you actually
@@ -256,18 +258,18 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
                         <span>{me.wheel.lastSpin.prizeIcon || '🎁'}</span>
                       )}
                       <span>
-                        آخر نتيجة: ربحت <b>{me.wheel.lastSpin.prizeName}</b>
+                        {tr('آخر نتيجة: ربحت', 'Last result: you won')} <b>{me.wheel.lastSpin.prizeName}</b>
                       </span>
                     </>
                   ) : (
-                    <span>🍀 آخر نتيجة: حظ أوفر بالمرة الجاية</span>
+                    <span>{tr('🍀 آخر نتيجة: حظ أوفر بالمرة الجاية', '🍀 Last result: better luck next time')}</span>
                   )}
                 </div>
               )}
             </>
           )}
           <button className="btn btn-primary wheel-spin-button" disabled={spinning || !canSpin || slots.length === 0} onClick={handleSpin}>
-            {spinning ? '🎡 جاري الدوران...' : mode === 'points' ? canSpin ? '🪙 دور مقابل 5 نقاط' : 'تحتاج 5 نقاط' : isReady ? '🚀 دور الحين' : '⏳ انتظر الفرة'}
+            {spinning ? tr('🎡 جاري الدوران...', '🎡 Spinning...') : mode === 'points' ? canSpin ? tr('🪙 دور مقابل 5 نقاط', '🪙 Spin for 5 points') : tr('تحتاج 5 نقاط', 'You need 5 points') : isReady ? tr('🚀 دور الحين', '🚀 Spin now') : tr('⏳ انتظر الفرة', '⏳ Wait for your spin')}
           </button>
           {error && <p className="wheel-error">{error}</p>}
         </div>
@@ -279,7 +281,7 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
       {prizes && prizes.length > 0 && (
         <div className="card prize-catalog" style={{ marginTop: 24 }}>
           <h3 className="card-title" style={{ marginBottom: 10 }}>
-              🏆 كل الجوائز ({visiblePrizes.length})
+              {tr('🏆 كل الجوائز', '🏆 All prizes')} ({visiblePrizes.length})
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             {visiblePrizes.map((p) => (
@@ -303,10 +305,10 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
                 )}
                 <div style={{ fontSize: 11, textAlign: 'center', color: 'var(--text-dim)' }}>{p.name}</div>
                 {me.isAdmin && p.availability === 'out_of_stock' && (
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>نفدت</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{tr('نفدت', 'Sold out')}</div>
                 )}
                 {me.isAdmin && p.availability === 'unavailable' && (
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>غير متاحة حالياً</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{tr('غير متاحة حالياً', 'Unavailable')}</div>
                 )}
               </div>
             ))}

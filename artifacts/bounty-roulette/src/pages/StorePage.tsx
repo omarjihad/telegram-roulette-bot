@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { LoadingScreen, EmptyState, Toast } from '../components/Common';
 import { useCachedFetch } from '../hooks/useCachedFetch';
@@ -23,24 +24,24 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
 
   async function buy(product: StoreProduct) {
     if (spinCredits < product.price) {
-      setToast('عدد فراتك غير كافي لشراء هذه الجائزة.');
+      setToast(tr('عدد فراتك غير كافي لشراء هذه الجائزة.', 'You don’t have enough spins to buy this prize.'));
       return;
     }
-    if (!window.confirm(`تأكيد شراء "${product.name}" مقابل ${product.price} فرة؟`)) return;
+    if (!window.confirm(tr(`تأكيد شراء "${product.name}" مقابل ${product.price} فرة؟`, `Buy "${product.name}" for ${product.price} spins?`))) return;
 
     setBuyingKey(product.key);
     haptic('medium');
     try {
       await api.post<{ ok: true; prizeName: string; remainingBalance: number }>('/store/purchase', { key: product.key });
-      setToast(`اشتريت "${product.name}" بنجاح! الجائزة في المخزون.`);
+      setToast(tr(`اشتريت "${product.name}" بنجاح! الجائزة في المخزون.`, `You bought "${product.name}"! It’s in your inventory.`));
       haptic('heavy');
       refreshMe();
       refetch();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'INSUFFICIENT_BALANCE') {
-        setToast('رصيدك غير كافي.');
+        setToast(tr('رصيدك غير كافي.', 'Not enough balance.'));
       } else {
-        setToast('حدث خطأ، حاول مجدداً.');
+        setToast(tr('حدث خطأ، حاول مجدداً.', 'Something went wrong, please try again.'));
       }
     } finally {
       setBuyingKey(null);
@@ -51,10 +52,10 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
     <div>
       <div className="header-row">
         <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-cyan)' }}>
-          <Store size={24} /> متجر القراصنة
+          <Store size={24} /> {tr('متجر القراصنة', 'Pirate store')}
         </h2>
         <button className="pill" style={{ cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onBack}>
-          <ArrowRight size={16} /> العودة
+          <ArrowRight size={16} /> {tr('العودة', 'Back')}
         </button>
       </div>
 
@@ -67,17 +68,17 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
           borderColor: 'rgba(38, 198, 218, 0.4)',
         }}
       >
-        <div style={{ fontSize: 14, color: 'var(--text-dim)', fontWeight: 700 }}>الفرات المتوفرة للمقايضة</div>
+        <div style={{ fontSize: 14, color: 'var(--text-dim)', fontWeight: 700 }}>{tr('الفرات المتوفرة للمقايضة', 'Spins available to trade')}</div>
         <div style={{ fontSize: 32, fontWeight: 900, color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, margin: '8px 0' }}>
-          <Coins size={28} /> {spinCredits} فرة
+          <Coins size={28} /> {spinCredits} {tr('فرة', 'spins')}
         </div>
       </div>
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      {!products && !error && <LoadingScreen label="جاري تفتيش المتجر..." />}
-      {!products && Boolean(error) && <LoadingScreen label="تعذر تحميل المتجر، حاول لاحقاً" />}
-      {products && products.length === 0 && <EmptyState icon="/logo-skull.png" title="المتجر فارغ حالياً" />}
+      {!products && !error && <LoadingScreen label={tr('جاري تفتيش المتجر...', 'Searching the store...')} />}
+      {!products && Boolean(error) && <LoadingScreen label={tr('تعذر تحميل المتجر، حاول لاحقاً', 'Could not load the store, try again later')} />}
+      {products && products.length === 0 && <EmptyState icon="/logo-skull.png" title={tr('المتجر فارغ حالياً', 'The store is empty right now')} />}
 
       {products && products.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -94,7 +95,7 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
               )}
               <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8, flex: 1, color: 'var(--text-main)' }}>{p.name}</div>
               <div style={{ fontSize: 15, color: 'var(--accent-cyan)', fontWeight: 900, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <Coins size={16} /> {p.price} فرة
+                <Coins size={16} /> {p.price} {tr('فرة', 'spins')}
               </div>
               <button
                 className="btn btn-primary"
@@ -102,7 +103,7 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
                 disabled={buyingKey === p.key || spinCredits < p.price}
                 onClick={() => buy(p)}
               >
-                {buyingKey === p.key ? 'جاري الشراء...' : spinCredits < p.price ? 'لا يكفي' : <><ShoppingCart size={16} /> شراء</>}
+                {buyingKey === p.key ? tr('جاري الشراء...', 'Buying...') : spinCredits < p.price ? tr('لا يكفي', 'Not enough') : <><ShoppingCart size={16} /> {tr('شراء', 'Buy')}</>}
               </button>
             </div>
           ))}

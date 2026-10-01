@@ -15,6 +15,7 @@ import { getShareImage } from './controllers/adminSystem.controller';
 import { getShowcase } from './controllers/showcase.controller';
 import { env } from './config/env';
 import { getAdsgramReward } from './controllers/games.controller';
+import { parseLang, runWithLang, t } from './i18n';
 
 export function createApp() {
   const app = express();
@@ -32,6 +33,8 @@ export function createApp() {
     autoLogging: { ignore: (req) => req.url === '/api/healthz' },
   }));
   app.use(generalLimiter);
+  // The Mini App sends its language with every request; server texts follow it.
+  app.use((req, _res, next) => runWithLang(parseLang(req.header('X-Lang')), next));
 
   app.get('/health', (_req, res) => res.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() }));
   app.get('/api/healthz', (_req, res) => res.json({
@@ -42,7 +45,7 @@ export function createApp() {
   }));
   app.use('/api', (_req, res, next) => {
     if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ ok: false, code: 'DATABASE_UNAVAILABLE', message: 'تعذر الاتصال بقاعدة البيانات. حاول مرة ثانية بعد قليل.' });
+      return res.status(503).json({ ok: false, code: 'DATABASE_UNAVAILABLE', message: t('تعذر الاتصال بقاعدة البيانات. حاول مرة ثانية بعد قليل.', 'Could not reach the database. Please try again shortly.') });
     }
     return next();
   });
@@ -57,7 +60,7 @@ export function createApp() {
 
   app.use('/api', (_req, res, next) => {
     if (!env.GAMEPLAY_ENABLED || env.OWNER_ID <= 0) {
-      return res.status(503).json({ ok: false, code: 'PREVIEW_ONLY', message: 'هذه النسخة للمعاينة حالياً. اللعب وإدارة الجوائز يتفعلان بعد إكمال الربط بأمان.' });
+      return res.status(503).json({ ok: false, code: 'PREVIEW_ONLY', message: t('هذه النسخة للمعاينة حالياً. اللعب وإدارة الجوائز يتفعلان بعد إكمال الربط بأمان.', 'This version is a preview. Playing and prize management turn on once setup is complete.') });
     }
     res.setHeader('Cache-Control', 'no-store');
     return next();

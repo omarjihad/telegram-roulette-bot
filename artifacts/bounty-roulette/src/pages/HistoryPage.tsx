@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { locale, tr } from '../i18n';
 import { api } from '../services/api';
 import { NotificationItem } from '../types';
 import { LoadingScreen, EmptyState } from '../components/Common';
@@ -27,16 +28,16 @@ export function HistoryPage() {
     api.post('/notifications/read').catch(() => {});
   }, []);
 
-  if (!items && error) return <LoadingScreen label="تعذر التحميل، حاول لاحقاً" />;
+  if (!items && error) return <LoadingScreen label={tr('تعذر التحميل، حاول لاحقاً', 'Could not load, try again later')} />;
   if (!items) return <LoadingScreen />;
 
   return (
     <div>
       <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}>
-        <ScrollText size={24} /> السجل
+        <ScrollText size={24} /> {tr('السجل', 'History')}
       </h2>
 
-      {items.length === 0 && <EmptyState icon="/logo-skull.png" title="ما فيه أي نشاط بعد" />}
+      {items.length === 0 && <EmptyState icon="/logo-skull.png" title={tr('ما فيه أي نشاط بعد', 'No activity yet')} />}
 
       {items.map((n) => (
         <div className="list-item" key={n._id} style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 10, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden' }}>
@@ -48,7 +49,7 @@ export function HistoryPage() {
               {ICONS[n.type] || <Bell size={18} />} {n.title}
             </span>
             <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 600 }}>
-              {new Date(n.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}
+              {new Date(n.createdAt).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })}
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 14, color: 'var(--text-dim)', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{n.body}</p>

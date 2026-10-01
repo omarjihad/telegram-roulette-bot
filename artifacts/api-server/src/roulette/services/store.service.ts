@@ -70,8 +70,11 @@ export async function purchaseProduct(telegramId: number, prizeKey: string) {
       userId: user._id as mongoose.Types.ObjectId,
       telegramId,
       type: 'prize_won',
-      title: '🛍️ عملية شراء ناجحة',
-      body: `اشتريت: ${prize.name} مقابل ${price} فرة. الجائزة الحين بالحقيبة، تكدر تستلمها متى ما تريد.`,
+      title: { ar: '🛍️ عملية شراء ناجحة', en: '🛍️ Purchase complete' },
+      body: {
+        ar: `اشتريت: ${prize.name} مقابل ${price} فرة. الجائزة الحين بالحقيبة، تكدر تستلمها متى ما تريد.`,
+        en: `You bought: ${prize.name} for ${price} spins. It’s in your inventory — claim it whenever you like.`,
+      },
     });
 
     return {

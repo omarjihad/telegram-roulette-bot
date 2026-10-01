@@ -8,6 +8,7 @@ import { fetchChatInfo, checkMembershipStatus } from './forcedSub.service';
 import { assertBotIsAdminInChat, normalizeChatIdentifier } from './forcedChatAdmin.service';
 import { writeAudit } from '../models/AuditLog';
 import { verifyDeliveryProfile } from './deliveryAccount.service';
+import { t } from '../i18n';
 
 export async function listTasks() {
   return Task.find({}).sort({ createdAt: -1 });
@@ -150,7 +151,7 @@ export async function claimTask(bot: TelegramBot, telegramId: number, taskId: st
             : { isSubscribed: false, unavailable: false };
           if (membership.unavailable) {
             throw new AppError(
-              'تعذر التحقق من القناة حالياً. تأكد من صحة BOT_TOKEN وأن البوت أدمن في قناة التحقق، ثم حاول مرة ثانية.',
+              t('تعذر التحقق من القناة حالياً. تأكد من صحة BOT_TOKEN وأن البوت أدمن في قناة التحقق، ثم حاول مرة ثانية.', 'Could not check the channel right now. Please try again later.'),
               503,
               'CHANNEL_CHECK_UNAVAILABLE',
             );
@@ -162,14 +163,14 @@ export async function claimTask(bot: TelegramBot, telegramId: number, taskId: st
             : { isSubscribed: false, unavailable: false };
           if (membership.unavailable) {
             throw new AppError(
-              'تعذر التحقق من القناة حالياً. تأكد من صحة BOT_TOKEN وأن البوت أدمن في القناة، ثم حاول مرة ثانية.',
+              t('تعذر التحقق من القناة حالياً. تأكد من صحة BOT_TOKEN وأن البوت أدمن في القناة، ثم حاول مرة ثانية.', 'Could not check the channel right now. Please try again later.'),
               503,
               'CHANNEL_CHECK_UNAVAILABLE',
             );
           }
           completed = membership.isSubscribed;
        }
-       if (!completed) throw new AppError('أكمل شروط المهمة أولاً ثم حاول مرة ثانية.', 403, 'TASK_NOT_COMPLETED');
+       if (!completed) throw new AppError(t('أكمل شروط المهمة أولاً ثم حاول مرة ثانية.', 'Complete the task first, then try again.'), 403, 'TASK_NOT_COMPLETED');
 
        const existing = await UserTask.findOne({ user: user._id, task: task._id }).session(session);
        if (existing && !existing.isRevoked) throw new AppError('Task already claimed', 409, 'TASK_ALREADY_CLAIMED');

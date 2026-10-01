@@ -114,8 +114,11 @@ async function processExpirations() {
         userId: item.user as mongoose.Types.ObjectId,
         telegramId: item.telegramId,
         type: 'prize_expiring',
-        title: '⌛ انتهى وقت الجائزة',
-        body: `انتهى وقت جائزتك [${item.prizeNameSnapshot}] لأن شروط الاستلام ما اكتملت، ورجعت لمخزون البوت.`,
+        title: { ar: '⌛ انتهى وقت الجائزة', en: '⌛ Prize expired' },
+        body: {
+          ar: `انتهى وقت جائزتك [${item.prizeNameSnapshot}] لأن شروط الاستلام ما اكتملت، ورجعت لمخزون البوت.`,
+          en: `Your prize [${item.prizeNameSnapshot}] expired because the claim conditions weren’t completed, so it went back to the bot.`,
+        },
       }).catch((err) => logger.warn({ err }, 'failed to notify user about expired prize'));
 
       await writeAudit({
@@ -157,8 +160,11 @@ async function processExpiryReminders() {
       userId: item.user as mongoose.Types.ObjectId,
       telegramId: item.telegramId,
       type: 'prize_expiring',
-      title: '⚠️ تنبيه',
-      body: `باقي على انتهاء جائزتك [${item.prizeNameSnapshot}] وقت محدود (${hoursLeft} ساعة تقريباً).\n\nأكمل الاستلام حتى لا تخسرها.`,
+      title: { ar: '⚠️ تنبيه', en: '⚠️ Reminder' },
+      body: {
+        ar: `باقي على انتهاء جائزتك [${item.prizeNameSnapshot}] وقت محدود (${hoursLeft} ساعة تقريباً).\n\nأكمل الاستلام حتى لا تخسرها.`,
+        en: `Your prize [${item.prizeNameSnapshot}] expires soon (about ${hoursLeft} hours left).\n\nFinish claiming it so you don’t lose it.`,
+      },
     });
 
     item.lastExpiryNotifiedAt = now;

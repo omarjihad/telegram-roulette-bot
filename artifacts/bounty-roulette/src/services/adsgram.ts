@@ -1,4 +1,5 @@
 import { api, ApiError } from './api';
+import { isPreviewMode } from './preview';
 
 // Adsgram rewarded-ads SDK: https://sad.adsgram.ai/js/sad.min.js
 interface AdsgramShowResult { done: boolean; description?: string; state?: string; error?: boolean }
@@ -32,12 +33,15 @@ function loadSdk(): Promise<void> {
 
 export class AdUnavailableError extends Error {}
 export class AdSkippedError extends Error {}
+/** Website preview: ads only run inside Telegram. */
+export class AdPreviewError extends Error {}
 
 /**
  * Shows one rewarded ad. Resolves only when the user watched it to the end.
  * No ad to show → AdUnavailableError; closed early → AdSkippedError.
  */
 export async function showRewardedAd(blockId: string): Promise<void> {
+  if (isPreviewMode()) throw new AdPreviewError('preview');
   try {
     await loadSdk();
   } catch {

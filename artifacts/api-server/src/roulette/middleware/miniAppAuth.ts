@@ -50,7 +50,7 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
       // The Mini App needs /me to decide which gate to render. Keep the gate
       // status endpoint available as well; every other feature remains locked
       // until Telegram confirms membership.
-      const canLoadGateState = req.path === '/me' || req.path === '/forced-sub/status';
+      const canLoadGateState = req.path === '/me' || req.path === '/me/language' || req.path === '/forced-sub/status';
       if (!forcedSubStatus.allOk && !canLoadGateState) {
         throw new AppError('Forced subscription required', 403, 'FORCED_SUB_REQUIRED');
       }
@@ -90,7 +90,7 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
     // The captcha is enforced here as well, not only by the Mini App UI, so nothing can
     // be used (and no referral can be counted) before it is solved.
     if (process.env.NODE_ENV !== 'test' && role === null && !user.captchaPassed) {
-      const captchaOpen = ['/me', '/forced-sub/status', '/captcha/request', '/captcha/submit'];
+      const captchaOpen = ['/me', '/me/language', '/forced-sub/status', '/captcha/request', '/captcha/submit'];
       if (!captchaOpen.includes(req.path)) {
         throw new AppError('Captcha required', 403, 'CAPTCHA_REQUIRED');
       }
