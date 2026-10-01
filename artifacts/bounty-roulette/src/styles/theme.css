@@ -1790,13 +1790,13 @@ html[dir='ltr'] body { direction: ltr; }
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  min-height: 150px;
+  min-height: 175px;
   padding: 16px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.75);
   border-radius: 22px;
   background:
-    url('/exchange-bg.jpg') center 25% / cover,
+    url('/exchange-bg.jpg') center 20% / cover,
     radial-gradient(circle at 75% 30%, rgba(255, 255, 255, 0.95) 0 14%, transparent 40%),
     radial-gradient(circle at 20% 80%, rgba(196, 181, 253, 0.85), transparent 55%),
     linear-gradient(135deg, #f5f3ff 0%, #c4b5fd 35%, #7c3aed 75%, #4c1d95 100%);
@@ -1809,7 +1809,9 @@ html[dir='ltr'] body { direction: ltr; }
 .home-exchange-shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, rgba(15, 10, 40, 0.92) 0%, rgba(15, 10, 40, 0.55) 45%, rgba(15, 10, 40, 0.05) 100%);
+  /* Purple Gear 5 tint: clear over Luffy's face, deeper at the bottom so the text reads well. */
+  background:
+    linear-gradient(0deg, rgba(24, 8, 52, 0.95) 0%, rgba(59, 20, 110, 0.7) 38%, rgba(124, 58, 237, 0.18) 70%, rgba(124, 58, 237, 0.05) 100%);
   pointer-events: none;
 }
 .home-exchange-copy { position: relative; display: flex; flex-direction: column; gap: 3px; }
