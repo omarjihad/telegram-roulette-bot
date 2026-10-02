@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../models/Prize', () => ({ Prize: {} }));
 vi.mock('../models/User', () => ({ User: {} }));
-vi.mock('../models/UserPrize', () => ({ UserPrize: {} }));
+const updateMany = vi.hoisted(() => vi.fn());
+vi.mock('../models/UserPrize', () => ({ UserPrize: { updateMany } }));
 vi.mock('./prize.service', () => ({ prizeImageUrl: () => null }));
 vi.mock('./claimTask.service', () => ({ createClaimTaskForPrize: vi.fn() }));
 
-import { computeNextDay } from './dailyLogin.service';
+import { backfillDailyPrizeExpiry, computeNextDay, DAILY_PRIZE_EXPIRY_MS } from './dailyLogin.service';
 
 const HOUR = 60 * 60 * 1000;
 const now = new Date('2026-09-26T12:00:00Z');
@@ -27,5 +28,20 @@ describe('daily login streak', () => {
 
   it('starts a new cycle after day 7', () => {
     expect(computeNextDay({ dailyLastClaimAt: ago(25), dailyStreakDay: 7 }, now).nextDay).toBe(1);
+  });
+});
+
+describe('daily prize deadline', () => {
+  it('is 12 hours', () => {
+    expect(DAILY_PRIZE_EXPIRY_MS).toBe(12 * HOUR);
+  });
+
+  it('gives old daily prizes without a deadline 12 hours from now', async () => {
+    updateMany.mockResolvedValue({ modifiedCount: 3 });
+    expect(await backfillDailyPrizeExpiry(now)).toBe(3);
+    expect(updateMany).toHaveBeenCalledWith(
+      { source: 'daily', status: 'active', expiresAt: null },
+      { $set: { expiresAt: new Date(now.getTime() + 12 * HOUR) } }
+    );
   });
 });

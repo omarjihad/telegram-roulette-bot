@@ -13,6 +13,7 @@ import { verifyDeliveryProfile } from '../services/deliveryAccount.service';
 import { processSpinReadyReminders } from './spinReady.worker';
 import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
 import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
+import { backfillDailyPrizeExpiry } from '../services/dailyLogin.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -27,6 +28,12 @@ export function startExpirationWorker() {
       if (checked > 0) logger.info({ checked, restored }, 'restored stock for previously expired prizes');
     })
     .catch((err) => logger.error({ err }, 'failed to restore stock for previously expired prizes'));
+
+  backfillDailyPrizeExpiry()
+    .then((count) => {
+      if (count > 0) logger.info({ count }, 'gave old daily prizes a 12-hour deadline');
+    })
+    .catch((err) => logger.error({ err }, 'failed to backfill daily prize expiry'));
 
   cron.schedule('*/5 * * * *', async () => {
     try {
@@ -127,15 +134,22 @@ async function processExpirations() {
       await releasePrizeReservation(item);
       await expireClaimTaskForUserPrize(item._id as mongoose.Types.ObjectId);
 
+      // Daily-login prizes never took wheel stock, so there's nothing "returned" to mention.
+      const daily = item.source === 'daily';
       await createNotification({
         userId: item.user as mongoose.Types.ObjectId,
         telegramId: item.telegramId,
         type: 'prize_expiring',
         title: { ar: '⌛ انتهى وقت الجائزة', en: '⌛ Prize expired' },
-        body: {
-          ar: `انتهى وقت جائزتك [${item.prizeNameSnapshot}] لأن شروط الاستلام ما اكتملت، ورجعت لمخزون البوت.`,
-          en: `Your prize [${item.prizeNameSnapshot}] expired because the claim conditions weren’t completed, so it went back to the bot.`,
-        },
+        body: daily
+          ? {
+              ar: `انتهى وقت جائزة الدخول اليومي [${item.prizeNameSnapshot}] لأنها ما انستلمت خلال 12 ساعة.`,
+              en: `Your daily login prize [${item.prizeNameSnapshot}] expired because it wasn’t claimed within 12 hours.`,
+            }
+          : {
+              ar: `انتهى وقت جائزتك [${item.prizeNameSnapshot}] لأن شروط الاستلام ما اكتملت، ورجعت لمخزون البوت.`,
+              en: `Your prize [${item.prizeNameSnapshot}] expired because the claim conditions weren’t completed, so it went back to the bot.`,
+            },
       }).catch((err) => logger.warn({ err }, 'failed to notify user about expired prize'));
 
       await writeAudit({
@@ -143,7 +157,7 @@ async function processExpirations() {
         actorUsername: 'system',
         action: 'prize.expired',
         target: String(item.telegramId),
-        metadata: { prizeName: item.prizeNameSnapshot, userPrizeId: item._id, stockReturned: true },
+        metadata: { prizeName: item.prizeNameSnapshot, userPrizeId: item._id, stockReturned: !daily },
       });
     } catch (err) {
       logger.error({ err, userPrizeId: candidate._id }, 'failed to expire user prize');

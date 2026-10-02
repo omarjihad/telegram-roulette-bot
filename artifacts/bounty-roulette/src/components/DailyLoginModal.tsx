@@ -106,6 +106,11 @@ export function DailyLoginModal({
           })}
         </div>
 
+        {(canCollect ? status.reward.type : collected?.reward.type) === 'prize' && (
+          <p className="daily-prize-deadline">
+            {tr('⏰ جائزة الهدية لازم تستلمها من المخزون خلال 12 ساعة، وإلا تروح.', '⏰ Claim this prize from your bag within 12 hours, or it disappears.')}
+          </p>
+        )}
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, margin: '0 0 10px' }}>{error}</p>}
 
         {canCollect ? (

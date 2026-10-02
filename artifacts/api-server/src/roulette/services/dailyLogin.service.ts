@@ -7,6 +7,8 @@ import { prizeImageUrl } from './prize.service';
 import { createClaimTaskForPrize } from './claimTask.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** A daily-login prize has to be claimed within this time, or it disappears. */
+export const DAILY_PRIZE_EXPIRY_MS = 12 * 60 * 60 * 1000;
 
 const DAILY_REWARDS = [
   { day: 1, type: 'points' as const, points: 0.5 },
@@ -158,7 +160,7 @@ export async function claimDailyLogin(telegramId: number) {
               prizeNameSnapshot: prizeDoc.name,
               source: 'daily',
               wonAt: now,
-              expiresAt: null,
+              expiresAt: new Date(now.getTime() + DAILY_PRIZE_EXPIRY_MS),
               status: 'active',
               // Nothing was reserved from stock, so there is never anything to give back.
               stockReleasedAt: now,
@@ -189,4 +191,15 @@ export async function claimDailyLogin(telegramId: number) {
   } finally {
     await session.endSession();
   }
+}
+/**
+ * Daily prizes collected before they had a deadline get the same 12 hours, counted from
+ * now, instead of staying forever. Safe to run on every start.
+ */
+export async function backfillDailyPrizeExpiry(now = new Date()) {
+  const res = await UserPrize.updateMany(
+    { source: 'daily', status: 'active', expiresAt: null },
+    { $set: { expiresAt: new Date(now.getTime() + DAILY_PRIZE_EXPIRY_MS) } }
+  );
+  return res.modifiedCount;
 }
