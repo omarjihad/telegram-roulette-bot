@@ -55,6 +55,7 @@ import {
   adminStartDeliveryLogin,
   adminVerifyDeliveryLogin,
   adminRemoveDeliveryAccount,
+  adminSyncDeliveryContacts,
 } from '../controllers/deliveryAccount.controller';
 import { adminListGiftLinks, adminCreateGiftLink, adminRevokeGiftLink } from '../controllers/adminGift.controller';
 import { adminDeductUserPoints } from '../controllers/adminPoints.controller';
@@ -68,6 +69,7 @@ import {
   adminStartContestRound,
 } from '../controllers/adminContest.controller';
 import { adminGetGames, adminUpdateGames } from '../controllers/games.controller';
+import { adminRefreshProofs, adminSetProofHidden, adminSetProofsChannel } from '../controllers/proofs.controller';
 import {
   adminBanExchangeOwner,
   adminGetExchange,
@@ -142,6 +144,7 @@ router.get('/delivery-account', adminGetDeliveryAccount);
 router.post('/delivery-account/login/start', requireOwner, adminStartDeliveryLogin);
 router.post('/delivery-account/login/verify', requireOwner, adminVerifyDeliveryLogin);
 router.delete('/delivery-account', requireOwner, adminRemoveDeliveryAccount);
+router.post('/delivery-account/sync-contacts', adminSyncDeliveryContacts);
 router.get('/users/lookup', adminLookupUser);
 router.get('/users/:query/referrals', adminListUserReferrals);
 
@@ -154,6 +157,11 @@ router.post('/points/deduct', adminDeductUserPoints);
 // Games & ads
 router.get('/games', adminGetGames);
 router.patch('/games', adminUpdateGames);
+
+// Proofs channel
+router.post('/proofs/refresh', adminRefreshProofs);
+router.post('/proofs/channel', adminSetProofsChannel);
+router.post('/proofs/:postId/hidden', adminSetProofHidden);
 
 // Exchange section
 router.get('/exchange', adminGetExchange);

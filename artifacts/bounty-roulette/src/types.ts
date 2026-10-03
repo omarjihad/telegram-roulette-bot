@@ -298,3 +298,24 @@ export interface MediationTicketView {
   mediator: string | null;
   createdAt: string;
 }
+
+export interface ProofPostView {
+  id: number;
+  url: string;
+  date: string | null;
+  views: string | null;
+  text: string;
+  headlineAr: string;
+  headlineEn: string;
+  descAr: string;
+  descEn: string;
+  media: { type: 'photo' | 'video'; url: string }[];
+}
+
+export interface ProofsResponse {
+  ok: true;
+  channel: string;
+  channelUrl: string;
+  hasMore: boolean;
+  posts: ProofPostView[];
+}

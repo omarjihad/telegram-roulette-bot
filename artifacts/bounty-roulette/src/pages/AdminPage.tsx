@@ -34,7 +34,7 @@ interface Withdrawal {
   status?: string;
 }
 
-type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games' | 'exchange';
+type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games' | 'exchange' | 'proofs';
 
 export function AdminPage({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<AdminTab>('prizes');
@@ -50,7 +50,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', background: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-          {(['prizes', 'withdrawals', 'race', 'games', 'exchange', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
+          {(['prizes', 'withdrawals', 'race', 'games', 'exchange', 'proofs', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
             <button
               key={t}
               className={`pill`}
@@ -87,6 +87,8 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
                 ? '🎮 الألعاب'
                 : t === 'exchange'
                 ? '🔄 التبادل'
+                : t === 'proofs'
+                ? '📸 الإثباتات'
                 : 'الإعدادات'}
             </button>
           ))}
@@ -108,6 +110,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         {tab === 'race' && <RaceAdminTab />}
         {tab === 'games' && <GamesAdminTab />}
         {tab === 'exchange' && <ExchangeAdminTab />}
+        {tab === 'proofs' && <ProofsAdminTab />}
       </div>
     </div>
   );
@@ -115,6 +118,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
 
 interface DeliveryAccountStatus {
   configured: boolean;
+  online?: boolean;
   username: string | null;
   firstName: string | null;
   phoneMasked: string | null;
@@ -179,6 +183,27 @@ function DeliveryAccountTab() {
     }
   }
 
+  async function syncContacts() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ ok: true; result: { added: number; already: number; failed: number; stoppedByFlood: boolean; running: boolean } }>(
+        '/admin/delivery-account/sync-contacts'
+      );
+      const x = r.result;
+      window.alert(
+        x.running
+          ? 'الإضافة شغّالة حالياً بالخلفية، انتظر شوي.'
+          : `✅ انضاف ${x.added} شخص لجهات الاتصال\nموجودين من قبل: ${x.already}\nفشل: ${x.failed}` +
+              (x.stoppedByFlood ? '\n\n⚠️ تيليجرام طلب انتظار، اضغط مرة ثانية بعد ساعة حتى يكمل الباقي.' : '')
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذر إضافة جهات الاتصال');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeAccount() {
     if (!window.confirm('متأكد تريد فصل حساب التسليم؟ لن تُحذف حسابات المستخدمين.')) return;
     setBusy(true);
@@ -208,7 +233,17 @@ function DeliveryAccountTab() {
             <div style={{ marginTop: 12, lineHeight: 1.8 }}>
               <div><strong>{account.username ? `@${account.username.replace(/^@/, '')}` : account.firstName || 'حساب Telegram'}</strong></div>
               <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>الهاتف: {account.phoneMasked}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: account.online ? 'var(--success)' : 'var(--danger)' }}>
+                {account.online ? '🟢 متصل الآن' : '🔴 غير متصل، سجّل الدخول من جديد أو أعد تشغيل السيرفر'}
+              </div>
             </div>
+            <p className="card-sub" style={{ marginTop: 12 }}>
+              الحساب يضيف تلقائياً لجهات اتصاله: أي شخص يراسله، وأي شخص يضغط «تحقق»، وأي شخص ينقبل طلب سحبه.
+              الزر الجوّه يضيف كل اللي راسلوه من قبل.
+            </p>
+            <button className="btn btn-primary" style={{ marginTop: 6 }} disabled={busy || !account.online} onClick={syncContacts}>
+              👥 إضافة كل المحادثات لجهات الاتصال
+            </button>
             <button className="btn btn-secondary" style={{ marginTop: 14 }} disabled={busy} onClick={removeAccount}>
               فصل الحساب
             </button>
@@ -682,6 +717,58 @@ function ExchangeAdminTab() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ProofsAdminTab() {
+  const [channel, setChannel] = useState('');
+  const [count, setCount] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/proofs')
+      .then((r) => r.json())
+      .then((r: { channel?: string; posts?: unknown[] }) => {
+        setChannel(r.channel ?? 'MFROLET');
+        setCount(r.posts?.length ?? 0);
+      })
+      .catch(() => setChannel('MFROLET'));
+  }, []);
+
+  async function run(fn: () => Promise<{ saved?: number }>) {
+    setBusy(true);
+    try {
+      const r = await fn();
+      window.alert(`✅ تم. انقرأ ${r.saved ?? 0} منشور من القناة.`);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'تعذر التحديث');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="card">
+        <h3 className="card-title">📸 قناة الإثباتات</h3>
+        <p className="card-sub" style={{ lineHeight: 1.9 }}>
+          القسم يعرض منشورات القناة داخل التطبيق (حتى بالموقع لمراجعي Adsgram)، ولكل منشور وصف بالعربي والإنگليزي حسب النص اللي بيه.
+          المنشورات الجديدة تنضاف وحدها كل 15 دقيقة. القناة لازم تكون عامة (بيها يوزر).
+          <br />
+          {count !== null && `المعروض هسه: ${count}+ منشور.`}
+        </p>
+        <input
+          value={channel}
+          onChange={(e) => setChannel(e.target.value)}
+          placeholder="MFROLET"
+          dir="ltr"
+          style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', fontFamily: 'inherit', marginBottom: 10 }}
+        />
+        <button className="btn btn-primary" disabled={busy} onClick={() => void run(() => api.post('/admin/proofs/channel', { channel }))}>💾 حفظ القناة</button>
+        <button className="btn btn-secondary" style={{ marginTop: 8 }} disabled={busy} onClick={() => void run(() => api.post('/admin/proofs/refresh'))}>🔄 تحديث المنشورات الآن</button>
+        <p className="card-sub" style={{ marginBottom: 0 }}>لإخفاء منشور معيّن: افتح القسم من التطبيق، وتحت المنشور يطلعلك زر «إخفاء» (للمطورين بس).</p>
       </div>
     </div>
   );

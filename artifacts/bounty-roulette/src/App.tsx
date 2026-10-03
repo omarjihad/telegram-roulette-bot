@@ -17,6 +17,7 @@ import { ContestPage } from './pages/ContestPage';
 import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
 import { ExchangePage } from './pages/ExchangePage';
+import { ProofsPage } from './pages/ProofsPage';
 import { PreviewBanner } from './components/PreviewBanner';
 import { hasStoredLang, setLang, tr, useLang } from './i18n';
 import { isPreviewMode } from './services/preview';
@@ -33,6 +34,7 @@ function initialTab(): TabKey {
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (startParam === 'race' || startParam.startsWith('race_') || urlTab === 'race') return 'contest';
   if (initialListingId() || initialOfferId() || urlTab === 'exchange') return 'exchange';
+  if (startParam === 'proofs' || urlTab === 'proofs') return 'proofs';
   return 'home';
 }
 
@@ -176,6 +178,7 @@ export default function App() {
         {tab === 'tasks' && <TasksPage refreshMe={loadMe} />}
         {tab === 'referrals' && <ReferralsPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
+        {tab === 'proofs' && <ProofsPage onBack={() => setTab('home')} isAdmin={me.isAdmin} />}
         {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
         {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setOfferLink(null); setTab('home'); }} initialListingId={listingLink} initialOfferId={offerLink} />}
         {tab === 'inventory' && <InventoryPage />}

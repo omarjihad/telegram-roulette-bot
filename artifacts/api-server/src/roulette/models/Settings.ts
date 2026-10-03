@@ -42,6 +42,8 @@ export interface ISettings extends Document {
   // Mediation group: the join-request link shown to users, and the group's chat id
   // (linked by sending /setmediation inside the group).
   mediationGroupLink: string;
+  // Public channel shown in the proofs section (without @).
+  proofsChannel: string;
   mediationChatId: number | null;
   adsgramBlockId: string;
   adTaskReward: number;
@@ -84,6 +86,7 @@ const settingsSchema = new Schema<ISettings>(
     exchangePublic: { type: Boolean, default: false },
     exchangeMiddlemanGroup: { type: String, default: 'MF_MMMM' },
     mediationGroupLink: { type: String, default: '' },
+    proofsChannel: { type: String, default: 'MFROLET' },
     mediationChatId: { type: Number, default: null },
     adsgramBlockId: { type: String, default: '50375' },
     adTaskReward: { type: Number, default: 0.2, min: 0 },

@@ -16,6 +16,7 @@ import { getShowcase } from './controllers/showcase.controller';
 import { env } from './config/env';
 import { getAdsgramReward } from './controllers/games.controller';
 import { getExchangeImageFile } from './controllers/exchange.controller';
+import { getProofMediaFile, getProofs } from './controllers/proofs.controller';
 import { parseLang, runWithLang, t } from './i18n';
 
 export function createApp() {
@@ -57,6 +58,9 @@ export function createApp() {
   app.get('/api/prizes/:key/image', getPrizeImage);
   app.get('/api/settings/share-image', getShareImage);
   app.get('/api/exchange/images/:id', getExchangeImageFile);
+  // Proofs channel: public, so the website preview (and Adsgram's reviewers) can see it.
+  app.get('/api/proofs', getProofs);
+  app.get('/api/proofs/media/:postId/:index', getProofMediaFile);
   // Adsgram calls this server-to-server (no Telegram initData); guarded by ADSGRAM_REWARD_KEY.
   app.get('/api/adsgram/reward', getAdsgramReward);
 

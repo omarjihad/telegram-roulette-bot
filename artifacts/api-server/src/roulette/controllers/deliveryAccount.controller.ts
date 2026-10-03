@@ -7,12 +7,18 @@ import {
   hasVerifiedDeliveryContact,
   removeDeliveryAccount,
   sendDeliveryLoginCode,
+  syncDeliveryContacts,
   verifyDeliveryContactBySending,
   verifyDeliveryLoginCode,
 } from '../services/deliveryAccount.service';
 
 export const adminGetDeliveryAccount = asyncHandler(async (_req: Request, res: Response) => {
   res.json({ ok: true, account: await getDeliveryAccountStatus() });
+});
+
+/** Adds everyone who chatted with the delivery account to its contacts. */
+export const adminSyncDeliveryContacts = asyncHandler(async (_req: Request, res: Response) => {
+  res.json({ ok: true, result: await syncDeliveryContacts() });
 });
 
 export const adminStartDeliveryLogin = asyncHandler(async (req: Request, res: Response) => {

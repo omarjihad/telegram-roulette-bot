@@ -126,6 +126,17 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
       </button>
 
+      {/* Delivery proofs from the official channel, shown inside the app. */}
+      <button className="home-proofs-card" onClick={() => onNavigate('proofs')}>
+        <span className="home-proofs-icon">📸</span>
+        <span className="home-contest-copy">
+          <span className="home-section-label">{tr('🏆 قناة الإثباتات', '🏆 Proofs channel')}</span>
+          <strong>{tr('شوف الجوائز اللي تسلّمت', 'See the prizes we delivered')}</strong>
+          <span>{tr('صور حقيقية لتسليم الجوائز للفائزين', 'Real photos of prizes handed to winners')}</span>
+        </span>
+        <span className="home-link-arrow">←</span>
+      </button>
+
       {me.contestEnabled !== false && (
         <button className="home-contest-card" onClick={() => onNavigate('contest')}>
           <img src="/nft-santa-hat.jpg" alt="" className="home-contest-art" />

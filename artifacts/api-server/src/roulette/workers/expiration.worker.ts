@@ -14,6 +14,7 @@ import { processSpinReadyReminders } from './spinReady.worker';
 import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
 import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
 import { backfillDailyPrizeExpiry } from '../services/dailyLogin.service';
+import { refreshProofs } from '../services/proofs.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -42,6 +43,12 @@ export function startExpirationWorker() {
       await processProfileTaskVerification();
     } catch (err) {
       logger.error({ err }, 'expiration worker tick failed');
+    }
+    try {
+      // At most every 15 minutes (the service keeps track).
+      await refreshProofs();
+    } catch (err) {
+      logger.error({ err }, 'proofs refresh failed');
     }
     try {
       await expireOldListings();

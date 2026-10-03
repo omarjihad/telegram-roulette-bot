@@ -12,7 +12,7 @@ import { expireClaimTaskForUserPrize, getClaimTaskForUserPrize } from './claimTa
 import { writeAudit } from '../models/AuditLog';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
-import { getDeliveryAccountStatus, getDeliveryContactLink, hasVerifiedDeliveryContact } from './deliveryAccount.service';
+import { addDeliveryContact, getDeliveryAccountStatus, getDeliveryContactLink, hasVerifiedDeliveryContact } from './deliveryAccount.service';
 import { t } from '../i18n';
 
 /**
@@ -269,6 +269,11 @@ export async function approveWithdrawal(
     target: withdrawalId,
     metadata: { prize: updated.prizeNameSnapshot, telegramId: updated.telegramId },
   });
+
+  // The winner goes into the delivery account's contacts so it can reach them right away.
+  void addDeliveryContact(updated.telegramId)
+    .then((r) => logger.info({ telegramId: updated.telegramId, result: r }, 'delivery contact on approval'))
+    .catch(() => undefined);
 
   const deliveryContact = await getDeliveryContactLink();
   const configuredDeliveryUsername = deliveryContact.username || env.DELIVERY_CONTACT_USERNAME;

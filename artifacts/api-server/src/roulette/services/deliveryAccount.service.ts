@@ -103,6 +103,139 @@ function attachDeliveryCommandListener(client: TelegramClient) {
   );
 }
 
+/** People added to the delivery account's contacts since the last start (avoids repeat calls). */
+const addedContacts = new Set<number>();
+let syncRunning = false;
+
+function floodWaitSeconds(err: unknown) {
+  const m = errorMessage(err).match(/FLOOD_WAIT_(\d+)|A wait of (\d+) seconds/);
+  return m ? Number(m[1] ?? m[2]) : 0;
+}
+
+type TgUser = Api.User;
+
+/**
+ * Adds a Telegram user to the delivery account's contacts. Needs a user object that
+ * carries its access hash: one that messaged the account, resolved from a @username, or
+ * already known to the session. Returns what happened, never throws.
+ */
+async function addUserAsContact(client: TelegramClient, user: TgUser, fallbackName?: string | null) {
+  const id = Number(user.id.toString());
+  if (user.bot || user.self || user.deleted) return 'skipped' as const;
+  if (user.contact || addedContacts.has(id)) {
+    addedContacts.add(id);
+    return 'already' as const;
+  }
+  const firstName = (user.firstName || fallbackName || user.username || `MF ${id}`).slice(0, 64);
+  try {
+    await client.invoke(
+      new Api.contacts.AddContact({
+        id: await client.getInputEntity(user),
+        firstName,
+        lastName: (user.lastName || '').slice(0, 64),
+        phone: '',
+        addPhonePrivacyException: false,
+      })
+    );
+    addedContacts.add(id);
+    logger.info({ telegramId: id }, 'delivery account added a contact');
+    return 'added' as const;
+  } catch (err) {
+    logger.warn({ err: errorMessage(err), telegramId: id }, 'delivery account could not add contact');
+    if (floodWaitSeconds(err)) return 'flood' as const;
+    return 'failed' as const;
+  }
+}
+
+/** Finds a user the delivery account can address: by @username, or from its own cache. */
+async function resolveTelegramUser(client: TelegramClient, telegramId: number, username?: string | null) {
+  const clean = username?.trim().replace(/^@/, '');
+  if (clean) {
+    try {
+      const resolved = await client.invoke(new Api.contacts.ResolveUsername({ username: clean }));
+      const match = resolved.users?.find((u) => Number(u.id.toString()) === telegramId) ?? resolved.users?.[0];
+      if (match instanceof Api.User) return match;
+    } catch (err) {
+      logger.info({ err: errorMessage(err), telegramId }, 'delivery account could not resolve username');
+    }
+  }
+  try {
+    const entity = await client.getEntity(telegramId);
+    if (entity instanceof Api.User) return entity;
+  } catch {
+    // Not in the session's cache (no @username and never talked to the account).
+  }
+  return null;
+}
+
+/**
+ * Adds a bot user to the delivery account's contacts (used when they verify, when their
+ * withdrawal is approved, and from the admin panel). Best effort: never throws.
+ */
+export async function addDeliveryContact(telegramId: number) {
+  const client = activeClient;
+  if (!client) return 'offline' as const;
+  if (addedContacts.has(telegramId)) return 'already' as const;
+  const dbUser = await User.findOne({ telegramId }).select('username firstName').lean();
+  const tgUser = await resolveTelegramUser(client, telegramId, dbUser?.username);
+  if (!tgUser) return 'unresolvable' as const;
+  return addUserAsContact(client, tgUser, dbUser?.firstName);
+}
+
+/** Anyone who writes to the delivery account in private is added to its contacts. */
+function attachAutoContactListener(client: TelegramClient) {
+  client.addEventHandler(async (event) => {
+    if (!event.isPrivate) return;
+    try {
+      const sender = await event.message.getSender();
+      if (sender instanceof Api.User) await addUserAsContact(client, sender);
+    } catch (err) {
+      logger.warn({ err: errorMessage(err) }, 'auto-contact from incoming message failed');
+    }
+  }, new NewMessage({ incoming: true }));
+}
+
+/**
+ * Goes through the account's private chats and adds everyone who isn't a contact yet
+ * (people who wrote before this feature existed). Slow on purpose to stay clear of
+ * Telegram's flood limits; stops at the first flood wait.
+ */
+export async function syncDeliveryContacts(limit = 300) {
+  const client = activeClient;
+  if (!client) throw new AppError('حساب التسليم غير متصل حالياً.', 503, 'DELIVERY_ACCOUNT_OFFLINE');
+  if (syncRunning) return { added: 0, already: 0, failed: 0, stoppedByFlood: false, running: true };
+  syncRunning = true;
+  const result = { added: 0, already: 0, failed: 0, stoppedByFlood: false, running: false };
+  try {
+    for await (const dialog of client.iterDialogs({ limit })) {
+      const entity = dialog.entity;
+      if (!(entity instanceof Api.User) || entity.bot || entity.self || entity.deleted) continue;
+      const r = await addUserAsContact(client, entity);
+      if (r === 'added') {
+        result.added += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } else if (r === 'already') result.already += 1;
+      else if (r === 'flood') {
+        result.stoppedByFlood = true;
+        break;
+      } else if (r === 'failed') result.failed += 1;
+    }
+  } finally {
+    syncRunning = false;
+  }
+  logger.info(result, 'delivery contacts sync finished');
+  return result;
+}
+
+function onConnected(client: TelegramClient) {
+  attachDeliveryCommandListener(client);
+  attachAutoContactListener(client);
+  // Catch up on people who wrote while the account wasn't adding contacts.
+  setTimeout(() => {
+    if (activeClient === client) void syncDeliveryContacts().catch((err) => logger.warn({ err: errorMessage(err) }, 'delivery contacts sync failed'));
+  }, 30_000);
+}
+
 async function persistAndActivate(client: TelegramClient, phone: string) {
   const me = await client.getMe();
   const telegramId = Number(me.id.toString());
@@ -126,7 +259,7 @@ async function persistAndActivate(client: TelegramClient, phone: string) {
   await closeClient(activeClient);
   activeClient = client;
   activeAccountId = telegramId;
-  attachDeliveryCommandListener(client);
+  onConnected(client);
   return { telegramId, username, firstName, phoneMasked: maskPhone(phone) };
 }
 
@@ -140,7 +273,7 @@ export async function initializeDeliveryAccount() {
     await client.connect();
     activeClient = client;
     activeAccountId = account.telegramId;
-    attachDeliveryCommandListener(client);
+    onConnected(client);
     await DeliveryAccount.updateOne({ _id: account._id }, { lastConnectedAt: new Date() });
     logger.info({ telegramId: account.telegramId }, 'delivery account connected');
     return true;
@@ -222,9 +355,11 @@ export async function getDeliveryAccountStatus() {
   const account = await DeliveryAccount.findOne({ singleton: 'main', isActive: true }).select(
     'telegramId username firstName phoneMasked isActive lastConnectedAt'
   );
-  if (!account) return { configured: false, username: null, firstName: null, phoneMasked: null, lastConnectedAt: null };
+  if (!account) return { configured: false, online: false, username: null, firstName: null, phoneMasked: null, lastConnectedAt: null };
   return {
     configured: true,
+    // Whether this server is actually connected with it right now (not just saved).
+    online: activeClient !== null,
     username: account.username ?? null,
     firstName: account.firstName ?? null,
     phoneMasked: account.phoneMasked,
@@ -254,12 +389,15 @@ export async function verifyDeliveryContactBySending(telegramId: number) {
   if (!user) throw new AppError(t('المستخدم غير موجود.', 'User not found.'), 404, 'USER_NOT_FOUND');
 
   const username = user.username?.trim();
-  let target: string | number = telegramId;
+  // Add them to the delivery account's contacts first: delivering an account works far
+  // more smoothly between mutual contacts. A failure here doesn't block the check.
+  const tgUser = await resolveTelegramUser(activeClient, telegramId, username);
+  if (tgUser) await addUserAsContact(activeClient, tgUser, user.firstName);
+  let target: string | number | Api.User = telegramId;
   try {
-    // A username gives the delivery account a resolvable Telegram entity. For
-    // users without usernames, GramJS can still use an entity cached in the
-    // delivery session (for example after a previous Telegram interaction).
-    target = username ? `@${username.replace(/^@/, '')}` : telegramId;
+    // The resolved user carries its access hash; otherwise fall back to the @username,
+    // or to an entity cached in the delivery session.
+    target = tgUser ?? (username ? `@${username.replace(/^@/, '')}` : telegramId);
     await activeClient.sendMessage(target, {
       message: t('✅ تم التحقق من إضافة حساب التسليم إلى جهات اتصالك. يمكنك الآن الرجوع إلى البوت وإكمال استلام الجائزة.', '✅ Verified: the delivery account is in your contacts. You can go back to the bot and finish claiming your prize.'),
     });

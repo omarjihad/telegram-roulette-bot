@@ -3,7 +3,7 @@ import { haptic } from '../hooks/useTelegramWebApp';
 import { tr } from '../i18n';
 import { Home, Target, Aperture, Backpack, Users, Trophy } from 'lucide-react';
 
-export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games' | 'referrals' | 'exchange';
+export type TabKey = 'home' | 'tasks' | 'wheel' | 'contest' | 'inventory' | 'history' | 'store' | 'games' | 'referrals' | 'exchange' | 'proofs';
 
 function tabs(): { key: TabKey; label: string; icon: React.ReactNode }[] {
   return [
