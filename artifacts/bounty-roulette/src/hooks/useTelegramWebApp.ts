@@ -23,9 +23,16 @@ interface TelegramWebApp {
   offEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
 }
 
+/** Telegram's low-level bridge (the WebApp object is built on top of it). */
+interface TelegramWebView {
+  postEvent: (eventType: string, callback?: unknown, eventData?: unknown) => void;
+  onEvent: (eventType: string, handler: (eventType: string, eventData: unknown) => void) => void;
+  offEvent: (eventType: string, handler: (eventType: string, eventData: unknown) => void) => void;
+}
+
 declare global {
   interface Window {
-    Telegram?: { WebApp: TelegramWebApp };
+    Telegram?: { WebApp: TelegramWebApp; WebView?: TelegramWebView };
   }
 }
 
@@ -53,4 +60,43 @@ export function useTelegramWebApp() {
 
 export function haptic(style: 'light' | 'medium' | 'heavy' = 'light') {
   getTelegramWebApp()?.HapticFeedback?.impactOccurred(style);
+}
+
+/**
+ * Opens Telegram's "send to chats" picker for a prepared inline message and reports
+ * whether it was sent. WebApp.shareMessage stays locked forever ("already opened") when a
+ * Telegram app never sends back the result, so every later share fails until the Mini App
+ * is reopened. This talks to the bridge directly instead, so each share opens again.
+ * Resolves true when sent, false when cancelled, null when Telegram never answered.
+ */
+export function openSharePicker(preparedId: string, timeoutMs = 120_000): Promise<boolean | null> {
+  const tg = window.Telegram;
+  const view = tg?.WebView;
+  if (!view?.postEvent || !view.onEvent) {
+    // Old bridge: fall back to the official method.
+    return new Promise((resolve) => {
+      try {
+        tg?.WebApp.shareMessage?.(preparedId, (sent) => resolve(sent));
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value: boolean | null) => {
+      if (done) return;
+      done = true;
+      view.offEvent('prepared_message_sent', onSent);
+      view.offEvent('prepared_message_failed', onFailed);
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    const onSent = () => finish(true);
+    const onFailed = () => finish(false);
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    view.onEvent('prepared_message_sent', onSent);
+    view.onEvent('prepared_message_failed', onFailed);
+    view.postEvent('web_app_send_prepared_message', false, { id: preparedId });
+  });
 }

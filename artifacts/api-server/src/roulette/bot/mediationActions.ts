@@ -5,7 +5,7 @@ import { completeByMediatorMessage, handleJoinRequest, linkMediationGroup, rateM
 import { User } from '../models/User';
 import { pick, userLang } from '../i18n';
 
-/** Mediation group: join requests from ticket sides, the "take ticket" button, setup and "م". */
+/** Mediation group: join requests from ticket sides, the "take ticket" button, setup and the middleman's "تم التسليم" / "الغاء". */
 export function registerMediationActions(bot: TelegramBot) {
   bot.on('chat_join_request', async (req) => {
     try {

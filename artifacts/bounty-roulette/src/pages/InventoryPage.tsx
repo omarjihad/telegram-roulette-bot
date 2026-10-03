@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { InventoryItem } from '../types';
 import { LoadingScreen, EmptyState, StatusBadge, SectionHero } from '../components/Common';
 import { useCountdown } from '../hooks/useCountdown';
-import { haptic, getTelegramWebApp } from '../hooks/useTelegramWebApp';
+import { haptic, getTelegramWebApp, openSharePicker } from '../hooks/useTelegramWebApp';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { DeliveryContactGate } from '../components/DeliveryContactGate';
 import { claimAfterAd, showRewardedAd } from '../services/adsgram';
@@ -78,8 +78,8 @@ function ClaimSteps({ task, onAd, adBusy, onCopy, onShare, sharing }: {
         <>
           <div className="claim-step-hint">
             {tr(
-              'اضغط مشاركة واختار أصدقاءك (المحادثات الخاصة بس). كل صديق يوصله وينحسب، والعدّاد يتحدّث خلال ثواني.',
-              'Tap share and pick your friends (private chats only). Every friend it reaches counts; the counter updates within seconds.'
+              'اضغط مشاركة واختار صديق واحد كل مرة (المحادثات الخاصة بس)، وكررها 3 مرات. كل إرسال ينحسب والعدّاد يتحدّث خلال ثواني.',
+              'Tap share and pick one friend each time (private chats only), 3 times. Every send counts; the counter updates within seconds.'
             )}
           </div>
           <Progress value={shares} total={sharesRequired} />
@@ -178,6 +178,7 @@ export function InventoryPage() {
   const [deliveryItem, setDeliveryItem] = useState<InventoryItem | null>(null);
 
   const [sharingId, setSharingId] = useState<string | null>(null);
+  const unansweredShare = useRef<{ userPrizeId: string; preparedId: string } | null>(null);
   const [adId, setAdId] = useState<string | null>(null);
 
   async function watchAd(item: InventoryItem) {
@@ -203,6 +204,17 @@ export function InventoryPage() {
     });
   }
 
+  function reportShare(userPrizeId: string, preparedMessageId: string) {
+    // Counts toward the "share with friends" task; Telegram's own report may add more.
+    void api
+      .post('/inventory/claim-steps/share-sent', { userPrizeId, preparedMessageId })
+      .catch(() => undefined)
+      .finally(() => {
+        void refetch();
+        window.setTimeout(() => void refetch(), 4000);
+      });
+  }
+
   async function shareLink(userPrizeId: string) {
     setSharingId(userPrizeId);
     haptic('light');
@@ -213,27 +225,23 @@ export function InventoryPage() {
         setToast(tr('نسخة تيليجرام عندك قديمة وما تدعم المشاركة المباشرة، حدّث التطبيق وجرب مرة ثانية.', 'Your Telegram version is too old for direct sharing. Update the app and try again.'));
         return;
       }
-      // Reported once per share window, from the callback or (on some apps) the event.
-      let reported = false;
-      const report = () => {
-        if (reported) return;
-        reported = true;
-        tg.offEvent?.('shareMessageSent', report);
-        setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
-        haptic('light');
-        // Counts toward the "share with friends" task; Telegram's own report may add more.
-        void api
-          .post('/inventory/claim-steps/share-sent', { userPrizeId, preparedMessageId: res.preparedMessageId })
-          .catch(() => undefined)
-          .finally(() => {
-            window.setTimeout(() => void refetch(), 1500);
-            window.setTimeout(() => void refetch(), 6000);
-          });
-      };
-      tg.onEvent?.('shareMessageSent', report);
-      tg.shareMessage(res.preparedMessageId, (sent) => {
-        if (sent) report();
-        else tg.offEvent?.('shareMessageSent', report);
+      // A previous share Telegram never answered for (some apps don't) counts now.
+      const previous = unansweredShare.current;
+      if (previous) {
+        unansweredShare.current = null;
+        reportShare(previous.userPrizeId, previous.preparedId);
+      }
+      const preparedId = res.preparedMessageId;
+      unansweredShare.current = { userPrizeId, preparedId };
+      void openSharePicker(preparedId, 45_000).then((sent) => {
+        if (unansweredShare.current?.preparedId !== preparedId) return;
+        unansweredShare.current = null;
+        // null: Telegram never answered; the window most likely went out, so it counts.
+        if (sent !== false) {
+          setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
+          haptic('light');
+          reportShare(userPrizeId, preparedId);
+        }
       });
     } catch (err) {
       setToast(

@@ -22,6 +22,7 @@ vi.mock('../models/MediationTicket', () => ({
     create: mocks.ticketCreate,
     find: mocks.ticketFind,
     updateOne: mocks.ticketUpdateOne,
+    aggregate: vi.fn().mockResolvedValue([{ sum: 9, count: 2 }]),
   },
 }));
 vi.mock('../models/ExchangeListing', () => ({ ExchangeListing: { findById: vi.fn() } }));
@@ -168,15 +169,31 @@ describe('closing tickets', () => {
     expect(bot.declineChatJoinRequest).not.toHaveBeenCalledWith(CHAT, 20);
   });
 
-  it('marks a ticket done when the middleman writes م or م2', async () => {
+  it('marks a ticket done when the middleman writes تم التسليم or سلمت (م / م2 do nothing)', async () => {
     mocks.ticketFindOneAndUpdate.mockResolvedValue(ticket({ status: 'completed' }));
     expect(await completeByMediatorMessage(CHAT, 500, 'hello')).toBeNull();
-    await completeByMediatorMessage(CHAT, 500, 'م2');
+    expect(await completeByMediatorMessage(CHAT, 500, 'م2')).toBeNull();
+    expect(mocks.ticketFindOneAndUpdate).not.toHaveBeenCalled();
+    await completeByMediatorMessage(CHAT, 500, 'تم  التسليم');
+    await completeByMediatorMessage(CHAT, 500, 'سلمت');
+    expect(mocks.ticketFindOneAndUpdate).toHaveBeenCalledTimes(2);
     expect(mocks.ticketFindOneAndUpdate).toHaveBeenCalledWith(
       { chatId: CHAT, mediatorTelegramId: 500, status: 'in_progress' },
-      expect.anything(),
+      { $set: expect.objectContaining({ status: 'completed' }) },
       expect.anything()
     );
+  });
+
+  it('cancels the ticket when the middleman writes الغاء', async () => {
+    mocks.ticketFindOneAndUpdate.mockResolvedValue(ticket({ status: 'cancelled' }));
+    mocks.userFindOne.mockReturnValue(select({ language: 'ar' }));
+    await completeByMediatorMessage(CHAT, 500, 'الغاء');
+    expect(mocks.ticketFindOneAndUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      { $set: expect.objectContaining({ status: 'cancelled' }) },
+      expect.anything()
+    );
+    expect(bot.sendMessage).toHaveBeenCalledWith(CHAT, expect.stringContaining('تم إلغاء التذكرة'), expect.anything());
   });
 });
 
@@ -194,10 +211,10 @@ describe('waiting for a middleman', () => {
 });
 
 describe('ratings', () => {
-  it('asks both sides to rate after م, once each', async () => {
+  it('asks both sides to rate after تم التسليم, once each', async () => {
     mocks.ticketFindOneAndUpdate.mockResolvedValueOnce(ticket({ status: 'completed', mediatorTelegramId: 500, mediatorUsername: 'mid1' }));
     mocks.userFindOne.mockReturnValue(select({ language: 'ar' }));
-    await completeByMediatorMessage(CHAT, 500, 'م');
+    await completeByMediatorMessage(CHAT, 500, 'تم التسليم');
     const asks = bot.sendMessage.mock.calls.filter((c) => c[0] === 10 || c[0] === 20);
     expect(asks).toHaveLength(2);
     expect(asks[0][2].reply_markup.inline_keyboard[0]).toHaveLength(5);

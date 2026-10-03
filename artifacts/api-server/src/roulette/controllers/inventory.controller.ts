@@ -140,7 +140,12 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
     await rememberSharePrepared(task._id as never, preparedMessageId);
   } catch (err) {
     logger.error({ err: err instanceof Error ? err.message : err, telegramId: req.telegramId }, 'failed to prepare share card');
-    throw new AppError(t('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية', 'Could not prepare the share card, please try again'), 502, 'SEND_FAILED');
+    const reason = (err instanceof Error ? err.message : String(err)).slice(0, 120);
+    throw new AppError(
+      t(`تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية (${reason})`, `Could not prepare the share card, please try again (${reason})`),
+      502,
+      'SHARE_PREP_FAILED'
+    );
   }
 
   res.json({ ok: true, preparedMessageId });

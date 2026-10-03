@@ -37,6 +37,7 @@ export function createBot(enablePolling = false): TelegramBot {
   registerMediationActions(bot);
   // A shared prize card reached a chat (needs inline feedback on in @BotFather).
   bot.on('chosen_inline_result', (result) => {
+    logger.info({ resultId: result.result_id, from: result.from.id, hasInlineId: Boolean(result.inline_message_id) }, 'chosen_inline_result');
     void recordSharedCard(result.result_id, result.from.id, result.inline_message_id).catch((err) =>
       logger.warn({ err }, 'failed to record shared prize card')
     );

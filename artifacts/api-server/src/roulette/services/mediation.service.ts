@@ -13,8 +13,11 @@ import { listAllAdminTelegramIds } from './admin.service';
 
 /** Both sides must ask to join the mediation group within this time. */
 export const MEDIATION_JOIN_WINDOW_MS = 15 * 60 * 1000;
-/** What the middleman types in the group to finish a ticket. */
-const COMPLETE_WORDS = new Set(['م', 'م2']);
+/** What the middleman types in the group once the deal is delivered, or to call it off. */
+const COMPLETE_WORDS = new Set(['تم التسليم', 'سلمت']);
+const CANCEL_WORDS = new Set(['الغاء', 'إلغاء']);
+/** A ticket leaves the Mini App 30 minutes after it was opened, or as soon as it closes. */
+export const MEDIATION_VISIBLE_MS = 30 * 60 * 1000;
 /** No middleman took a ready ticket: ping them again after 10 minutes, tell the developers after 30. */
 const REPING_AFTER_MS = 10 * 60 * 1000;
 const ALERT_ADMINS_AFTER_MS = 30 * 60 * 1000;
@@ -107,8 +110,27 @@ export async function lookupPartner(user: HydratedDocument<IUser>, adminRole: st
 async function findOpenTicketFor(telegramId: number) {
   return MediationTicket.findOne({
     status: { $in: OPEN_MEDIATION_STATUSES },
+    // Older tickets are out of the way: they no longer block a new request.
+    createdAt: { $gte: new Date(Date.now() - MEDIATION_VISIBLE_MS) },
     $or: [{ 'requester.telegramId': telegramId }, { 'partner.telegramId': telegramId }],
   });
+}
+
+/** A middleman's average rating from both sides of their completed tickets. */
+export async function getMediatorRating(telegramId: number) {
+  const [row] = await MediationTicket.aggregate<{ sum: number; count: number }>([
+    { $match: { status: 'completed', mediatorTelegramId: telegramId } },
+    { $project: { r: [{ $ifNull: ['$requesterRating', null] }, { $ifNull: ['$partnerRating', null] }] } },
+    { $unwind: '$r' },
+    { $match: { r: { $ne: null } } },
+    { $group: { _id: null, sum: { $sum: '$r' }, count: { $sum: 1 } } },
+  ]);
+  if (!row || !row.count) return { rating: null as number | null, count: 0 };
+  return { rating: Math.round((row.sum / row.count) * 10) / 10, count: row.count };
+}
+
+function ratingLine(r: { rating: number | null; count: number }) {
+  return r.rating === null ? '⭐ تقييم الوسيط: جديد (ما عنده تقييمات بعد)' : `⭐ تقييم الوسيط: ${r.rating}/5 (${r.count} تقييم)`;
 }
 
 export async function createTicket(
@@ -182,7 +204,11 @@ export async function createTicket(
 export async function listMyTickets(user: HydratedDocument<IUser>, adminRole: string | null) {
   const settings = await getSettings();
   if (!exchangeAllowed(settings, adminRole)) throw new AppError(t('قريباً', 'Coming soon'), 403, 'EXCHANGE_COMING_SOON');
-  const tickets = await MediationTicket.find({ $or: [{ 'requester.telegramId': user.telegramId }, { 'partner.telegramId': user.telegramId }] })
+  const tickets = await MediationTicket.find({
+    status: { $in: OPEN_MEDIATION_STATUSES },
+    createdAt: { $gte: new Date(Date.now() - MEDIATION_VISIBLE_MS) },
+    $or: [{ 'requester.telegramId': user.telegramId }, { 'partner.telegramId': user.telegramId }],
+  })
     .sort({ createdAt: -1 })
     .limit(10);
   return {
@@ -328,36 +354,67 @@ export async function takeTicket(ticketId: string, mediator: TelegramBot.User, c
     await botRef.approveChatJoinRequest(chatId, p.telegramId).catch((err) => logger.warn({ err, ticket: ticket.number }, 'failed to approve join request'));
   }
   const med = { telegramId: mediator.id, username: mediator.username, name: mediator.first_name };
+  const rating = ratingLine(await getMediatorRating(mediator.id).catch(() => ({ rating: null, count: 0 })));
   await botRef
     .sendMessage(
       chatId,
       `🤝 <b>التذكرة #${ticket.number}</b>\n\n` +
         `${mention(ticket.requester)} و ${mention(ticket.partner)}\n` +
-        `راح يتوسطلكم: ${mention(med)}\n\n` +
-        `📌 على الوسيط كتابة الآتي:\n<b>ش</b>\n\nوبعد إكمال التبادل يكتب:\n<b>م</b> أو <b>م2</b>`,
+        `راح يتوسطلكم: ${mention(med)}\n${rating}\n\n` +
+        `📌 على الوسيط كتابة الآتي:\n<b>ق</b>\n\n` +
+        `وبعد إكمال التبادل يكتب:\n<b>م</b> للاندرويد\n<b>م2</b> للايفون\n\n` +
+        `وبعد إكمال الشروط يكتب الوسيط <b>تم التسليم</b> او <b>سلمت</b> ليتم التأكيد عبر البوت!\n` +
+        `اذا حدثت اي مشكله او تم الغاء التوسط على الوسيط كتابه <b>الغاء</b> ليتم انهائها بين الطرفين`,
       { parse_mode: 'HTML', disable_web_page_preview: true }
     )
     .catch((err) => logger.warn({ err }, 'failed to post mediator assignment'));
   for (const p of [ticket.requester, ticket.partner]) {
     await dm(p.telegramId, {
-      ar: `🤝 الوسيط ${plainName(med)} استلم تذكرتك #${ticket.number} وتم قبولكم بالكروب.\nتعامل وياه داخل الكروب فقط، ولا تثق بأي شخص يراسلك بالخاص باسم الوسيط.`,
-      en: `🤝 Middleman ${plainName(med)} took your ticket #${ticket.number} and you're in the group.\nDeal with them inside the group only; don't trust anyone messaging you privately in their name.`,
+      ar: `🤝 الوسيط ${plainName(med)} استلم تذكرتك #${ticket.number} وتم قبولكم بالكروب.\n${rating}\nتعامل وياه داخل الكروب فقط، ولا تثق بأي شخص يراسلك بالخاص باسم الوسيط.`,
+      en: `🤝 Middleman ${plainName(med)} took your ticket #${ticket.number} and you're in the group.\n${rating}\nDeal with them inside the group only; don't trust anyone messaging you privately in their name.`,
     });
   }
   return { ticket };
 }
 
-/** The middleman typed "م" / "م2" in the group: their latest ticket there is done. */
+/**
+ * The middleman typed "تم التسليم" / "سلمت" (delivered: the ticket is done) or "الغاء"
+ * (called off) in the group. Applies to their latest open ticket there.
+ */
 export async function completeByMediatorMessage(chatId: number, mediatorId: number, text: string) {
-  if (!COMPLETE_WORDS.has(text.trim())) return null;
+  const word = text.trim().replace(/\s+/g, ' ');
+  const done = COMPLETE_WORDS.has(word);
+  if (!done && !CANCEL_WORDS.has(word)) return null;
   const settings = await getSettings();
   if (!settings.mediationChatId || chatId !== settings.mediationChatId) return null;
+  const now = new Date();
   const ticket = await MediationTicket.findOneAndUpdate(
     { chatId, mediatorTelegramId: mediatorId, status: 'in_progress' },
-    { $set: { status: 'completed', completedAt: new Date(), closedAt: new Date() } },
+    { $set: done ? { status: 'completed', completedAt: now, closedAt: now } : { status: 'cancelled', closedAt: now } },
     { sort: { takenAt: -1 }, new: true }
   );
-  if (ticket) await askForRatings(ticket);
+  if (!ticket) return null;
+  if (botRef) {
+    await botRef
+      .sendMessage(
+        chatId,
+        done
+          ? `✅ <b>تم تأكيد التسليم للتذكرة #${ticket.number}</b>\n\n${mention(ticket.requester)} و ${mention(ticket.partner)}\nانتهت الوساطة بنجاح، شكراً لثقتكم بـ MF 🤝`
+          : `❌ <b>تم إلغاء التذكرة #${ticket.number}</b>\n\n${mention(ticket.requester)} و ${mention(ticket.partner)}\nانتهت الوساطة بين الطرفين.`,
+        { parse_mode: 'HTML', disable_web_page_preview: true }
+      )
+      .catch(() => undefined);
+  }
+  if (done) {
+    await askForRatings(ticket);
+  } else {
+    for (const p of [ticket.requester, ticket.partner]) {
+      await dm(p.telegramId, {
+        ar: `❌ الوسيط ألغى التذكرة #${ticket.number}. تگدر تطلب وسيط من جديد من قسم الوساطة إذا تحتاج.`,
+        en: `❌ The middleman cancelled ticket #${ticket.number}. You can request a middleman again from the mediation section.`,
+      });
+    }
+  }
   return ticket;
 }
 

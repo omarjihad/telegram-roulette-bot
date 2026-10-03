@@ -244,11 +244,13 @@ export async function confirmShareSent(telegramId: number, userPrizeId: string, 
  */
 export async function recordSharedCard(resultId: string, fromId: number, inlineMessageId?: string) {
   const m = resultId.match(/^cs_([A-Za-z0-9_-]{10})_/);
-  if (!m || !inlineMessageId) return false;
+  if (!m) return false;
+  // Without an inline message id, each report is still one chat the card reached.
+  const sentId = inlineMessageId || `${resultId}#${Date.now()}`;
   const task = await ClaimTask.findOne({ token: m[1], referrerTelegramId: fromId });
   if (!task || task.status !== 'pending') return false;
-  if (!task.sharedInlineIds.includes(inlineMessageId)) {
-    task.sharedInlineIds.push(inlineMessageId);
+  if (!task.sharedInlineIds.includes(sentId)) {
+    task.sharedInlineIds.push(sentId);
     await task.save();
     await completeIfDone(task);
   }
