@@ -4,7 +4,7 @@ import { spinLimiter, claimLimiter, purchaseLimiter } from '../middleware/rateLi
 import { getMe, getForcedSubStatus, postLanguage } from '../controllers/user.controller';
 import { requestCaptcha, submitCaptcha } from '../controllers/captcha.controller';
 import { getWheelStatus, spin, spinWithPoints, getWheelPrizes, getRecentDailyWins } from '../controllers/roulette.controller';
-import { listMyInventory, claimPrize, shareCard } from '../controllers/inventory.controller';
+import { listMyInventory, claimPrize, shareCard, postClaimAdStep, postClaimShareSent } from '../controllers/inventory.controller';
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getStoreProducts, postStorePurchase } from '../controllers/store.controller';
@@ -54,6 +54,8 @@ router.post('/tasks/:id/claim', postClaimTask);
 router.get('/inventory', listMyInventory);
 router.post('/inventory/claim', claimLimiter, claimPrize);
 router.post('/inventory/share-card', shareCard);
+router.post('/inventory/claim-steps/ad', claimLimiter, postClaimAdStep);
+router.post('/inventory/claim-steps/share-sent', postClaimShareSent);
 
 router.get('/referrals', getMyReferrals);
 router.post('/referrals/milestone/claim', postClaimReferralMilestone);

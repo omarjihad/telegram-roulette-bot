@@ -85,7 +85,10 @@ export function DailyLoginModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div style={{ fontSize: 38 }}>🔥</div>
+        <div className="daily-banner" aria-hidden="true">
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/daily.svg)' }} />
+          <span className="art-shade" />
+        </div>
         <h2 style={{ margin: '4px 0' }}>{tr('تسجيل الدخول اليومي', 'Daily login')}</h2>
         <p className="card-sub" style={{ marginTop: 6, lineHeight: 1.6 }}>{subtitle}</p>
         <div className="daily-grid">

@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { GamesResponse, SnakeRound } from '../types';
-import { LoadingScreen } from '../components/Common';
+import { LoadingScreen, SectionHero } from '../components/Common';
 import { SnakeGame } from '../components/SnakeGame';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { useCountdown } from '../hooks/useCountdown';
 import { claimAfterAd, showRewardedAd } from '../services/adsgram';
-import { AdTaskCard, adErrorMessage } from '../components/AdTaskCard';
+import { adErrorMessage } from '../components/AdTaskCard';
 
 type Result = { reward: number; food: number; died: boolean };
 
@@ -82,10 +82,12 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
   const { snake } = data;
   return (
     <div className="games-page">
-      <div className="header-row">
-        <h2 className="page-title" style={{ margin: 0 }}>{tr('🎮 العب واربح', '🎮 Play & earn')}</h2>
-        <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={onBack}>{tr('رجوع', 'Back')}</button>
-      </div>
+      <SectionHero
+        art="snake"
+        title={tr('🐍 لعبة الحية', '🐍 Snake')}
+        subtitle={tr('كُل التفاح واجمع نقاط للعجلة', 'Eat apples and collect wheel points')}
+        onBack={onBack}
+      />
 
       {data.comingSoon && (
         <div className="games-soon-banner">
@@ -114,7 +116,6 @@ export function GamesPage({ onBack, refreshMe }: { onBack: () => void; refreshMe
         )}
       </div>
 
-      <AdTaskCard onEarned={refreshMe} />
 
       {result && (
         <div className="modal-backdrop" onClick={() => setResult(null)}>

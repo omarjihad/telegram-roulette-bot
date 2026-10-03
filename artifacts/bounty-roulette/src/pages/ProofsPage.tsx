@@ -3,6 +3,7 @@ import { getLang, locale, tr } from '../i18n';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
 import { api } from '../services/api';
 import { ProofPostView, ProofsResponse } from '../types';
+import { SectionHero } from '../components/Common';
 
 function openLink(url: string) {
   const tg = getTelegramWebApp();
@@ -116,20 +117,17 @@ export function ProofsPage({ onBack, isAdmin = false }: { onBack: () => void; is
 
   return (
     <div className="proofs-page">
-      <div className="header-row">
-        <h2 className="page-title" style={{ margin: 0 }}>{tr('📸 قناة الإثباتات', '📸 Proofs')}</h2>
-        <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={onBack}>{tr('رجوع', 'Back')}</button>
-      </div>
-
-      <div className="proofs-hero">
-        <div className="proofs-hero-icon">🏆</div>
-        <div className="proofs-hero-copy">
-          <b>{tr('جوائز حقيقية تسلّمت للفائزين', 'Real prizes delivered to winners')}</b>
-          <span>{tr('كل منشور هنا إثبات تسليم من قناتنا الرسمية', 'Every post here is a delivery proof from our official channel')}</span>
+      <SectionHero
+        art="proofs"
+        title={tr('📸 قناة الإثباتات', '📸 Proofs')}
+        subtitle={tr('جوائز حقيقية تسلّمت للفائزين، من قناتنا الرسمية', 'Real prizes delivered to winners, from our official channel')}
+        onBack={onBack}
+      >
+        <div className="proofs-hero-row">
           <bdi dir="ltr" className="proofs-handle">@{channel}</bdi>
+          <button className="btn btn-primary proofs-join" onClick={() => openLink(channelUrl)}>{tr('📢 انضم', '📢 Join')}</button>
         </div>
-        <button className="btn btn-primary proofs-join" onClick={() => openLink(channelUrl)}>{tr('📢 انضم', '📢 Join')}</button>
-      </div>
+      </SectionHero>
 
       {error && (
         <div className="card ex-empty">

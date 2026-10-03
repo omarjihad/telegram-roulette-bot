@@ -3,7 +3,17 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { UserPrize } from '../models/UserPrize';
 import { ClaimTask } from '../models/ClaimTask';
 import { requestClaim } from '../services/withdrawal.service';
-import { buildTaskLink } from '../services/claimTask.service';
+import {
+  assertCanShare,
+  buildTaskLink,
+  CLAIM_SHARES_REQUIRED,
+  completeClaimAdStep,
+  confirmShareSent,
+  currentStep,
+  rememberSharePrepared,
+  shareCount,
+} from '../services/claimTask.service';
+import { nanoid } from 'nanoid';
 import { prizeImageUrl } from '../services/prize.service';
 import { getSettings } from '../models/Settings';
 import { env } from '../config/env';
@@ -21,6 +31,7 @@ export const listMyInventory = asyncHandler(async (req: Request, res: Response) 
   const claimableItemIds = items.filter((i) => i.source === 'wheel' || i.source === 'daily').map((i) => i._id);
   const tasks = await ClaimTask.find({ userPrize: { $in: claimableItemIds } });
   const taskByUserPrize = new Map(tasks.map((t) => [String(t.userPrize), t]));
+  const settings = await getSettings();
 
   res.json({
     ok: true,
@@ -42,6 +53,13 @@ export const listMyInventory = asyncHandler(async (req: Request, res: Response) 
               requiredCount: task.requiredCount,
               creditedCount: task.creditedCount,
               status: task.status,
+              // Step-by-step claim: 1 ad, 2 share with friends, 3 invites (4 = all done).
+              steps: task.steps,
+              step: currentStep(task),
+              adDone: Boolean(task.adWatchedAt),
+              shares: shareCount(task),
+              sharesRequired: task.shareRequired ?? CLAIM_SHARES_REQUIRED,
+              adBlockId: settings.adsgramBlockId,
             }
           : null,
       };
@@ -89,12 +107,15 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
 
   const userPrize = await UserPrize.findOne({ _id: userPrizeId, telegramId: req.telegramId });
   if (!userPrize) throw new AppError('Prize not found', 404, 'NOT_FOUND');
-  if (userPrize.source !== 'wheel') {
+  if (userPrize.source !== 'wheel' && userPrize.source !== 'daily') {
     throw new AppError('This prize has no referral link to share', 422, 'VALIDATION_ERROR');
   }
 
-  const task = await ClaimTask.findOne({ userPrize: userPrize._id });
-  if (!task) throw new AppError('No referral task found for this prize', 404, 'NOT_FOUND');
+  // Sharing is step 2: it opens after the ad (step 1).
+  const task = await assertCanShare(req.telegramId!, userPrizeId);
+  // Each share window gets its own id, so Telegram's report of where it was sent
+  // (chosen_inline_result "cs_<token>_<nonce>") can be matched back to this task.
+  const resultId = `cs_${task.token}_${nanoid(8)}`;
 
   const link = buildTaskLink(task.token);
   if (!link) throw new AppError('BOT_USERNAME is not configured on the server', 500, 'CONFIG_ERROR');
@@ -121,7 +142,7 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
   const result: Record<string, unknown> = photoUrl
     ? {
         type: 'photo',
-        id: '1',
+        id: resultId,
         photo_url: photoUrl,
         thumbnail_url: photoUrl,
         caption,
@@ -129,7 +150,7 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
       }
     : {
         type: 'article',
-        id: '1',
+        id: resultId,
         title: t(`ربحت ${userPrize.prizeNameSnapshot} 🎉`, `I won ${userPrize.prizeNameSnapshot} 🎉`),
         input_message_content: { message_text: caption },
         reply_markup: replyMarkup,
@@ -154,10 +175,23 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
       throw new Error(data.description || 'savePreparedInlineMessage failed');
     }
     preparedMessageId = data.result.id;
+    await rememberSharePrepared(task._id as never, preparedMessageId);
   } catch (err) {
     logger.error({ err, telegramId: req.telegramId }, 'failed to prepare share card');
     throw new AppError(t('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية', 'Could not prepare the share card, please try again'), 502, 'SEND_FAILED');
   }
 
   res.json({ ok: true, preparedMessageId });
+});
+
+/** Step 1 of claiming: an ad watched to the end. */
+export const postClaimAdStep = asyncHandler(async (req: Request, res: Response) => {
+  const { userPrizeId } = req.body as { userPrizeId?: string };
+  res.json({ ok: true, ...(await completeClaimAdStep(req.telegramId!, String(userPrizeId ?? ''))) });
+});
+
+/** Step 2: Telegram confirmed (in the Mini App) that the share window was sent. */
+export const postClaimShareSent = asyncHandler(async (req: Request, res: Response) => {
+  const { userPrizeId, preparedMessageId } = req.body as { userPrizeId?: string; preparedMessageId?: string };
+  res.json({ ok: true, ...(await confirmShareSent(req.telegramId!, String(userPrizeId ?? ''), String(preparedMessageId ?? ''))) });
 });

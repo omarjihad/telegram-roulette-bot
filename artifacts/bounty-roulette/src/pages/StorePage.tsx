@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { tr } from '../i18n';
+import { SectionHero } from '../components/Common';
 import { api, ApiError } from '../services/api';
 import { LoadingScreen, EmptyState, Toast } from '../components/Common';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { haptic } from '../hooks/useTelegramWebApp';
-import { Store, ArrowRight, Coins, ShoppingCart } from 'lucide-react';
+import { Coins, ShoppingCart } from 'lucide-react';
 
 interface StoreProduct {
   key: string;
@@ -50,14 +51,7 @@ export function StorePage({ spinCredits, onBack, refreshMe }: { spinCredits: num
 
   return (
     <div>
-      <div className="header-row">
-        <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-cyan)' }}>
-          <Store size={24} /> {tr('متجر القراصنة', 'Pirate store')}
-        </h2>
-        <button className="pill" style={{ cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onBack}>
-          <ArrowRight size={16} /> {tr('العودة', 'Back')}
-        </button>
-      </div>
+      <SectionHero art="store" title={tr('🏪 متجر القراصنة', '🏪 Pirate store')} subtitle={tr('بدّل فرّاتك بجوائز حقيقية', 'Swap your spins for real prizes')} onBack={onBack} />
 
       <div
         className="card"

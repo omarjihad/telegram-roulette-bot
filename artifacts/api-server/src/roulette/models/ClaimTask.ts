@@ -20,6 +20,16 @@ export interface IClaimTask extends Document {
   status: ClaimTaskStatus;
   expiresAt: Date; // mirrors the UserPrize's own expiry — same 24h window
   completedAt?: Date | null;
+  // Step-by-step claim (prizes won after it was introduced): 1) watch an ad, 2) share the
+  // prize card with 3 friends, 3) the invites above. Older tasks are invites only.
+  steps: boolean;
+  adWatchedAt?: Date | null;
+  shareRequired: number;
+  // Chats the card reached, as reported by Telegram (one inline message per chat).
+  sharedInlineIds: string[];
+  // Share windows we opened, and the ones the Mini App confirmed were sent.
+  sharePreparedIds: string[];
+  shareConfirmedIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +45,12 @@ const claimTaskSchema = new Schema<IClaimTask>(
     status: { type: String, enum: ['pending', 'completed', 'expired'], default: 'pending', index: true },
     expiresAt: { type: Date, required: true, index: true },
     completedAt: { type: Date, default: null },
+    steps: { type: Boolean, default: false },
+    adWatchedAt: { type: Date, default: null },
+    shareRequired: { type: Number, default: 3 },
+    sharedInlineIds: { type: [String], default: [] },
+    sharePreparedIds: { type: [String], default: [] },
+    shareConfirmedIds: { type: [String], default: [] },
   },
   { timestamps: true }
 );

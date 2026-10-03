@@ -6,6 +6,51 @@ import { getSettings } from '../models/Settings';
 import { env } from '../config/env';
 import { createNotification } from './notification.service';
 import { logger } from '../config/logger';
+import { AppError } from '../utils/AppError';
+import { t } from '../i18n';
+import { consumeAdView } from './games.service';
+
+/** Friends the prize card must be shared with (step 2 of a step-by-step claim). */
+export const CLAIM_SHARES_REQUIRED = 3;
+
+type TaskLike = Pick<IClaimTask, 'steps' | 'adWatchedAt' | 'shareRequired' | 'sharedInlineIds' | 'shareConfirmedIds' | 'creditedCount' | 'requiredCount'>;
+
+/**
+ * Chats the card was shared to. Telegram reports each chat a prepared message reaches
+ * (with inline feedback on in @BotFather); without that, each share the Mini App saw
+ * succeed counts as one.
+ */
+export function shareCount(task: Pick<IClaimTask, 'sharedInlineIds' | 'shareConfirmedIds'>) {
+  return Math.max(task.sharedInlineIds?.length ?? 0, task.shareConfirmedIds?.length ?? 0);
+}
+
+/** Which step a task is on: 1 ad, 2 share, 3 invites, 4 all done. Old tasks start at 3. */
+export function currentStep(task: TaskLike) {
+  if (task.steps) {
+    if (!task.adWatchedAt) return 1;
+    if (shareCount(task) < (task.shareRequired ?? CLAIM_SHARES_REQUIRED)) return 2;
+  }
+  return task.creditedCount >= task.requiredCount ? 4 : 3;
+}
+
+/** Marks the task completed once every step is done, and tells the winner. */
+async function completeIfDone(task: HydratedDocument<IClaimTask>) {
+  if (task.status !== 'pending' || currentStep(task) !== 4) return false;
+  task.status = 'completed';
+  task.completedAt = new Date();
+  await task.save();
+  await createNotification({
+    userId: task.user,
+    telegramId: task.referrerTelegramId,
+    type: 'referral_progress',
+    title: { ar: '🎉 اكتملت مهام الاستلام', en: '🎉 Claim tasks complete' },
+    body: {
+      ar: 'أكملت كل مهام هذه الجائزة. تقدر الحين تروح للحقيبة وتضغط "استلام".',
+      en: 'You finished every task for this prize. Go to your inventory and tap "Claim".',
+    },
+  }).catch((err) => logger.warn({ err }, 'failed to notify claim task completion'));
+  return true;
+}
 
 /**
  * Called right after a wheel prize is granted. Creates the prize's own, unique
@@ -31,6 +76,8 @@ export async function createClaimTaskForPrize(
         creditedCount: 0,
         status: 'pending',
         expiresAt: userPrize.expiresAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        steps: true,
+        shareRequired: CLAIM_SHARES_REQUIRED,
       },
     ],
     { session: options.session }
@@ -85,21 +132,11 @@ export async function creditReferralToTask(taskId: mongoose.Types.ObjectId) {
 
   task.creditedCount += 1;
 
-  if (task.creditedCount >= task.requiredCount) {
-    task.status = 'completed';
-    task.completedAt = new Date();
+  if (currentStep(task) === 4) {
+    await completeIfDone(task);
+  } else if (task.creditedCount >= task.requiredCount) {
+    // Invites are done but an earlier step (ad / share) isn't yet.
     await task.save();
-
-    await createNotification({
-      userId: task.user,
-      telegramId: task.referrerTelegramId,
-      type: 'referral_progress',
-      title: { ar: '🎉 اكتملت مهمة الدعوات', en: '🎉 Invite task complete' },
-      body: {
-        ar: 'أكملت عدد الدعوات المطلوب لهذه الجائزة. تقدر الحين تروح للحقيبة وتضغط "استلام".',
-        en: 'You reached the invites needed for this prize. Go to your inventory and tap "Claim".',
-      },
-    });
   } else {
     await task.save();
     const remaining = task.requiredCount - task.creditedCount;
@@ -142,4 +179,65 @@ export async function uncreditReferralFromTask(taskId: mongoose.Types.ObjectId):
 /** Marks a task expired (called from the expiration worker alongside its UserPrize). */
 export async function expireClaimTaskForUserPrize(userPrizeId: mongoose.Types.ObjectId | string) {
   await ClaimTask.updateOne({ userPrize: userPrizeId, status: 'pending' }, { status: 'expired' });
+}
+
+async function pendingTaskFor(telegramId: number, userPrizeId: string) {
+  if (!mongoose.isValidObjectId(userPrizeId)) throw new AppError('Prize not found', 404, 'NOT_FOUND');
+  const task = await ClaimTask.findOne({ userPrize: userPrizeId, referrerTelegramId: telegramId });
+  if (!task) throw new AppError(t('ما لگينا مهام هذي الجائزة', 'No tasks found for this prize'), 404, 'NOT_FOUND');
+  if (task.status === 'expired') throw new AppError(t('انتهى وقت هذي الجائزة', 'This prize has expired'), 409, 'EXPIRED');
+  return task;
+}
+
+/** Step 1: an ad watched to the end (confirmed by Adsgram when the reward key is set). */
+export async function completeClaimAdStep(telegramId: number, userPrizeId: string) {
+  const task = await pendingTaskFor(telegramId, userPrizeId);
+  if (!task.adWatchedAt) {
+    await consumeAdView(telegramId, 'claim_task');
+    task.adWatchedAt = new Date();
+    await task.save();
+    await completeIfDone(task);
+  }
+  return { step: currentStep(task) };
+}
+
+/** Step 2 needs step 1 first; the share window itself is prepared by the inventory controller. */
+export async function assertCanShare(telegramId: number, userPrizeId: string) {
+  const task = await pendingTaskFor(telegramId, userPrizeId);
+  if (task.steps && !task.adWatchedAt) {
+    throw new AppError(t('كمّل المهمة الأولى أولاً', 'Finish the first task first'), 409, 'STEP_LOCKED');
+  }
+  return task;
+}
+
+export async function rememberSharePrepared(taskId: mongoose.Types.ObjectId, preparedId: string) {
+  await ClaimTask.updateOne({ _id: taskId }, { $push: { sharePreparedIds: { $each: [preparedId], $slice: -30 } } });
+}
+
+/** The Mini App saw Telegram confirm a share window was sent. Each window counts once. */
+export async function confirmShareSent(telegramId: number, userPrizeId: string, preparedId: string) {
+  const task = await pendingTaskFor(telegramId, userPrizeId);
+  if (task.sharePreparedIds.includes(preparedId) && !task.shareConfirmedIds.includes(preparedId)) {
+    task.shareConfirmedIds.push(preparedId);
+    await task.save();
+    await completeIfDone(task);
+  }
+  return { shares: shareCount(task), required: task.shareRequired, step: currentStep(task) };
+}
+
+/**
+ * Telegram's chosen_inline_result for a shared prize card (result id "cs_<token>_<nonce>"):
+ * every chat it reached arrives as its own inline message.
+ */
+export async function recordSharedCard(resultId: string, fromId: number, inlineMessageId?: string) {
+  const m = resultId.match(/^cs_([A-Za-z0-9_-]{10})_/);
+  if (!m || !inlineMessageId) return false;
+  const task = await ClaimTask.findOne({ token: m[1], referrerTelegramId: fromId });
+  if (!task || task.status !== 'pending') return false;
+  if (!task.sharedInlineIds.includes(inlineMessageId)) {
+    task.sharedInlineIds.push(inlineMessageId);
+    await task.save();
+    await completeIfDone(task);
+  }
+  return true;
 }

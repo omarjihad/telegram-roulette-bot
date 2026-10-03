@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset=".45" stop-color="#9a3412"/><stop offset=".8" stop-color="#f59e0b"/><stop offset="1" stop-color="#fcd34d"/></linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff7ed"/><stop offset=".5" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></radialGradient>
+    <linearGradient id="brick" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#78350f"/><stop offset=".5" stop-color="#b45309"/><stop offset="1" stop-color="#78350f"/></linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d97706"/><stop offset="1" stop-color="#78350f"/></linearGradient>
+    <pattern id="bricks" width="24" height="12" patternUnits="userSpaceOnUse"><path d="M0 12h24M12 0v6M0 6h24M24 6v6M0 6v6" stroke="#451a03" stroke-opacity=".35" stroke-width="1.2" fill="none"/></pattern>
+  </defs>
+  <rect width="800" height="400" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".7"><circle cx="70" cy="40" r="1.6"/><circle cx="150" cy="80" r="1.2"/><circle cx="260" cy="30" r="1.6"/><circle cx="600" cy="50" r="1.2"/><circle cx="700" cy="25" r="1.6"/><circle cx="760" cy="90" r="1.2"/></g>
+  <circle cx="400" cy="170" r="150" fill="url(#sun)"/>
+  <!-- ziggurat -->
+  <g transform="translate(400 330)">
+    <path d="M-280 0h560l-30-64h-500z" fill="url(#brick)"/><path d="M-280 0h560l-30-64h-500z" fill="url(#bricks)"/>
+    <path d="M-210 -64h420l-26-56h-368z" fill="url(#brick)"/><path d="M-210 -64h420l-26-56h-368z" fill="url(#bricks)"/>
+    <path d="M-140 -120h280l-22-46h-236z" fill="url(#brick)"/><path d="M-140 -120h280l-22-46h-236z" fill="url(#bricks)"/>
+    <rect x="-70" y="-206" width="140" height="40" fill="#92400e"/><rect x="-70" y="-206" width="140" height="40" fill="url(#bricks)"/>
+    <rect x="-18" y="-196" width="36" height="30" rx="4" fill="#451a03"/>
+    <!-- stairs -->
+    <path d="M-30 0h60l-14-206h-32z" fill="#fbbf24" opacity=".9"/>
+    <g stroke="#92400e" stroke-width="2" opacity=".6"><path d="M-29 -20h58M-28 -40h56M-27 -60h54M-26 -80h52M-25 -100h50M-24 -120h48M-23 -140h46M-22 -160h44M-21 -180h42"/></g>
+    <path d="M-250 -32h40M210 -32h40M-180 -92h30M150 -92h30" stroke="#fde68a" stroke-width="3" opacity=".35"/>
+  </g>
+  <!-- dunes & palms -->
+  <path d="M0 340q120-40 240-10t260 0 300-20V400H0z" fill="url(#sand)"/>
+  <g fill="#1c1917" opacity=".9">
+    <g transform="translate(90 340)"><path d="M0 0q4-60-2-110" stroke="#1c1917" stroke-width="7" fill="none"/><path d="M-2-110q-40-6-60 18q30-16 60-12zm0 0q36-14 62 6q-30-8-62-2zm0 0q-14-34-44-40q26 12 44 40zm0 0q16-32 46-34q-28 10-46 34z"/></g>
+    <g transform="translate(720 345) scale(.8)"><path d="M0 0q4-60-2-110" stroke="#1c1917" stroke-width="7" fill="none"/><path d="M-2-110q-40-6-60 18q30-16 60-12zm0 0q36-14 62 6q-30-8-62-2zm0 0q-14-34-44-40q26 12 44 40zm0 0q16-32 46-34q-28 10-46 34z"/></g>
+  </g>
+</svg>

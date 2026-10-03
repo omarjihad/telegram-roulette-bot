@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { tr } from '../i18n';
 import { ReferralData } from '../types';
-import { LoadingScreen } from '../components/Common';
+import { LoadingScreen, SectionHero } from '../components/Common';
 import { api, ApiError } from '../services/api';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
@@ -33,7 +33,7 @@ export function TasksPage({ refreshMe }: { refreshMe?: () => void }) {
 
   return (
     <div>
-      <h2 className="page-title">{tr('🎯 المهام', '🎯 Tasks')}</h2>
+      <SectionHero art="tasks" title={tr('🎯 المهام', '🎯 Tasks')} subtitle={tr('شاهد الإعلانات وكمّل المهام واجمع نقاط', 'Watch ads, finish tasks and collect points')} />
 
       <AdTaskCard onEarned={refreshMe} />
 

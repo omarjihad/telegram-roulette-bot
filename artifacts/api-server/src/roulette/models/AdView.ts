@@ -9,7 +9,7 @@ export interface IAdView extends Document {
   telegramId: number;
   source: 'adsgram_callback' | 'client';
   consumedAt?: Date | null;
-  consumedFor?: 'ad_task' | 'snake_round' | null;
+  consumedFor?: 'ad_task' | 'snake_round' | 'claim_task' | null;
   createdAt: Date;
 }
 
@@ -18,7 +18,7 @@ const adViewSchema = new Schema<IAdView>(
     telegramId: { type: Number, required: true, index: true },
     source: { type: String, enum: ['adsgram_callback', 'client'], required: true },
     consumedAt: { type: Date, default: null },
-    consumedFor: { type: String, enum: ['ad_task', 'snake_round', null], default: null },
+    consumedFor: { type: String, enum: ['ad_task', 'snake_round', 'claim_task', null], default: null },
   },
   { timestamps: true }
 );

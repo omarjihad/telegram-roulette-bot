@@ -72,7 +72,7 @@ export async function requestClaim(telegramId: number, userPrizeId: string) {
       const remaining = task ? Math.max(0, task.requiredCount - task.creditedCount) : null;
       throw new AppError(
         remaining !== null
-          ? `You still need ${remaining} more qualified referral(s) to claim this prize`
+          ? t('كمّل مهام الاستلام أولاً (إعلان، مشاركة، دعوات)', 'Finish the claim tasks first (ad, share, invites)')
           : 'This prize has no active invite task',
         409,
         'REFERRALS_REQUIRED'

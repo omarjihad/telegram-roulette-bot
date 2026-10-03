@@ -10,6 +10,7 @@ import { registerAdminCommands } from './adminCommands';
 import { registerExchangeActions } from './exchangeActions';
 import { attachExchangeBot } from '../services/exchange.service';
 import { registerMediationActions } from './mediationActions';
+import { recordSharedCard } from '../services/claimTask.service';
 import { attachMediationBot } from '../services/mediation.service';
 
 export function createBot(enablePolling = false): TelegramBot {
@@ -20,7 +21,7 @@ export function createBot(enablePolling = false): TelegramBot {
   const bot = new TelegramBot(env.BOT_TOKEN, {
     polling: enablePolling ? {
       params: {
-        allowed_updates: ['message', 'callback_query', 'my_chat_member', 'chat_member', 'chat_join_request'],
+        allowed_updates: ['message', 'callback_query', 'my_chat_member', 'chat_member', 'chat_join_request', 'chosen_inline_result'],
       },
     } : false,
   });
@@ -34,6 +35,12 @@ export function createBot(enablePolling = false): TelegramBot {
   registerAdminCommands(bot);
   registerExchangeActions(bot);
   registerMediationActions(bot);
+  // A shared prize card reached a chat (needs inline feedback on in @BotFather).
+  bot.on('chosen_inline_result', (result) => {
+    void recordSharedCard(result.result_id, result.from.id, result.inline_message_id).catch((err) =>
+      logger.warn({ err }, 'failed to record shared prize card')
+    );
+  });
   registerMemberEventHandlers(bot);
 
   setBotInstance(bot);

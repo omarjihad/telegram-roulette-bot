@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1917"/><stop offset=".55" stop-color="#78350f"/><stop offset="1" stop-color="#d97706"/></linearGradient>
+    <radialGradient id="glow" cx=".68" cy=".45" r=".45"><stop offset="0" stop-color="#fde68a" stop-opacity=".85"/><stop offset="1" stop-color="#fde68a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#92400e"/><stop offset="1" stop-color="#451a03"/></linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5f3fc"/><stop offset="1" stop-color="#0891b2"/></linearGradient>
+    <linearGradient id="gem2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5d0fe"/><stop offset="1" stop-color="#a21caf"/></linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#bg)"/>
+  <rect width="800" height="400" fill="url(#glow)"/>
+  <g transform="translate(420 150)">
+    <!-- lid -->
+    <path d="M10 40C10 0 50-30 140-30s130 30 130 70z" fill="url(#wood)" transform="rotate(-14 10 40)"/>
+    <!-- light -->
+    <path d="M40 60L-30-160h400L240 60z" fill="#fef9c3" opacity=".22"/>
+    <!-- gems -->
+    <path d="M90 40l28-34h40l28 34-48 44z" fill="url(#gem)"/>
+    <path d="M170 46l18-22h28l18 22-32 30z" fill="url(#gem2)"/>
+    <circle cx="70" cy="56" r="16" fill="#fbbf24"/><circle cx="112" cy="62" r="14" fill="#f59e0b"/><circle cx="200" cy="64" r="15" fill="#fbbf24"/><circle cx="236" cy="58" r="12" fill="#f59e0b"/>
+    <!-- body -->
+    <rect x="10" y="56" width="260" height="150" rx="16" fill="url(#wood)"/>
+    <rect x="10" y="56" width="260" height="22" fill="#fbbf24"/><rect x="10" y="184" width="260" height="22" rx="8" fill="#b45309"/>
+    <rect x="40" y="56" width="18" height="150" fill="#fbbf24" opacity=".8"/><rect x="222" y="56" width="18" height="150" fill="#fbbf24" opacity=".8"/>
+    <rect x="118" y="96" width="44" height="54" rx="10" fill="#fde047"/><circle cx="140" cy="118" r="8" fill="#451a03"/><rect x="136" y="122" width="8" height="16" fill="#451a03"/>
+  </g>
+  <g fill="#fef08a"><path d="M380 80l6 16 16 6-16 6-6 16-6-16-16-6 16-6z"/><path d="M730 110l5 12 12 5-12 5-5 12-5-12-12-5 12-5z"/><path d="M360 300l4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/></g>
+  <g fill="#fbbf24" opacity=".9"><ellipse cx="150" cy="340" rx="26" ry="9"/><ellipse cx="150" cy="330" rx="26" ry="9" fill="#fde047"/><ellipse cx="210" cy="350" rx="22" ry="8"/><ellipse cx="210" cy="341" rx="22" ry="8" fill="#fde047"/></g>
+</svg>

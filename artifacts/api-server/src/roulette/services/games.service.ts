@@ -58,7 +58,7 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
  * the Reward URL count; the client retries for a few seconds because the callback can land
  * just after the ad closes. Without a key (testing), the client's word is taken.
  */
-async function consumeAdView(telegramId: number, purpose: 'ad_task' | 'snake_round') {
+export async function consumeAdView(telegramId: number, purpose: 'ad_task' | 'snake_round' | 'claim_task') {
   if (!env.ADSGRAM_REWARD_KEY) {
     await AdView.create({ telegramId, source: 'client', consumedAt: new Date(), consumedFor: purpose });
     return;

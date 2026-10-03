@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b0764"/><stop offset=".55" stop-color="#7c2d12"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+    <radialGradient id="glow" cx=".72" cy=".42" r=".5"><stop offset="0" stop-color="#fde68a" stop-opacity=".55"/><stop offset="1" stop-color="#fde68a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#dc2626"/><stop offset=".5" stop-color="#f97316"/><stop offset="1" stop-color="#fde047"/></linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff7ed"/><stop offset="1" stop-color="#fed7aa"/></linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#bg)"/>
+  <rect width="800" height="400" fill="url(#glow)"/>
+  <g fill="#fff" opacity=".55"><circle cx="80" cy="60" r="2"/><circle cx="160" cy="120" r="1.5"/><circle cx="300" cy="40" r="2"/><circle cx="420" cy="90" r="1.5"/><circle cx="740" cy="50" r="2"/><circle cx="690" cy="330" r="1.5"/><circle cx="40" cy="300" r="1.5"/></g>
+  <!-- calendar -->
+  <g transform="translate(500 70) rotate(6)">
+    <rect x="0" y="0" width="210" height="230" rx="26" fill="#000" opacity=".25" transform="translate(8 10)"/>
+    <rect x="0" y="0" width="210" height="230" rx="26" fill="url(#page)"/>
+    <path d="M0 26a26 26 0 0 1 26-26h158a26 26 0 0 1 26 26v40H0z" fill="#dc2626"/>
+    <circle cx="55" cy="10" r="9" fill="#7f1d1d"/><circle cx="155" cy="10" r="9" fill="#7f1d1d"/>
+    <rect x="60" y="34" width="90" height="10" rx="5" fill="#fff" opacity=".85"/>
+    <path d="M105 92c28 30 42 52 30 82-8 20-26 32-30 32s-22-12-30-32c-12-30 2-52 30-82z" fill="url(#flame)"/>
+    <path d="M105 140c12 14 18 24 12 38-4 8-10 12-12 12s-8-4-12-12c-6-14 0-24 12-38z" fill="#fef3c7"/>
+  </g>
+  <!-- streak dots -->
+  <g transform="translate(70 300)">
+    <g fill="#fbbf24"><circle cx="0" cy="0" r="16"/><circle cx="48" cy="0" r="16"/><circle cx="96" cy="0" r="16"/><circle cx="144" cy="0" r="16"/></g>
+    <g fill="none" stroke="#fde68a" stroke-width="4" opacity=".6"><circle cx="192" cy="0" r="14"/><circle cx="240" cy="0" r="14"/><circle cx="288" cy="0" r="14"/></g>
+    <g stroke="#7c2d12" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M-6 0l4 5 8-9"/><path d="M42 0l4 5 8-9"/><path d="M90 0l4 5 8-9"/><path d="M138 0l4 5 8-9"/></g>
+  </g>
+  <!-- gifts -->
+  <g transform="translate(395 230) rotate(-10)">
+    <rect width="86" height="70" rx="10" fill="#22d3ee"/><rect x="36" width="14" height="70" fill="#fef08a"/><rect y="-16" width="96" height="22" x="-5" rx="6" fill="#06b6d4"/><rect x="36" y="-16" width="14" height="22" fill="#fde047"/>
+    <path d="M43 -16c-20-26-42-10-26 0zM43 -16c20-26 42-10 26 0z" fill="#fde047"/>
+  </g>
+  <g transform="translate(720 260) rotate(14) scale(.7)">
+    <rect width="86" height="70" rx="10" fill="#a855f7"/><rect x="36" width="14" height="70" fill="#fde68a"/><rect y="-16" width="96" height="22" x="-5" rx="6" fill="#9333ea"/>
+    <path d="M43 -16c-20-26-42-10-26 0zM43 -16c20-26 42-10 26 0z" fill="#fde68a"/>
+  </g>
+  <g fill="#fef08a"><path d="M430 60l6 16 16 6-16 6-6 16-6-16-16-6 16-6z"/><path d="M760 170l4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/><path d="M360 170l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" opacity=".8"/></g>
+</svg>

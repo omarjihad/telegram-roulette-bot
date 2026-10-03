@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { locale, tr } from '../i18n';
 import { ReferralData } from '../types';
-import { LoadingScreen } from '../components/Common';
+import { LoadingScreen, SectionHero } from '../components/Common';
 import { api, ApiError } from '../services/api';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
@@ -37,7 +37,7 @@ export function ReferralsPage() {
 
   return (
     <div>
-      <h2 className="page-title">{tr('👥 إحالاتي', '👥 My referrals')}</h2>
+      <SectionHero art="referrals" title={tr('👥 إحالاتي', '👥 My referrals')} subtitle={tr('ادعُ أصدقاءك واجمع مكافآت', 'Invite friends and collect rewards')} />
 
       <div className="card">
         <h3 className="card-title">{tr('👥 مكافأة الدعوات', '👥 Invite reward')}</h3>

@@ -47,3 +47,38 @@ export function StatusBadge({ status }: { status: string }) {
   };
   return <span className={`status-badge ${cls[status] || ''}`}>{map[status] || status}</span>;
 }
+
+/**
+ * Section banner with its own artwork (public/art/<art>.svg). In Arabic the picture is
+ * mirrored so it always sits opposite the text.
+ */
+export function SectionHero({
+  art,
+  title,
+  subtitle,
+  onBack,
+  children,
+}: {
+  art: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  onBack?: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="section-hero">
+      <span className="art-bg" style={{ backgroundImage: `url(/art/${art}.svg)` }} aria-hidden="true" />
+      <span className="art-shade" aria-hidden="true" />
+      {onBack && (
+        <button className="section-hero-back" onClick={onBack}>
+          {tr('رجوع', 'Back')}
+        </button>
+      )}
+      <div className="section-hero-copy">
+        <h2>{title}</h2>
+        {subtitle && <p>{subtitle}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}

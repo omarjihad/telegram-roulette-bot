@@ -169,7 +169,6 @@ export async function claimDailyLogin(telegramId: number) {
           { session }
         );
         await createClaimTaskForPrize(dailyPrize, {
-          requiredCount: 5,
           session,
           now,
         });

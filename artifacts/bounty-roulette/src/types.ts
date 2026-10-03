@@ -93,6 +93,13 @@ export interface InventoryItem {
     requiredCount: number;
     creditedCount: number;
     status: 'pending' | 'completed' | 'expired';
+    // Step-by-step claim: 1 ad, 2 share with 3 friends, 3 invites; 4 = all done.
+    steps?: boolean;
+    step?: number;
+    adDone?: boolean;
+    shares?: number;
+    sharesRequired?: number;
+    adBlockId?: string;
   } | null;
 }
 

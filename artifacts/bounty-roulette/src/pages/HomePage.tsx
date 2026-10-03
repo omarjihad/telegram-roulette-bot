@@ -3,7 +3,6 @@ import { ScrollText } from 'lucide-react';
 import { MeResponse } from '../types';
 import { useCountdown } from '../hooks/useCountdown';
 import { TabKey } from '../components/BottomNav';
-import { AdTaskCard } from '../components/AdTaskCard';
 import { api } from '../services/api';
 import { getLang, setLang, tr } from '../i18n';
 
@@ -116,25 +115,45 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </button>
 
-      <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
-        <span className="home-exchange-shade" />
-        <span className="home-exchange-copy">
-          <span className="home-section-label">{tr('🔄 قسم التبادل', '🔄 Exchange')}</span>
-          <strong>{tr('بدّل أو بِع حسابك في باونتي راش', 'Trade or sell your Bounty Rush account')}</strong>
-          <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
-        </span>
-        {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
-      </button>
+      {/* Quick sections, each with its own artwork. */}
+      <div className="home-tiles">
+        <button className="art-tile" onClick={onDailyLogin}>
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/daily.svg)' }} />
+          <span className="art-shade" />
+          <span className="art-tile-icon">🔥</span>
+          <strong>{tr('الدخول اليومي', 'Daily login')}</strong>
+          <small>{tr('جائزة كل 24 ساعة', 'A reward every 24h')}</small>
+        </button>
+        <button className="art-tile" onClick={() => onNavigate('tasks')}>
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/tasks.svg)' }} />
+          <span className="art-shade" />
+          <span className="art-tile-icon">🎯</span>
+          <strong>{tr('المهام', 'Tasks')}</strong>
+          <small>{tr('إعلانات ومهام بنقاط', 'Ads & tasks for points')}</small>
+        </button>
+        <button className="art-tile" onClick={() => onNavigate('inventory')}>
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/inventory.svg)' }} />
+          <span className="art-shade" />
+          <span className="art-tile-icon">🎒</span>
+          <strong>{tr('المخزون', 'Inventory')}</strong>
+          <small>{tr('جوائزك واستلامها', 'Your prizes')}</small>
+        </button>
+        <button className="art-tile" onClick={() => onNavigate('store')}>
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/store.svg)' }} />
+          <span className="art-shade" />
+          <span className="art-tile-icon">🏪</span>
+          <strong>{tr('المتجر', 'Store')}</strong>
+          <small>{tr('بدّل فرّاتك بجوائز', 'Swap spins for prizes')}</small>
+        </button>
+      </div>
 
-      {/* Delivery proofs from the official channel, shown inside the app. */}
-      <button className="home-proofs-card" onClick={() => onNavigate('proofs')}>
-        <span className="home-proofs-icon">📸</span>
-        <span className="home-contest-copy">
-          <span className="home-section-label">{tr('🏆 قناة الإثباتات', '🏆 Proofs channel')}</span>
-          <strong>{tr('شوف الجوائز اللي تسلّمت', 'See the prizes we delivered')}</strong>
-          <span>{tr('صور حقيقية لتسليم الجوائز للفائزين', 'Real photos of prizes handed to winners')}</span>
-        </span>
-        <span className="home-link-arrow">←</span>
+      <button className="art-card" onClick={() => onNavigate('games')}>
+        <span className="art-bg" style={{ backgroundImage: 'url(/art/games.svg)' }} />
+        <span className="art-shade" />
+        <span className="home-section-label">{tr('🎮 قسم الألعاب', '🎮 Games')}</span>
+        <strong>{tr('العب واربح نقاط', 'Play and earn points')}</strong>
+        <span className="art-card-sub">{tr('لعبة الحية، وألعاب جديدة جاية قريباً', 'Snake, with new games coming soon')}</span>
+        <span className="art-card-pill">{tr('ادخل ←', 'Enter →')}</span>
       </button>
 
       {me.contestEnabled !== false && (
@@ -149,47 +168,23 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </button>
       )}
 
-      <button className="home-games-card" onClick={() => onNavigate('games')}>
-        <span className="home-games-icon">🐍</span>
-        <span className="home-contest-copy">
-          <span className="home-section-label">{tr('🎮 العب واربح', '🎮 Play & earn')}</span>
-          <strong>{tr('لعبة الحية', 'Snake game')}</strong>
-          <span>{tr('العب وابدأ في الربح', 'Play and start earning')}</span>
+      <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
+        <span className="home-exchange-shade" />
+        <span className="home-exchange-copy">
+          <span className="home-section-label">{tr('🔄 قسم التبادل', '🔄 Exchange')}</span>
+          <strong>{tr('بدّل أو بِع حسابك في باونتي راش', 'Trade or sell your Bounty Rush account')}</strong>
+          <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
         </span>
-        {me.gamesPublic === false && !me.isAdmin ? <span className="games-soon-pill">{tr('قريباً', 'Soon')}</span> : <span className="home-link-arrow">←</span>}
+        {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
       </button>
 
-      {/* The rewarded-ads section, kept on the home screen so it's easy to find. */}
-      <div className="home-ads-section">
-        <div className="home-ads-label">{tr('📺 قسم الإعلانات', '📺 Ads section')}</div>
-        <AdTaskCard />
-      </div>
-
-      <button className="home-link-card home-link-daily" onClick={onDailyLogin}>
-        <span className="home-link-icon">🔥</span>
-        <span className="home-link-copy">
-          <strong>{tr('تسجيل الدخول اليومي', 'Daily login')}</strong>
-          <span>{tr('استلم جائزتك كل 24 ساعة وحافظ على الستريك', 'Collect your reward every 24 hours and keep your streak')}</span>
-        </span>
-        <span className="home-link-arrow">←</span>
-      </button>
-
-      <button className="home-link-card home-link-tasks" onClick={() => onNavigate('tasks')}>
-        <span className="home-link-icon">🎯</span>
-        <span className="home-link-copy">
-          <strong>{tr('المهام', 'Tasks')}</strong>
-          <span>{tr('أكمل المهام واحصل على نقاط إضافية', 'Complete tasks and earn extra points')}</span>
-        </span>
-        <span className="home-link-arrow">←</span>
-      </button>
-
-      <button className="home-link-card home-link-inventory" onClick={() => onNavigate('inventory')}>
-        <span className="home-link-icon">🎒</span>
-        <span className="home-link-copy">
-          <strong>{tr('المخزون', 'Inventory')}</strong>
-          <span>{tr('شوف جوائزك واستلمها قبل ما تنتهي', 'See your prizes and claim them before they expire')}</span>
-        </span>
-        <span className="home-link-arrow">←</span>
+      {/* Delivery proofs from the official channel, shown inside the app. */}
+      <button className="art-card" onClick={() => onNavigate('proofs')}>
+        <span className="art-bg" style={{ backgroundImage: 'url(/art/proofs.svg)' }} />
+        <span className="art-shade" />
+        <span className="home-section-label">{tr('🏆 قناة الإثباتات', '🏆 Proofs channel')}</span>
+        <strong>{tr('شوف الجوائز اللي تسلّمت', 'See the prizes we delivered')}</strong>
+        <span className="art-card-sub">{tr('صور حقيقية لتسليم الجوائز للفائزين', 'Real photos of prizes handed to winners')}</span>
       </button>
 
       {toast && <div className="toast">{toast}</div>}

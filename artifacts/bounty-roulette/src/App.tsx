@@ -18,6 +18,7 @@ import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
 import { ExchangePage } from './pages/ExchangePage';
 import { ProofsPage } from './pages/ProofsPage';
+import { GamesHubPage } from './pages/GamesHubPage';
 import { PreviewBanner } from './components/PreviewBanner';
 import { hasStoredLang, setLang, tr, useLang } from './i18n';
 import { isPreviewMode } from './services/preview';
@@ -179,7 +180,10 @@ export default function App() {
         {tab === 'referrals' && <ReferralsPage />}
         {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'proofs' && <ProofsPage onBack={() => setTab('home')} isAdmin={me.isAdmin} />}
-        {tab === 'games' && <GamesPage onBack={() => setTab('home')} refreshMe={loadMe} />}
+        {tab === 'games' && (
+          <GamesHubPage onBack={() => setTab('home')} onOpenSnake={() => setTab('snake')} snakeLocked={me.gamesPublic === false && !me.isAdmin} />
+        )}
+        {tab === 'snake' && <GamesPage onBack={() => setTab('games')} refreshMe={loadMe} />}
         {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setOfferLink(null); setTab('home'); }} initialListingId={listingLink} initialOfferId={offerLink} />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && (

@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { InventoryItem } from '../types';
-import { LoadingScreen, EmptyState, StatusBadge } from '../components/Common';
+import { LoadingScreen, EmptyState, StatusBadge, SectionHero } from '../components/Common';
 import { useCountdown } from '../hooks/useCountdown';
 import { haptic, getTelegramWebApp } from '../hooks/useTelegramWebApp';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { DeliveryContactGate } from '../components/DeliveryContactGate';
+import { claimAfterAd, showRewardedAd } from '../services/adsgram';
+import { adErrorMessage } from '../components/AdTaskCard';
 
 function ExpiryLabel({ expiresAt }: { expiresAt: string | null }) {
   const { label, isReady } = useCountdown(expiresAt);
@@ -16,8 +18,93 @@ function ExpiryLabel({ expiresAt }: { expiresAt: string | null }) {
   return <span className={`expiry-chip ${urgent ? 'expiry-chip-urgent' : ''}`}>⏳ {label}</span>;
 }
 
+type Task = NonNullable<InventoryItem['task']>;
+
+function Progress({ value, total }: { value: number; total: number }) {
+  return (
+    <div className="task-progress" aria-label={`${value} / ${total}`}>
+      <div className="task-progress-track">
+        <div className="task-progress-fill" style={{ width: `${Math.min(100, (value / Math.max(1, total)) * 100)}%` }} />
+      </div>
+      <span className="task-progress-count">{Math.min(value, total)}/{total}</span>
+    </div>
+  );
+}
+
+/**
+ * Claiming a gift step by step: watch an ad, share the card with 3 friends, then invite.
+ * Only the current task is explained; the next ones stay locked ("مهمة 2", "مهمة 3").
+ */
+function ClaimSteps({ task, onAd, adBusy, onCopy, onShare, sharing }: {
+  task: Task;
+  onAd: () => void;
+  adBusy: boolean;
+  onCopy: () => void;
+  onShare: () => void;
+  sharing?: boolean;
+}) {
+  const step = task.step ?? 1;
+  const shares = task.shares ?? 0;
+  const sharesRequired = task.sharesRequired ?? 3;
+  if (task.status === 'expired') {
+    return <div className="claim-steps-note claim-steps-expired">{tr('⌛ انتهت مهلة مهام الاستلام', '⌛ The claim tasks have expired')}</div>;
+  }
+  const row = (n: number, icon: string, title: string, body: React.ReactNode) => {
+    const done = step > n;
+    const current = step === n;
+    const locked = step < n;
+    return (
+      <div className={`claim-step ${done ? 'claim-step-done' : ''} ${current ? 'claim-step-current' : ''} ${locked ? 'claim-step-locked' : ''}`} key={n}>
+        <div className="claim-step-dot">{done ? '✓' : locked ? '🔒' : n}</div>
+        <div className="claim-step-main">
+          <div className="claim-step-title">
+            {locked ? tr(`مهمة ${n}`, `Task ${n}`) : <>{icon} {tr(`مهمة ${n}: `, `Task ${n}: `)}{title}</>}
+          </div>
+          {current && body}
+          {locked && <div className="claim-step-hint">{tr('تنفتح بعد ما تكمل المهمة اللي قبلها', 'Unlocks after the previous task')}</div>}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div className="claim-steps">
+      <div className="claim-steps-head">{tr('🎯 كمّل المهام حتى تستلم الجائزة', '🎯 Finish the tasks to claim this prize')}</div>
+      {row(1, '📺', tr('شاهد إعلان', 'Watch an ad'), (
+        <button className="btn btn-primary claim-step-btn" disabled={adBusy} onClick={onAd}>
+          {adBusy ? tr('جاري عرض الإعلان...', 'Showing the ad...') : tr('📺 شاهد الإعلان', '📺 Watch the ad')}
+        </button>
+      ))}
+      {row(2, '📤', tr(`أرسل رسالة المشاركة لـ ${sharesRequired} من أصدقائك`, `Send the share message to ${sharesRequired} friends`), (
+        <>
+          <div className="claim-step-hint">{tr('اضغط مشاركة، حدّد أصدقاءك من القائمة وأرسلها لهم مرة وحدة.', 'Tap share, pick your friends from the list and send it to them in one go.')}</div>
+          <Progress value={shares} total={sharesRequired} />
+          <button className="btn btn-primary claim-step-btn" onClick={onShare} disabled={sharing}>
+            {sharing ? tr('📤 جاري التجهيز...', '📤 Preparing...') : tr('📤 مشاركة مع أصدقائي', '📤 Share with my friends')}
+          </button>
+        </>
+      ))}
+      {row(3, '👥', tr(`ادعُ ${task.requiredCount} أشخاص برابطك`, `Invite ${task.requiredCount} people with your link`), (
+        <>
+          <div className="claim-step-hint">{tr('كل شخص يدخل البوت من رابطك ويكمل الاشتراك ينحسب.', 'Everyone who joins the bot through your link and completes sign-up counts.')}</div>
+          <Progress value={task.creditedCount} total={task.requiredCount} />
+          {task.link && (
+            <>
+              <div className="claim-step-link" dir="ltr">{task.link}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary claim-step-btn" onClick={onCopy}>{tr('📋 نسخ', '📋 Copy')}</button>
+                <button className="btn btn-primary claim-step-btn" onClick={onShare} disabled={sharing}>{tr('📤 مشاركة', '📤 Share')}</button>
+              </div>
+            </>
+          )}
+        </>
+      ))}
+      {step >= 4 && <div className="claim-steps-note">{tr('✅ أكملت كل المهام، تگدر تستلم الجائزة الحين', '✅ All tasks done — you can claim the prize now')}</div>}
+    </div>
+  );
+}
+
 function TaskProgress({ task, onCopy, onShare, sharing }: {
-  task: NonNullable<InventoryItem['task']>;
+  task: Task;
   onCopy: () => void;
   onShare: () => void;
   sharing?: boolean;
@@ -86,6 +173,23 @@ export function InventoryPage() {
   const [deliveryItem, setDeliveryItem] = useState<InventoryItem | null>(null);
 
   const [sharingId, setSharingId] = useState<string | null>(null);
+  const [adId, setAdId] = useState<string | null>(null);
+
+  async function watchAd(item: InventoryItem) {
+    if (!item.task || adId) return;
+    setAdId(item.id);
+    try {
+      await showRewardedAd(item.task.adBlockId || '');
+      await claimAfterAd('/inventory/claim-steps/ad', { userPrizeId: item.id });
+      haptic('medium');
+      setToast(tr('✅ تمت المهمة الأولى', '✅ First task done'));
+      await refetch();
+    } catch (err) {
+      setToast(adErrorMessage(err));
+    } finally {
+      setAdId(null);
+    }
+  }
 
   function copyLink(link: string) {
     navigator.clipboard?.writeText(link).then(() => {
@@ -108,10 +212,15 @@ export function InventoryPage() {
         if (sent) {
           setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
           haptic('light');
+          // Counts toward the "share with friends" task; Telegram's own report may add more.
+          void api
+            .post('/inventory/claim-steps/share-sent', { userPrizeId, preparedMessageId: res.preparedMessageId })
+            .catch(() => undefined)
+            .finally(() => window.setTimeout(() => void refetch(), 1500));
         }
       });
-    } catch {
-      setToast(tr('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.', 'Could not prepare the share card, please try again.'));
+    } catch (err) {
+      setToast(err instanceof ApiError && err.code === 'STEP_LOCKED' ? err.message : tr('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.', 'Could not prepare the share card, please try again.'));
     } finally {
       setSharingId(null);
     }
@@ -159,7 +268,7 @@ export function InventoryPage() {
 
   return (
     <div>
-      <h2 className="page-title">{tr('🎒 المخزون', '🎒 Inventory')}</h2>
+      <SectionHero art="inventory" title={tr('🎒 المخزون', '🎒 Inventory')} subtitle={tr('جوائزك هنا: كمّل مهامها واستلمها قبل ما تنتهي', 'Your prizes: finish their tasks and claim them before they expire')} />
 
       {items.length === 0 && (
         <EmptyState icon="🎒" title={tr('حقيبتك فارغة حالياً', 'Your inventory is empty')} subtitle={tr('روح للفرة المجانية ودور عشان تربح جوائز', 'Go to the free spin and spin to win prizes')} />
@@ -195,7 +304,17 @@ export function InventoryPage() {
               <StatusBadge status={item.status} />
             </div>
 
-            {item.status === 'active' && item.task && (
+            {item.status === 'active' && item.task?.steps && (
+              <ClaimSteps
+                task={item.task}
+                onAd={() => void watchAd(item)}
+                adBusy={adId === item.id}
+                onCopy={() => item.task?.link && copyLink(item.task.link)}
+                onShare={() => shareLink(item.id)}
+                sharing={sharingId === item.id}
+              />
+            )}
+            {item.status === 'active' && item.task && !item.task.steps && (
               <TaskProgress
                 task={item.task}
                 onCopy={() => item.task?.link && copyLink(item.task.link)}
