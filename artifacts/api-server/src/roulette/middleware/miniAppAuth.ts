@@ -5,7 +5,7 @@ import { User } from '../models/User';
 import { getSettings } from '../models/Settings';
 import { getAdminRole } from '../services/admin.service';
 import { AppError } from '../utils/AppError';
-import { getClaimTaskByToken, parseTaskTokenFromStartParam } from '../services/claimTask.service';
+import { getClaimTaskByToken, parseTaskTokenFromStartParam, recordShareOpener } from '../services/claimTask.service';
 import { parseGeneralReferralToken, registerGeneralReferralIfNew, registerReferralIfNew } from '../services/referral.service';
 import { logger } from '../config/logger';
 import { grantDemoAccess, hasDemoAccess, parseDemoToken } from '../services/demo.service';
@@ -75,6 +75,8 @@ export async function miniAppAuth(req: Request, res: Response, next: NextFunctio
       const outcome = await registerContestReferralIfNew({ newUser: user, token: contestToken, isBrandNewUser: isNew });
       logger.info({ outcome, contestToken, newUserId: user.telegramId }, 'invite race registration attempt');
     }
+    // Anyone opening a shared prize card counts toward the winner's "share with 3 friends".
+    if (taskToken) Promise.resolve().then(() => recordShareOpener(taskToken, user.telegramId)).catch(() => undefined);
     if (taskToken && (isNew || settings.demoModeEnabled)) {
       const task = await getClaimTaskByToken(taskToken);
       if (task) {

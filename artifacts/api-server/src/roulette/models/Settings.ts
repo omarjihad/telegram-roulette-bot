@@ -26,6 +26,8 @@ export interface ISettings extends Document {
   shareImageData: Buffer | null;
   shareImageMimeType: string | null;
   hasShareImage: boolean;
+  // The share image uploaded to Telegram once, reused for every share card.
+  shareImageFileId: string | null;
   // Invite race: when counting stops, which round is live, and the announced winner.
   // Invite race on/off. Off hides it everywhere in the bot and pauses all counting; data is kept.
   contestEnabled: boolean;
@@ -79,6 +81,7 @@ const settingsSchema = new Schema<ISettings>(
     shareImageData: { type: Buffer, default: null, select: false },
     shareImageMimeType: { type: String, default: null },
     hasShareImage: { type: Boolean, default: false },
+    shareImageFileId: { type: String, default: null },
     contestEnabled: { type: Boolean, default: true },
     contestEndsAt: { type: Date, default: null },
     contestMinTotalInvites: { type: Number, default: 120, min: 0 },

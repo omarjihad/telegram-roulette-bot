@@ -9,7 +9,7 @@ vi.mock('./notification.service', () => ({ createNotification: mocks.notify }));
 vi.mock('./games.service', () => ({ consumeAdView: mocks.consumeAd }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { completeClaimAdStep, confirmShareSent, currentStep, recordSharedCard, shareCount } from './claimTask.service';
+import { completeClaimAdStep, confirmShareSent, currentStep, recordShareOpener, recordSharedCard, shareCount } from './claimTask.service';
 
 function task(over: Record<string, unknown> = {}) {
   return {
@@ -76,5 +76,19 @@ describe('claim steps', () => {
     expect(tk.status).toBe('completed');
     expect(mocks.notify).toHaveBeenCalled();
     expect(await recordSharedCard('something_else', 10, 'd')).toBe(false);
+  });
+});
+
+describe('friends opening the shared card', () => {
+  it('counts each other person once, never the winner', async () => {
+    const tk = task({ adWatchedAt: new Date(), shareOpeners: [] as number[] });
+    mocks.findOne.mockResolvedValue(tk);
+    expect(await recordShareOpener('abcdefghij', 10)).toBe(false);
+    expect(await recordShareOpener('abcdefghij', 21)).toBe(true);
+    expect(await recordShareOpener('abcdefghij', 21)).toBe(false);
+    await recordShareOpener('abcdefghij', 22);
+    await recordShareOpener('abcdefghij', 23);
+    expect(shareCount(tk as never)).toBe(3);
+    expect(currentStep(tk as never)).toBe(3);
   });
 });

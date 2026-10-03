@@ -30,6 +30,8 @@ export interface IClaimTask extends Document {
   // Share windows we opened, and the ones the Mini App confirmed were sent.
   sharePreparedIds: string[];
   shareConfirmedIds: string[];
+  // People (other than the winner) who opened the shared card's link.
+  shareOpeners: number[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +53,7 @@ const claimTaskSchema = new Schema<IClaimTask>(
     sharedInlineIds: { type: [String], default: [] },
     sharePreparedIds: { type: [String], default: [] },
     shareConfirmedIds: { type: [String], default: [] },
+    shareOpeners: { type: [Number], default: [] },
   },
   { timestamps: true }
 );

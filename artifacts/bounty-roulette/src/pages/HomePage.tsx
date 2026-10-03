@@ -99,6 +99,16 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </section>
 
+      <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
+        <span className="home-exchange-shade" />
+        <span className="home-exchange-copy">
+          <span className="home-section-label">{tr('🔄 قسم التبادل', '🔄 Exchange')}</span>
+          <strong>{tr('بدّل أو بِع حسابك في باونتي راش', 'Trade or sell your Bounty Rush account')}</strong>
+          <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
+        </span>
+        {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
+      </button>
+
       <button className="home-spin-card" onClick={() => onNavigate('wheel')}>
         <div className="home-spin-art" aria-hidden="true">🎡</div>
         <div className="home-spin-content">
@@ -167,16 +177,6 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
           <span className="home-link-arrow">←</span>
         </button>
       )}
-
-      <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
-        <span className="home-exchange-shade" />
-        <span className="home-exchange-copy">
-          <span className="home-section-label">{tr('🔄 قسم التبادل', '🔄 Exchange')}</span>
-          <strong>{tr('بدّل أو بِع حسابك في باونتي راش', 'Trade or sell your Bounty Rush account')}</strong>
-          <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
-        </span>
-        {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
-      </button>
 
       {/* Delivery proofs from the official channel, shown inside the app. */}
       <button className="art-card" onClick={() => onNavigate('proofs')}>

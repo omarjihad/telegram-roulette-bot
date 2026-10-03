@@ -14,6 +14,7 @@ import {
   shareCount,
 } from '../services/claimTask.service';
 import { nanoid } from 'nanoid';
+import { prepareShareCard } from '../services/shareCard.service';
 import { prizeImageUrl } from '../services/prize.service';
 import { getSettings } from '../models/Settings';
 import { env } from '../config/env';
@@ -126,58 +127,19 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
       `🎉 I won ${userPrize.prizeNameSnapshot} on the MF Roulette bot\n\nGrab your prize before it’s gone — prizes are limited ⏳\n\nBot link: ${link}`
     );
 
-  const replyMarkup = { inline_keyboard: [[{ text: t('🚀 ابدأ الربح الآن', '🚀 Start winning now'), url: link }]] };
-  const settings = await getSettings();
-
-  // Resolve the photo URL (if any) up front — a config problem here is distinct from an
-  // actual Telegram API failure and deserves its own clear error, not the generic one.
-  let photoUrl: string | null = null;
-  if (settings.hasShareImage) {
-    if (!env.MINI_APP_URL) {
-      throw new AppError('MINI_APP_URL يجب أن يكون معبّى بالسيرفر عشان يرسل صور المشاركة', 500, 'CONFIG_ERROR');
-    }
-    photoUrl = `${env.MINI_APP_URL.replace(/\/$/, '')}/api/settings/share-image`;
-  }
-
-  const result: Record<string, unknown> = photoUrl
-    ? {
-        type: 'photo',
-        id: resultId,
-        photo_url: photoUrl,
-        thumbnail_url: photoUrl,
-        caption,
-        reply_markup: replyMarkup,
-      }
-    : {
-        type: 'article',
-        id: resultId,
-        title: t(`ربحت ${userPrize.prizeNameSnapshot} 🎉`, `I won ${userPrize.prizeNameSnapshot} 🎉`),
-        input_message_content: { message_text: caption },
-        reply_markup: replyMarkup,
-      };
-
   let preparedMessageId: string;
   try {
-    const apiRes = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/savePreparedInlineMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: req.telegramId,
-        result,
-        allow_user_chats: true,
-        allow_group_chats: true,
-        allow_channel_chats: false,
-        allow_bot_chats: false,
-      }),
+    preparedMessageId = await prepareShareCard({
+      userId: req.telegramId!,
+      resultId,
+      title: t(`ربحت ${userPrize.prizeNameSnapshot} 🎉`, `I won ${userPrize.prizeNameSnapshot} 🎉`),
+      caption,
+      buttonText: t('🚀 ابدأ الربح الآن', '🚀 Start winning now'),
+      link,
     });
-    const data = (await apiRes.json()) as { ok: boolean; result?: { id: string }; description?: string };
-    if (!data.ok || !data.result) {
-      throw new Error(data.description || 'savePreparedInlineMessage failed');
-    }
-    preparedMessageId = data.result.id;
     await rememberSharePrepared(task._id as never, preparedMessageId);
   } catch (err) {
-    logger.error({ err, telegramId: req.telegramId }, 'failed to prepare share card');
+    logger.error({ err: err instanceof Error ? err.message : err, telegramId: req.telegramId }, 'failed to prepare share card');
     throw new AppError(t('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية', 'Could not prepare the share card, please try again'), 502, 'SEND_FAILED');
   }
 

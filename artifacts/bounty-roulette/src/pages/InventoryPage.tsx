@@ -76,7 +76,12 @@ function ClaimSteps({ task, onAd, adBusy, onCopy, onShare, sharing }: {
       ))}
       {row(2, '📤', tr(`أرسل رسالة المشاركة لـ ${sharesRequired} من أصدقائك`, `Send the share message to ${sharesRequired} friends`), (
         <>
-          <div className="claim-step-hint">{tr('اضغط مشاركة، حدّد أصدقاءك من القائمة وأرسلها لهم مرة وحدة.', 'Tap share, pick your friends from the list and send it to them in one go.')}</div>
+          <div className="claim-step-hint">
+            {tr(
+              'اضغط مشاركة واختار أصدقاءك (المحادثات الخاصة بس). كل صديق يوصله وينحسب، والعدّاد يتحدّث خلال ثواني.',
+              'Tap share and pick your friends (private chats only). Every friend it reaches counts; the counter updates within seconds.'
+            )}
+          </div>
           <Progress value={shares} total={sharesRequired} />
           <button className="btn btn-primary claim-step-btn" onClick={onShare} disabled={sharing}>
             {sharing ? tr('📤 جاري التجهيز...', '📤 Preparing...') : tr('📤 مشاركة مع أصدقائي', '📤 Share with my friends')}
@@ -208,19 +213,34 @@ export function InventoryPage() {
         setToast(tr('نسخة تيليجرام عندك قديمة وما تدعم المشاركة المباشرة، حدّث التطبيق وجرب مرة ثانية.', 'Your Telegram version is too old for direct sharing. Update the app and try again.'));
         return;
       }
+      // Reported once per share window, from the callback or (on some apps) the event.
+      let reported = false;
+      const report = () => {
+        if (reported) return;
+        reported = true;
+        tg.offEvent?.('shareMessageSent', report);
+        setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
+        haptic('light');
+        // Counts toward the "share with friends" task; Telegram's own report may add more.
+        void api
+          .post('/inventory/claim-steps/share-sent', { userPrizeId, preparedMessageId: res.preparedMessageId })
+          .catch(() => undefined)
+          .finally(() => {
+            window.setTimeout(() => void refetch(), 1500);
+            window.setTimeout(() => void refetch(), 6000);
+          });
+      };
+      tg.onEvent?.('shareMessageSent', report);
       tg.shareMessage(res.preparedMessageId, (sent) => {
-        if (sent) {
-          setToast(tr('تم إرسال الجائزة ✅', 'Prize sent ✅'));
-          haptic('light');
-          // Counts toward the "share with friends" task; Telegram's own report may add more.
-          void api
-            .post('/inventory/claim-steps/share-sent', { userPrizeId, preparedMessageId: res.preparedMessageId })
-            .catch(() => undefined)
-            .finally(() => window.setTimeout(() => void refetch(), 1500));
-        }
+        if (sent) report();
+        else tg.offEvent?.('shareMessageSent', report);
       });
     } catch (err) {
-      setToast(err instanceof ApiError && err.code === 'STEP_LOCKED' ? err.message : tr('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.', 'Could not prepare the share card, please try again.'));
+      setToast(
+        err instanceof ApiError && err.code !== 'SEND_FAILED' && err.code !== 'UNKNOWN'
+          ? err.message
+          : tr('تعذر تجهيز بطاقة المشاركة، حاول مرة ثانية.', 'Could not prepare the share card, please try again.')
+      );
     } finally {
       setSharingId(null);
     }

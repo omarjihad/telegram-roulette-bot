@@ -51,6 +51,7 @@ export const adminUploadShareImage = asyncHandler(async (req: Request, res: Resp
   settings.shareImageData = req.file.buffer;
   settings.shareImageMimeType = req.file.mimetype;
   settings.hasShareImage = true;
+  settings.shareImageFileId = null;
   await settings.save();
   await writeAudit({
     actorId: req.telegramId!,
@@ -66,6 +67,7 @@ export const adminClearShareImage = asyncHandler(async (req: Request, res: Respo
   settings.shareImageData = null;
   settings.shareImageMimeType = null;
   settings.hasShareImage = false;
+  settings.shareImageFileId = null;
   await settings.save();
   await writeAudit({ actorId: req.telegramId!, actorUsername: req.dbUser!.username, action: 'settings.update', metadata: { hasShareImage: false } });
   res.json({ ok: true, settings: { ...settings.toObject(), shareImageUrl: null } });

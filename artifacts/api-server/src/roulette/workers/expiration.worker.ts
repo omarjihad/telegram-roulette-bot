@@ -15,6 +15,7 @@ import { expireOldListings, sendRenewReminders } from '../services/exchange.serv
 import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
 import { backfillDailyPrizeExpiry } from '../services/dailyLogin.service';
 import { refreshProofs } from '../services/proofs.service';
+import { keepDeliveryAccountConnected } from '../services/deliveryAccount.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
 
 /**
@@ -43,6 +44,11 @@ export function startExpirationWorker() {
       await processProfileTaskVerification();
     } catch (err) {
       logger.error({ err }, 'expiration worker tick failed');
+    }
+    try {
+      await keepDeliveryAccountConnected();
+    } catch (err) {
+      logger.error({ err }, 'delivery account reconnect failed');
     }
     try {
       // At most every 15 minutes (the service keeps track).

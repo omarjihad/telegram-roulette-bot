@@ -173,7 +173,7 @@ async function resolveTelegramUser(client: TelegramClient, telegramId: number, u
  * withdrawal is approved, and from the admin panel). Best effort: never throws.
  */
 export async function addDeliveryContact(telegramId: number) {
-  const client = activeClient;
+  const client = await ensureDeliveryClient();
   if (!client) return 'offline' as const;
   if (addedContacts.has(telegramId)) return 'already' as const;
   const dbUser = await User.findOne({ telegramId }).select('username firstName').lean();
@@ -201,7 +201,7 @@ function attachAutoContactListener(client: TelegramClient) {
  * Telegram's flood limits; stops at the first flood wait.
  */
 export async function syncDeliveryContacts(limit = 300) {
-  const client = activeClient;
+  const client = await ensureDeliveryClient();
   if (!client) throw new AppError('حساب التسليم غير متصل حالياً.', 503, 'DELIVERY_ACCOUNT_OFFLINE');
   if (syncRunning) return { added: 0, already: 0, failed: 0, stoppedByFlood: false, running: true };
   syncRunning = true;
@@ -263,24 +263,67 @@ async function persistAndActivate(client: TelegramClient, phone: string) {
   return { telegramId, username, firstName, phoneMasked: maskPhone(phone) };
 }
 
+/** Why the last connection attempt failed (shown in the developer panel). */
+let lastConnectError: string | null = null;
+let connecting: Promise<boolean> | null = null;
+
+function isConnected(client: TelegramClient | null) {
+  return Boolean(client && (client as unknown as { connected?: boolean }).connected !== false);
+}
+
 export async function initializeDeliveryAccount() {
   const account = await DeliveryAccount.findOne({ singleton: 'main', isActive: true }).select('+encryptedSession');
   if (!account) return false;
   try {
+    if (!env.DELIVERY_API_ID || !env.DELIVERY_API_HASH) throw new Error('DELIVERY_API_ID / DELIVERY_API_HASH are not set on the server');
     const client = new TelegramClient(new StringSession(decrypt(account.encryptedSession)), env.DELIVERY_API_ID, env.DELIVERY_API_HASH, {
       connectionRetries: 5,
+      autoReconnect: true,
     });
     await client.connect();
+    // Proves the session is still valid (connect() alone succeeds with a revoked session).
+    await client.getMe();
+    const previous = activeClient;
     activeClient = client;
     activeAccountId = account.telegramId;
+    if (previous && previous !== client) await closeClient(previous);
     onConnected(client);
+    lastConnectError = null;
     await DeliveryAccount.updateOne({ _id: account._id }, { lastConnectedAt: new Date() });
     logger.info({ telegramId: account.telegramId }, 'delivery account connected');
     return true;
   } catch (err) {
-    logger.error({ err }, 'delivery account connection failed');
+    lastConnectError = errorMessage(err) || 'unknown error';
+    logger.error({ err: lastConnectError }, 'delivery account connection failed');
     return false;
   }
+}
+
+/**
+ * The delivery account's live connection, reconnecting when it dropped (a restart, a
+ * deploy overlapping the old server, a network blip). Returns null only when it really
+ * can't connect.
+ */
+export async function ensureDeliveryClient(): Promise<TelegramClient | null> {
+  if (activeClient && isConnected(activeClient)) return activeClient;
+  if (activeClient) {
+    try {
+      await activeClient.connect();
+      if (isConnected(activeClient)) return activeClient;
+    } catch (err) {
+      lastConnectError = errorMessage(err) || lastConnectError;
+    }
+  }
+  if (!connecting) connecting = initializeDeliveryAccount().finally(() => (connecting = null));
+  await connecting;
+  return activeClient && isConnected(activeClient) ? activeClient : null;
+}
+
+/** Background check (every few minutes) so the account is reconnected before anyone needs it. */
+export async function keepDeliveryAccountConnected() {
+  const configured = await DeliveryAccount.exists({ singleton: 'main', isActive: true });
+  if (!configured) return;
+  await ensureDeliveryClient();
 }
 
 export async function sendDeliveryLoginCode(actorId: number, phone: string) {
@@ -355,11 +398,12 @@ export async function getDeliveryAccountStatus() {
   const account = await DeliveryAccount.findOne({ singleton: 'main', isActive: true }).select(
     'telegramId username firstName phoneMasked isActive lastConnectedAt'
   );
-  if (!account) return { configured: false, online: false, username: null, firstName: null, phoneMasked: null, lastConnectedAt: null };
+  if (!account) return { configured: false, online: false, lastError: null, username: null, firstName: null, phoneMasked: null, lastConnectedAt: null };
   return {
     configured: true,
     // Whether this server is actually connected with it right now (not just saved).
-    online: activeClient !== null,
+    online: isConnected(activeClient),
+    lastError: isConnected(activeClient) ? null : lastConnectError,
     username: account.username ?? null,
     firstName: account.firstName ?? null,
     phoneMasked: account.phoneMasked,
@@ -381,7 +425,8 @@ export async function getDeliveryContactLink() {
 }
 
 export async function verifyDeliveryContactBySending(telegramId: number) {
-  if (!activeClient || activeAccountId === null) {
+  const client = await ensureDeliveryClient();
+  if (!client || activeAccountId === null) {
     throw new AppError(t('حساب التسليم غير متصل حالياً. حاول بعد قليل.', 'The delivery account is offline right now. Please try again shortly.'), 503, 'DELIVERY_ACCOUNT_OFFLINE');
   }
 
@@ -391,14 +436,14 @@ export async function verifyDeliveryContactBySending(telegramId: number) {
   const username = user.username?.trim();
   // Add them to the delivery account's contacts first: delivering an account works far
   // more smoothly between mutual contacts. A failure here doesn't block the check.
-  const tgUser = await resolveTelegramUser(activeClient, telegramId, username);
-  if (tgUser) await addUserAsContact(activeClient, tgUser, user.firstName);
+  const tgUser = await resolveTelegramUser(client, telegramId, username);
+  if (tgUser) await addUserAsContact(client, tgUser, user.firstName);
   let target: string | number | Api.User = telegramId;
   try {
     // The resolved user carries its access hash; otherwise fall back to the @username,
     // or to an entity cached in the delivery session.
     target = tgUser ?? (username ? `@${username.replace(/^@/, '')}` : telegramId);
-    await activeClient.sendMessage(target, {
+    await client.sendMessage(target, {
       message: t('✅ تم التحقق من إضافة حساب التسليم إلى جهات اتصالك. يمكنك الآن الرجوع إلى البوت وإكمال استلام الجائزة.', '✅ Verified: the delivery account is in your contacts. You can go back to the bot and finish claiming your prize.'),
     });
   } catch (err) {
@@ -417,8 +462,11 @@ export async function verifyDeliveryContactBySending(telegramId: number) {
   return { verified: true };
 }
 
+/**
+ * Whether the user already passed the contact check. Stored in the database: a dropped
+ * connection to the delivery account must not send verified users back to the check.
+ */
 export async function hasVerifiedDeliveryContact(telegramId: number) {
-  if (!activeClient || activeAccountId === null) return false;
   const user = await User.findOne({ telegramId }).select('deliveryContactVerifiedAt deliveryContactVerificationMethod');
   return Boolean(user?.deliveryContactVerifiedAt && user.deliveryContactVerificationMethod === 'outgoing_message');
 }
@@ -442,7 +490,8 @@ export async function verifyDeliveryProfile(
     return name.includes('mf');
   }
 
-  if (!activeClient || activeAccountId === null) {
+  const client = await ensureDeliveryClient();
+  if (!client || activeAccountId === null) {
     throw new AppError('حساب التسليم غير متصل حالياً. حاول بعد قليل.', 503, 'DELIVERY_ACCOUNT_OFFLINE');
   }
 
@@ -450,17 +499,17 @@ export async function verifyDeliveryProfile(
   try {
     const username = profile?.username?.trim().replace(/^@/, '');
     if (username) {
-      const resolved = await activeClient.invoke(new Api.contacts.ResolveUsername({ username }));
+      const resolved = await client.invoke(new Api.contacts.ResolveUsername({ username }));
       const matchingUser = resolved.users?.find((candidate: any) => Number(candidate.id) === telegramId);
       entity = matchingUser ?? resolved.users?.[0];
     }
-    if (!entity) entity = await activeClient.getEntity(telegramId);
+    if (!entity) entity = await client.getEntity(telegramId);
   } catch (err) {
     throw new AppError('تعذر الوصول إلى حساب المستخدم في Telegram حالياً.', 503, 'DELIVERY_PROFILE_UNAVAILABLE');
   }
 
   try {
-    const full = await activeClient.invoke(new Api.users.GetFullUser({ id: entity }));
+    const full = await client.invoke(new Api.users.GetFullUser({ id: entity }));
     const telegramUser = (full as any).user ?? entity;
     const about = String((full as any).fullUser?.about ?? '').toLowerCase();
     return about.includes('@mfbisnes') || about.includes('mfbisnes');

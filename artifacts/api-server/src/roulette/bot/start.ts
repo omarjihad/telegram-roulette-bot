@@ -4,7 +4,7 @@ import { env } from '../config/env';
 import { logger } from '../config/logger';
 import { findOrCreateUser } from '../services/user.service';
 import { parseGeneralReferralToken, registerGeneralReferralIfNew, registerReferralIfNew } from '../services/referral.service';
-import { getClaimTaskByToken, parseTaskTokenFromStartParam } from '../services/claimTask.service';
+import { getClaimTaskByToken, parseTaskTokenFromStartParam, recordShareOpener } from '../services/claimTask.service';
 import { checkAllForcedChats } from '../services/forcedSub.service';
 import { getSettings } from '../models/Settings';
 import { getAdminRole } from '../services/admin.service';
@@ -116,6 +116,7 @@ export function registerStartHandler(bot: TelegramBot) {
       }
 
       if (taskToken) {
+        Promise.resolve().then(() => recordShareOpener(taskToken, user.telegramId)).catch(() => undefined);
         const task = await getClaimTaskByToken(taskToken);
         if (task) {
           const outcome = await registerReferralIfNew({

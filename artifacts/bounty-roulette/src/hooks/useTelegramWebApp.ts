@@ -19,6 +19,8 @@ interface TelegramWebApp {
   // client on WebApp API version 7.8+; older clients simply don't have this method, so
   // callers must check `tg.shareMessage` is defined before calling it.
   shareMessage?: (messageId: string, callback?: (sent: boolean) => void) => void;
+  onEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
+  offEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
 }
 
 declare global {

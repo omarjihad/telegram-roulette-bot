@@ -119,6 +119,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
 interface DeliveryAccountStatus {
   configured: boolean;
   online?: boolean;
+  lastError?: string | null;
   username: string | null;
   firstName: string | null;
   phoneMasked: string | null;
@@ -234,8 +235,14 @@ function DeliveryAccountTab() {
               <div><strong>{account.username ? `@${account.username.replace(/^@/, '')}` : account.firstName || 'حساب Telegram'}</strong></div>
               <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>الهاتف: {account.phoneMasked}</div>
               <div style={{ fontSize: 13, fontWeight: 800, color: account.online ? 'var(--success)' : 'var(--danger)' }}>
-                {account.online ? '🟢 متصل الآن' : '🔴 غير متصل، سجّل الدخول من جديد أو أعد تشغيل السيرفر'}
+                {account.online ? '🟢 متصل الآن' : '🔴 غير متصل: السيرفر يحاول يرجع يتصل كل 5 دقايق'}
               </div>
+              {!account.online && account.lastError && (
+                <div style={{ fontSize: 12, color: 'var(--text-dim)' }} dir="ltr">
+                  السبب: {account.lastError}
+                  {/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED|decrypt|Unsupported state/i.test(account.lastError) && ' — سجّل دخول الحساب من جديد'}
+                </div>
+              )}
             </div>
             <p className="card-sub" style={{ marginTop: 12 }}>
               الحساب يضيف تلقائياً لجهات اتصاله: أي شخص يراسله، وأي شخص يضغط «تحقق»، وأي شخص ينقبل طلب سحبه.

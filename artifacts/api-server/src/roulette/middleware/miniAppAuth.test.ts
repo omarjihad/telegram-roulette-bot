@@ -19,6 +19,7 @@ vi.mock('../models/Settings', () => ({ getSettings: mocks.getSettings }));
 vi.mock('../services/admin.service', () => ({ getAdminRole: mocks.getAdminRole }));
 vi.mock('../services/claimTask.service', () => ({
   getClaimTaskByToken: mocks.getTask,
+  recordShareOpener: vi.fn().mockResolvedValue(false),
   parseTaskTokenFromStartParam: (value?: string | null) =>
     value?.match(/^task_([A-Za-z0-9_-]+)$/)?.[1] ?? null,
 }));

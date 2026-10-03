@@ -13,15 +13,28 @@ import { consumeAdView } from './games.service';
 /** Friends the prize card must be shared with (step 2 of a step-by-step claim). */
 export const CLAIM_SHARES_REQUIRED = 3;
 
-type TaskLike = Pick<IClaimTask, 'steps' | 'adWatchedAt' | 'shareRequired' | 'sharedInlineIds' | 'shareConfirmedIds' | 'creditedCount' | 'requiredCount'>;
+type TaskLike = Pick<IClaimTask, 'steps' | 'adWatchedAt' | 'shareRequired' | 'sharedInlineIds' | 'shareConfirmedIds' | 'creditedCount' | 'requiredCount'> &
+  Partial<Pick<IClaimTask, 'shareOpeners'>>;
 
 /**
- * Chats the card was shared to. Telegram reports each chat a prepared message reaches
- * (with inline feedback on in @BotFather); without that, each share the Mini App saw
- * succeed counts as one.
+ * Friends the card reached, from whichever signal shows the most:
+ * - each chat Telegram reports the prepared message was sent to (needs inline feedback
+ *   on in @BotFather),
+ * - each share the Mini App saw Telegram confirm,
+ * - each different person who opened the card's link.
  */
-export function shareCount(task: Pick<IClaimTask, 'sharedInlineIds' | 'shareConfirmedIds'>) {
-  return Math.max(task.sharedInlineIds?.length ?? 0, task.shareConfirmedIds?.length ?? 0);
+export function shareCount(task: Pick<IClaimTask, 'sharedInlineIds' | 'shareConfirmedIds'> & Partial<Pick<IClaimTask, 'shareOpeners'>>) {
+  return Math.max(task.sharedInlineIds?.length ?? 0, task.shareConfirmedIds?.length ?? 0, task.shareOpeners?.length ?? 0);
+}
+
+/** Someone opened a prize card's link (startapp/start task_<token>): counts as a friend reached. */
+export async function recordShareOpener(token: string, openerTelegramId: number) {
+  const task = await ClaimTask.findOne({ token, status: 'pending', steps: true });
+  if (!task || task.referrerTelegramId === openerTelegramId || task.shareOpeners?.includes(openerTelegramId)) return false;
+  task.shareOpeners = [...(task.shareOpeners ?? []), openerTelegramId];
+  await task.save();
+  await completeIfDone(task);
+  return true;
 }
 
 /** Which step a task is on: 1 ad, 2 share, 3 invites, 4 all done. Old tasks start at 3. */
