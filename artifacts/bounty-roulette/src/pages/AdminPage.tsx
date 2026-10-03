@@ -241,6 +241,8 @@ function DeliveryAccountTab() {
                 <div style={{ fontSize: 12, color: 'var(--text-dim)' }} dir="ltr">
                   السبب: {account.lastError}
                   {/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED|decrypt|Unsupported state/i.test(account.lastError) && ' — سجّل دخول الحساب من جديد'}
+                  {/AUTH_KEY_DUPLICATED/.test(account.lastError) &&
+                    ' (تيليجرام فصل الجلسة لأنها اشتغلت من مكانين بنفس الوقت، غالباً وقت تحديث السيرفر. هسه السيرفر يمنع هالشي، فبعد ما تسجل من جديد ما راح يتكرر)'}
                 </div>
               )}
             </div>

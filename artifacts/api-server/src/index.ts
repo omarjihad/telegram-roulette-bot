@@ -4,7 +4,7 @@ import { env } from "./roulette/config/env";
 import { connectDatabase, disconnectDatabase } from "./roulette/config/database";
 import { createBot } from "./roulette/bot";
 import { startExpirationWorker } from "./roulette/workers/expiration.worker";
-import { initializeDeliveryAccount } from "./roulette/services/deliveryAccount.service";
+import { initializeDeliveryAccount, shutdownDeliveryAccount } from "./roulette/services/deliveryAccount.service";
 
 const rawPort = process.env["PORT"];
 
@@ -46,6 +46,8 @@ async function shutdown() {
   shuttingDown = true;
   setTimeout(() => process.exit(1), 10000).unref();
   await bot.stopPolling().catch(() => undefined);
+  // Before the database closes: frees the delivery account for the new server right away.
+  await shutdownDeliveryAccount().catch(() => undefined);
   await disconnectDatabase();
   server.close(() => process.exit(0));
 }

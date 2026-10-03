@@ -253,44 +253,130 @@ async function persistAndActivate(client: TelegramClient, phone: string) {
       encryptedSession: encrypt(session),
       isActive: true,
       lastConnectedAt: new Date(),
+      // A fresh login: this instance holds the connection.
+      leaseOwner: INSTANCE_ID,
+      leaseUntil: new Date(Date.now() + LEASE_MS),
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
   await closeClient(activeClient);
   activeClient = client;
   activeAccountId = telegramId;
+  lastConnectError = null;
   onConnected(client);
+  startLeaseRenewal();
   return { telegramId, username, firstName, phoneMasked: maskPhone(phone) };
 }
 
 /** Why the last connection attempt failed (shown in the developer panel). */
 let lastConnectError: string | null = null;
 let connecting: Promise<boolean> | null = null;
+let shuttingDown = false;
 
 function isConnected(client: TelegramClient | null) {
   return Boolean(client && (client as unknown as { connected?: boolean }).connected !== false);
 }
 
+/** Telegram killed the saved session; only a fresh login fixes it, so retrying is pointless. */
+function isDeadSession(message: string | null) {
+  return Boolean(message && /AUTH_KEY_DUPLICATED|AUTH_KEY_UNREGISTERED|SESSION_REVOKED|USER_DEACTIVATED|SESSION_EXPIRED/.test(message));
+}
+
+// ---- One connection at a time, across server instances ----------------------------------
+// Railway starts the new server before stopping the old one. If both connect with the same
+// session, Telegram revokes it (AUTH_KEY_DUPLICATED) and the account has to log in again.
+// A short lease in the database lets only one instance connect; it is renewed while
+// connected and released on shutdown, so the next instance takes over within seconds.
+const INSTANCE_ID = `${process.env.RAILWAY_DEPLOYMENT_ID ?? 'local'}:${process.pid}:${Math.random().toString(36).slice(2, 8)}`;
+const LEASE_MS = 90_000;
+const LEASE_RENEW_MS = 30_000;
+let leaseTimer: NodeJS.Timeout | null = null;
+let retryTimer: NodeJS.Timeout | null = null;
+
+async function acquireLease() {
+  const now = new Date();
+  const res = await DeliveryAccount.updateOne(
+    {
+      singleton: 'main',
+      isActive: true,
+      $or: [{ leaseOwner: null }, { leaseOwner: INSTANCE_ID }, { leaseUntil: null }, { leaseUntil: { $lte: now } }],
+    },
+    { $set: { leaseOwner: INSTANCE_ID, leaseUntil: new Date(now.getTime() + LEASE_MS) } }
+  );
+  return res.modifiedCount > 0 || res.matchedCount > 0;
+}
+
+async function releaseLease() {
+  await DeliveryAccount.updateOne({ singleton: 'main', leaseOwner: INSTANCE_ID }, { $set: { leaseOwner: null, leaseUntil: null } }).catch(() => undefined);
+}
+
+function startLeaseRenewal() {
+  if (leaseTimer) return;
+  leaseTimer = setInterval(() => {
+    void acquireLease()
+      .then(async (held) => {
+        if (held || !activeClient) return;
+        // Another instance took over: step aside so the session isn't used twice.
+        logger.warn('delivery account lease lost; disconnecting this instance');
+        const client = activeClient;
+        activeClient = null;
+        await closeClient(client);
+      })
+      .catch(() => undefined);
+  }, LEASE_RENEW_MS);
+  leaseTimer.unref?.();
+}
+
+/** Retries soon while another instance (usually the old server mid-deploy) still holds it. */
+function scheduleRetry(ms = 20_000) {
+  if (retryTimer || shuttingDown) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void ensureDeliveryClient().catch(() => undefined);
+  }, ms);
+  retryTimer.unref?.();
+}
+
+async function destroyClient(client: TelegramClient | null) {
+  if (!client) return;
+  await (client as unknown as { destroy?: () => Promise<void> }).destroy?.().catch(() => undefined);
+  await closeClient(client);
+}
+
 export async function initializeDeliveryAccount() {
+  if (shuttingDown) return false;
   const account = await DeliveryAccount.findOne({ singleton: 'main', isActive: true }).select('+encryptedSession');
   if (!account) return false;
   try {
     if (!env.DELIVERY_API_ID || !env.DELIVERY_API_HASH) throw new Error('DELIVERY_API_ID / DELIVERY_API_HASH are not set on the server');
+    if (!(await acquireLease())) {
+      lastConnectError = 'WAITING: السيرفر القديم بعده ماسك الحساب (تحديث جاري)، راح يتصل خلال ثواني';
+      scheduleRetry();
+      return false;
+    }
+    // Never two live connections with the same session: the old client goes first.
+    const previous = activeClient;
+    activeClient = null;
+    await destroyClient(previous);
     const client = new TelegramClient(new StringSession(decrypt(account.encryptedSession)), env.DELIVERY_API_ID, env.DELIVERY_API_HASH, {
       connectionRetries: 5,
       autoReconnect: true,
     });
-    await client.connect();
-    // Proves the session is still valid (connect() alone succeeds with a revoked session).
-    await client.getMe();
-    const previous = activeClient;
+    try {
+      await client.connect();
+      // Proves the session is still valid (connect() alone succeeds with a revoked session).
+      await client.getMe();
+    } catch (err) {
+      await destroyClient(client);
+      throw err;
+    }
     activeClient = client;
     activeAccountId = account.telegramId;
-    if (previous && previous !== client) await closeClient(previous);
     onConnected(client);
+    startLeaseRenewal();
     lastConnectError = null;
     await DeliveryAccount.updateOne({ _id: account._id }, { lastConnectedAt: new Date() });
-    logger.info({ telegramId: account.telegramId }, 'delivery account connected');
+    logger.info({ telegramId: account.telegramId, instance: INSTANCE_ID }, 'delivery account connected');
     return true;
   } catch (err) {
     lastConnectError = errorMessage(err) || 'unknown error';
@@ -300,20 +386,15 @@ export async function initializeDeliveryAccount() {
 }
 
 /**
- * The delivery account's live connection, reconnecting when it dropped (a restart, a
- * deploy overlapping the old server, a network blip). Returns null only when it really
- * can't connect.
+ * The delivery account's live connection. GramJS reconnects a dropped connection by itself
+ * (autoReconnect); a fresh client is only made when there is none. Returns null only when
+ * it really can't connect.
  */
 export async function ensureDeliveryClient(): Promise<TelegramClient | null> {
+  if (shuttingDown) return null;
   if (activeClient && isConnected(activeClient)) return activeClient;
-  if (activeClient) {
-    try {
-      await activeClient.connect();
-      if (isConnected(activeClient)) return activeClient;
-    } catch (err) {
-      lastConnectError = errorMessage(err) || lastConnectError;
-    }
-  }
+  // A session Telegram revoked stays dead until the developer logs in again.
+  if (isDeadSession(lastConnectError)) return null;
   if (!connecting) connecting = initializeDeliveryAccount().finally(() => (connecting = null));
   await connecting;
   return activeClient && isConnected(activeClient) ? activeClient : null;
@@ -324,6 +405,17 @@ export async function keepDeliveryAccountConnected() {
   const configured = await DeliveryAccount.exists({ singleton: 'main', isActive: true });
   if (!configured) return;
   await ensureDeliveryClient();
+}
+
+/** Server shutdown: drop the connection and hand the account to the next instance right away. */
+export async function shutdownDeliveryAccount() {
+  shuttingDown = true;
+  if (leaseTimer) clearInterval(leaseTimer);
+  if (retryTimer) clearTimeout(retryTimer);
+  const client = activeClient;
+  activeClient = null;
+  await destroyClient(client);
+  await releaseLease();
 }
 
 export async function sendDeliveryLoginCode(actorId: number, phone: string) {

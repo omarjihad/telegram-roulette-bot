@@ -53,6 +53,8 @@ function ClaimSteps({ task, onAd, adBusy, onCopy, onShare, sharing }: {
     const done = step > n;
     const current = step === n;
     const locked = step < n;
+    // A finished task leaves the list so only what's left to do shows.
+    if (done) return null;
     return (
       <div className={`claim-step ${done ? 'claim-step-done' : ''} ${current ? 'claim-step-current' : ''} ${locked ? 'claim-step-locked' : ''}`} key={n}>
         <div className="claim-step-dot">{done ? '✓' : locked ? '🔒' : n}</div>
@@ -69,6 +71,9 @@ function ClaimSteps({ task, onAd, adBusy, onCopy, onShare, sharing }: {
   return (
     <div className="claim-steps">
       <div className="claim-steps-head">{tr('🎯 كمّل المهام حتى تستلم الجائزة', '🎯 Finish the tasks to claim this prize')}</div>
+      {step > 1 && step < 4 && (
+        <div className="claim-step-hint">{tr(`✅ أكملت ${step - 1} من 3 مهام`, `✅ ${step - 1} of 3 tasks done`)}</div>
+      )}
       {row(1, '📺', tr('شاهد إعلان', 'Watch an ad'), (
         <button className="btn btn-primary claim-step-btn" disabled={adBusy} onClick={onAd}>
           {adBusy ? tr('جاري عرض الإعلان...', 'Showing the ad...') : tr('📺 شاهد الإعلان', '📺 Watch the ad')}
@@ -211,7 +216,7 @@ export function InventoryPage() {
       .catch(() => undefined)
       .finally(() => {
         void refetch();
-        window.setTimeout(() => void refetch(), 4000);
+        window.setTimeout(() => void refetch(), 2500);
       });
   }
 
@@ -233,7 +238,7 @@ export function InventoryPage() {
       }
       const preparedId = res.preparedMessageId;
       unansweredShare.current = { userPrizeId, preparedId };
-      void openSharePicker(preparedId, 45_000).then((sent) => {
+      void openSharePicker(preparedId).then((sent) => {
         if (unansweredShare.current?.preparedId !== preparedId) return;
         unansweredShare.current = null;
         // null: Telegram never answered; the window most likely went out, so it counts.

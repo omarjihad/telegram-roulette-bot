@@ -69,7 +69,7 @@ export function haptic(style: 'light' | 'medium' | 'heavy' = 'light') {
  * is reopened. This talks to the bridge directly instead, so each share opens again.
  * Resolves true when sent, false when cancelled, null when Telegram never answered.
  */
-export function openSharePicker(preparedId: string, timeoutMs = 120_000): Promise<boolean | null> {
+export function openSharePicker(preparedId: string, timeoutMs = 30_000): Promise<boolean | null> {
   const tg = window.Telegram;
   const view = tg?.WebView;
   if (!view?.postEvent || !view.onEvent) {
@@ -84,19 +84,36 @@ export function openSharePicker(preparedId: string, timeoutMs = 120_000): Promis
   }
   return new Promise((resolve) => {
     let done = false;
+    let backTimer: number | undefined;
     const finish = (value: boolean | null) => {
       if (done) return;
       done = true;
       view.offEvent('prepared_message_sent', onSent);
       view.offEvent('prepared_message_failed', onFailed);
+      document.removeEventListener('visibilitychange', onBack);
+      window.removeEventListener('focus', onBack);
       window.clearTimeout(timer);
+      window.clearTimeout(backTimer);
       resolve(value);
     };
     const onSent = () => finish(true);
     const onFailed = () => finish(false);
+    // Back in the Mini App after the picker closed: if Telegram still said nothing a moment
+    // later, don't keep the person waiting.
+    const onBack = () => {
+      if (document.visibilityState !== 'visible') return;
+      window.clearTimeout(backTimer);
+      backTimer = window.setTimeout(() => finish(null), 1500);
+    };
     const timer = window.setTimeout(() => finish(null), timeoutMs);
     view.onEvent('prepared_message_sent', onSent);
     view.onEvent('prepared_message_failed', onFailed);
+    // Listen only after the picker had a moment to open, so its own opening doesn't count.
+    window.setTimeout(() => {
+      if (done) return;
+      document.addEventListener('visibilitychange', onBack);
+      window.addEventListener('focus', onBack);
+    }, 800);
     view.postEvent('web_app_send_prepared_message', false, { id: preparedId });
   });
 }
