@@ -1956,6 +1956,25 @@ html[dir='ltr'] body { direction: ltr; }
 .ex-admin-id { font-size: 11.5px; color: var(--text-dim); }
 .ex-zoom { position: fixed; inset: 0; z-index: 120; background: rgba(0, 0, 0, 0.95); display: grid; place-items: center; }
 .ex-zoom img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ex-zoom-back {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+  inset-inline-start: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 16px 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
 
 .ex-warning { border-color: var(--danger); display: flex; flex-direction: column; gap: 10px; padding: 26px 20px; }
 .ex-warning h2 { margin: 0; font-size: 19px; color: #fecaca; line-height: 1.6; }

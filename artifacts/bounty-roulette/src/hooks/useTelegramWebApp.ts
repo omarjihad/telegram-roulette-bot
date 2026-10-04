@@ -21,6 +21,7 @@ interface TelegramWebApp {
   shareMessage?: (messageId: string, callback?: (sent: boolean) => void) => void;
   onEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
   offEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
+  BackButton?: { show: () => void; hide: () => void; onClick: (cb: () => void) => void; offClick: (cb: () => void) => void };
 }
 
 /** Telegram's low-level bridge (the WebApp object is built on top of it). */

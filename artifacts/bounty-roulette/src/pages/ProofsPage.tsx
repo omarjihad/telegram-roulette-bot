@@ -3,6 +3,7 @@ import { getLang, locale, tr } from '../i18n';
 import { getTelegramWebApp } from '../hooks/useTelegramWebApp';
 import { api } from '../services/api';
 import { ProofPostView, ProofsResponse } from '../types';
+import { ImageViewer } from '../components/ImageViewer';
 import { SectionHero } from '../components/Common';
 
 function openLink(url: string) {
@@ -164,11 +165,7 @@ export function ProofsPage({ onBack, isAdmin = false }: { onBack: () => void; is
         </button>
       )}
 
-      {zoom && (
-        <div className="ex-zoom" onClick={() => setZoom(null)}>
-          <img src={zoom} alt="" />
-        </div>
-      )}
+      {zoom && <ImageViewer src={zoom} onClose={() => setZoom(null)} />}
     </div>
   );
 }

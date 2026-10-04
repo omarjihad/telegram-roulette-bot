@@ -3,6 +3,7 @@ import { LayoutGrid, PlusCircle, ClipboardList, ChevronLeft, ChevronRight, Shiel
 import { locale, tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp, haptic } from '../hooks/useTelegramWebApp';
+import { ImageViewer } from '../components/ImageViewer';
 import {
   ExchangeCurrency,
   ExchangeListingDetail,
@@ -920,11 +921,7 @@ function ListingDetail({
           </>
         )}
 
-        {zoom && (
-          <div className="ex-zoom" onClick={() => setZoom(null)}>
-            <img src={zoom} alt="" />
-          </div>
-        )}
+        {zoom && <ImageViewer src={zoom} onClose={() => setZoom(null)} />}
 
         {warning && listing && (
           <div className="modal-backdrop" onClick={() => setWarning(false)}>

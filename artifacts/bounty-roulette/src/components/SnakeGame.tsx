@@ -4,6 +4,8 @@ import { haptic } from '../hooks/useTelegramWebApp';
 
 const GRID = 15;
 const TICK_MS = 150;
+/** The board's size in CSS pixels; the canvas itself is drawn at the screen's pixel density. */
+const BOARD = 360;
 
 type Point = { x: number; y: number };
 type Dir = 'up' | 'down' | 'left' | 'right';
@@ -35,6 +37,10 @@ export function SnakeGame({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const snakeRef = useRef<Point[]>([{ x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }]);
+  // Where the snake was before the last step, and when that step happened: frames in
+  // between glide from there, so it moves smoothly at the screen's frame rate.
+  const prevSnakeRef = useRef<Point[]>(snakeRef.current);
+  const lastStepRef = useRef(performance.now());
   const dirRef = useRef<Dir>('right');
   const queuedRef = useRef<Dir[]>([]);
   const foodRef = useRef<Point>(randomFood(snakeRef.current));
@@ -43,6 +49,8 @@ export function SnakeGame({
   const startRef = useRef(Date.now());
   const [eaten, setEaten] = useState(0);
   const [left, setLeft] = useState(durationSec);
+  // Sharp on high-density screens.
+  const [pixelRatio] = useState(() => Math.min(3, Math.max(1, window.devicePixelRatio || 1)));
 
   function turn(dir: Dir) {
     const last = queuedRef.current[queuedRef.current.length - 1] ?? dirRef.current;
@@ -57,13 +65,26 @@ export function SnakeGame({
     onEnd({ food: eatenRef.current, died });
   }
 
-  function draw() {
+  /** The snake between its last two steps (t = 0..1). Wrapping across an edge jumps. */
+  function interpolated(t: number): Point[] {
+    const cur = snakeRef.current;
+    const prev = prevSnakeRef.current;
+    return cur.map((c, i) => {
+      const p = prev[Math.min(i, prev.length - 1)];
+      if (Math.abs(c.x - p.x) + Math.abs(c.y - p.y) > 1) return c;
+      return { x: p.x + (c.x - p.x) * t, y: p.y + (c.y - p.y) * t };
+    });
+  }
+
+  function draw(now = performance.now()) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    const cell = canvas.width / GRID;
+    const dpr = canvas.width / BOARD;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cell = BOARD / GRID;
     ctx.fillStyle = '#0b1f14';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, BOARD, BOARD);
     ctx.fillStyle = 'rgba(134, 239, 172, 0.05)';
     for (let y = 0; y < GRID; y++) for (let x = (y % 2); x < GRID; x += 2) ctx.fillRect(x * cell, y * cell, cell, cell);
 
@@ -87,7 +108,7 @@ export function SnakeGame({
     ctx.ellipse(cx + cell * 0.12, cy - cell * 0.4, cell * 0.14, cell * 0.07, -0.6, 0, Math.PI * 2);
     ctx.fill();
 
-    const sn = snakeRef.current;
+    const sn = endedRef.current ? snakeRef.current : interpolated(Math.min(1, (now - lastStepRef.current) / TICK_MS));
     const n = sn.length;
     const shade = (i: number) => {
       const t = n > 1 ? i / (n - 1) : 0;
@@ -95,17 +116,17 @@ export function SnakeGame({
     };
     const padOf = (i: number) => (i === 0 ? 1.5 : i === n - 1 ? 5 : i === n - 2 ? 4 : 3);
     // Smooth connectors between neighbouring segments (skipped across the wrap-around edge).
+    ctx.lineCap = 'round';
     for (let i = n - 1; i > 0; i--) {
       const a = sn[i];
       const b = sn[i - 1];
-      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
-      const th = cell - padOf(i) * 2;
-      const ax = a.x * cell + cell / 2;
-      const ay = a.y * cell + cell / 2;
-      const bx = b.x * cell + cell / 2;
-      const by = b.y * cell + cell / 2;
-      ctx.fillStyle = shade(i);
-      ctx.fillRect(Math.min(ax, bx) - th / 2, Math.min(ay, by) - th / 2, Math.abs(ax - bx) + th, Math.abs(ay - by) + th);
+      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) > 1.01) continue;
+      ctx.strokeStyle = shade(i);
+      ctx.lineWidth = cell - padOf(i) * 2;
+      ctx.beginPath();
+      ctx.moveTo(a.x * cell + cell / 2, a.y * cell + cell / 2);
+      ctx.lineTo(b.x * cell + cell / 2, b.y * cell + cell / 2);
+      ctx.stroke();
     }
     for (let i = n - 1; i > 0; i--) {
       const p = sn[i];
@@ -171,7 +192,9 @@ export function SnakeGame({
         end(true);
         return;
       }
+      prevSnakeRef.current = snakeRef.current;
       snakeRef.current = [newHead, ...body];
+      lastStepRef.current = performance.now();
       if (eats) {
         eatenRef.current += 1;
         setEaten(eatenRef.current);
@@ -183,8 +206,15 @@ export function SnakeGame({
         }
         foodRef.current = randomFood(snakeRef.current);
       }
-      draw();
     }, TICK_MS);
+
+    // Drawing runs every screen frame (60/90/120 fps), separately from the game steps.
+    let frame = 0;
+    const render = (now: number) => {
+      if (!endedRef.current) draw(now);
+      frame = window.requestAnimationFrame(render);
+    };
+    frame = window.requestAnimationFrame(render);
 
     const clock = window.setInterval(() => {
       const remaining = Math.max(0, durationSec - Math.floor((Date.now() - startRef.current) / 1000));
@@ -203,6 +233,7 @@ export function SnakeGame({
     return () => {
       window.clearInterval(tick);
       window.clearInterval(clock);
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('keydown', onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,8 +264,8 @@ export function SnakeGame({
       </div>
       <canvas
         ref={canvasRef}
-        width={360}
-        height={360}
+        width={Math.round(BOARD * pixelRatio)}
+        height={Math.round(BOARD * pixelRatio)}
         className="snake-board"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
