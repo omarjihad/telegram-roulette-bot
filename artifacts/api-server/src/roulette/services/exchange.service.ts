@@ -23,6 +23,7 @@ import { pick, t, userLang } from '../i18n';
 import { listAllAdminTelegramIds } from './admin.service';
 import { banUser } from './ban.service';
 import { createNotification } from './notification.service';
+import { adsBlockId, consumeAdView } from './games.service';
 
 export const MAX_LISTING_IMAGES = 7;
 /** Active listings one member may have at a time (developers get more room for testing). */
@@ -187,6 +188,29 @@ export function parsePrices(raw: unknown): ExchangePrice[] {
   return prices;
 }
 
+/** Posting a listing costs one ad, watched just before; the pass lasts this long. */
+const POST_AD_PASS_MS = 30 * 60 * 1000;
+
+function hasPostPass(user: Pick<IUser, 'exchangeAdPassAt'>, now = Date.now()) {
+  return Boolean(user.exchangeAdPassAt && now - user.exchangeAdPassAt.getTime() < POST_AD_PASS_MS);
+}
+
+/** Whether this user has to watch an ad before posting, and the block to show. */
+export async function postAdStatus(user: HydratedDocument<IUser>) {
+  const blockId = await adsBlockId();
+  return { required: Boolean(blockId) && !hasPostPass(user), blockId };
+}
+
+/** An ad was watched for posting: it allows one new listing within 30 minutes. */
+export async function grantPostAdPass(user: HydratedDocument<IUser>, adminRole: string | null) {
+  await assertAllowed(adminRole);
+  if (!hasPostPass(user)) {
+    await consumeAdView(user.telegramId, 'exchange_post');
+    await User.updateOne({ _id: user._id }, { $set: { exchangeAdPassAt: new Date() } });
+  }
+  return { ok: true };
+}
+
 export async function createListing(
   user: HydratedDocument<IUser>,
   adminRole: string | null,
@@ -194,6 +218,9 @@ export async function createListing(
   uploaded: UploadedFile[]
 ) {
   await assertAllowed(adminRole);
+  if ((await adsBlockId()) && !hasPostPass(user)) {
+    throw new AppError(t('شاهد الإعلان أولاً حتى تنشر حسابك', 'Watch the ad first to post your account'), 403, 'AD_REQUIRED');
+  }
   let files = uploaded;
   const { mode, details, prices } = parseListingFields(input);
   if (files.length === 0) throw new AppError(t('أضف صورة واحدة على الأقل للحساب', 'Add at least one photo of the account'), 422, 'VALIDATION_ERROR');
@@ -229,6 +256,8 @@ export async function createListing(
     expiresAt: new Date(Date.now() + LISTING_LIFETIME_MS),
     images: images.map((i) => i._id),
   });
+  // The ad pass is used up by this post.
+  await User.updateOne({ _id: user._id }, { $set: { exchangeAdPassAt: null } });
   return { listing: summary(listing) };
 }
 

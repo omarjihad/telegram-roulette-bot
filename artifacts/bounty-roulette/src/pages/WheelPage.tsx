@@ -9,6 +9,8 @@ import { SpinResult, MeResponse, RecentWinsResponse } from '../types';
 import { WinModal, BetterLuckModal } from '../components/ResultModals';
 import { LoadingScreen } from '../components/Common';
 import { haptic } from '../hooks/useTelegramWebApp';
+import { adErrorMessage } from '../components/AdTaskCard';
+import { claimAfterAd, showRewardedAd } from '../services/adsgram';
 
 const SPIN_DURATION_MS = 9000;
 
@@ -20,7 +22,11 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [transientPrize, setTransientPrize] = useState<PublicPrize | null>(null);
-  const [pendingAnimation, setPendingAnimation] = useState<{ result: SpinResult; slotKey: string | null } | null>(null);
+  const [pendingAnimation, setPendingAnimation] = useState<{ result: SpinResult; slotKey: string | null; adSpin?: boolean } | null>(null);
+  // Spins bought with an ad (3 a day); they don't touch the free spin's timer.
+  const [adSpinsLeft, setAdSpinsLeft] = useState(me.ads?.adSpinsLeft ?? 0);
+  const adBlockId = me.ads?.blockId ?? null;
+  useEffect(() => setAdSpinsLeft(me.ads?.adSpinsLeft ?? 0), [me.ads?.adSpinsLeft]);
   const spinningRef = useRef(false);
   const deferredPrizeRefreshRef = useRef(false);
   const { label, isReady } = useCountdown(nextSpinAt);
@@ -134,12 +140,13 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
       return;
     }
     const spinResult = pendingAnimation.result;
+    const isAdSpin = Boolean(pendingAnimation.adSpin);
     setPendingAnimation(null);
     wheelRef.current.spinTo(targetSlotIndex, SPIN_DURATION_MS, () => {
       spinningRef.current = false;
       setSpinning(false);
       setResult(spinResult);
-      if (mode === 'daily') setNextSpinAt(spinResult.nextSpinAt);
+      if (mode === 'daily' && !isAdSpin) setNextSpinAt(spinResult.nextSpinAt);
       haptic(spinResult.won ? 'heavy' : 'light');
       invalidateCache('inventory');
       invalidateCache('history');
@@ -156,6 +163,24 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
       }
     });
    }, [mode, pendingAnimation, refreshMe, refetchPrizes, refetchRecentWins, slots]);
+
+  async function handleAdSpin() {
+    if (spinning || !adBlockId || adSpinsLeft <= 0 || slots.length === 0) return;
+    setError(null);
+    spinningRef.current = true;
+    setSpinning(true);
+    try {
+      await showRewardedAd(adBlockId);
+      haptic('medium');
+      const res = await claimAfterAd<{ ok: true; adSpinsLeft: number }>('/wheel/ad-spin');
+      setAdSpinsLeft(res.adSpinsLeft);
+      setPendingAnimation({ result: { won: false, nextSpinAt }, slotKey: null, adSpin: true });
+    } catch (err) {
+      spinningRef.current = false;
+      setSpinning(false);
+      setError(adErrorMessage(err));
+    }
+  }
 
   async function handleSpin() {
     if (spinning || !canSpin || slots.length === 0) return;
@@ -271,6 +296,13 @@ export function WheelPage({ me, refreshMe }: { me: MeResponse; refreshMe: () => 
           <button className="btn btn-primary wheel-spin-button" disabled={spinning || !canSpin || slots.length === 0} onClick={handleSpin}>
             {spinning ? tr('🎡 جاري الدوران...', '🎡 Spinning...') : mode === 'points' ? canSpin ? tr('🪙 دور مقابل 5 نقاط', '🪙 Spin for 5 points') : tr('تحتاج 5 نقاط', 'You need 5 points') : isReady ? tr('🚀 دور الحين', '🚀 Spin now') : tr('⏳ انتظر الفرة', '⏳ Wait for your spin')}
           </button>
+          {mode === 'daily' && adBlockId && (
+            <button className="btn btn-secondary wheel-ad-spin-button" disabled={spinning || adSpinsLeft <= 0 || slots.length === 0} onClick={() => void handleAdSpin()}>
+              {adSpinsLeft > 0
+                ? tr(`📺 فرّ العجلة بإعلان (${adSpinsLeft}/${me.ads?.adSpinsPerDay ?? 3})`, `📺 Spin with an ad (${adSpinsLeft}/${me.ads?.adSpinsPerDay ?? 3})`)
+                : tr('📺 خلصت فرّات الإعلان لليوم', '📺 No ad spins left today')}
+            </button>
+          )}
           {error && <p className="wheel-error">{error}</p>}
         </div>
       </section>

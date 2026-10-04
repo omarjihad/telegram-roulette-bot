@@ -117,8 +117,6 @@ export async function previewGet(path: string): Promise<unknown> {
       };
     case '/notifications':
       return { ok: true, items: [] };
-    case '/store/products':
-      return { ok: true, products: [] };
     case '/games':
       return {
         ok: true, allowed: true, comingSoon: false, blockId: '', spinPoints: 3.6,

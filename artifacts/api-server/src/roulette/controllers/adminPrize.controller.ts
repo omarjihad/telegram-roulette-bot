@@ -87,18 +87,6 @@ export const adminUpdatePrize = asyncHandler(async (req: Request, res: Response)
   res.json({ ok: true, prize });
 });
 
-/** Sets (or clears, with null) this prize's Store price in spin-points. Separate from the
- *  general update endpoint so the admin UI can offer a quick "set price" prompt without
- *  touching name/icon/image. */
-export const adminSetStorePrice = asyncHandler(async (req: Request, res: Response) => {
-  const { storePrice } = req.body as { storePrice?: number | null };
-  if (storePrice !== null && (typeof storePrice !== 'number' || storePrice <= 0)) {
-    throw new AppError('storePrice must be a positive number or null', 422, 'VALIDATION_ERROR');
-  }
-  const prize = await updatePrizeDetails(req.params.key, { storePrice }, req.telegramId!, req.dbUser!.username);
-  res.json({ ok: true, prize });
-});
-
 /** Multipart image upload for a prize — the file itself is handled by the uploadPrizeImage
  *  middleware (see routes/admin.routes.ts, now using memory storage) and stored directly
  *  in MongoDB rather than on local disk. */

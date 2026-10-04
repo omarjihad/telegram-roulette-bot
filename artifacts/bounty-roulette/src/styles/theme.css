@@ -1034,6 +1034,15 @@ select option {
   box-shadow: 0 11px 28px rgba(243, 198, 35, 0.3);
 }
 
+.wheel-ad-spin-button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  font-size: 15px;
+  border: 1px solid rgba(167, 139, 250, 0.55);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.28), rgba(30, 41, 59, 0.9));
+}
+
 .wheel-error {
   margin: 10px 0 0;
   color: #ff9b9b;
@@ -2162,6 +2171,7 @@ html[dir='ltr'] body { direction: ltr; }
 
 /* Home: art tiles and cards */
 .home-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.art-tile-wide { grid-column: 1 / -1; }
 .art-tile, .art-card {
   position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px;
   width: 100%; padding: 12px; text-align: start; color: #fff; font: inherit; cursor: pointer;

@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
-vi.mock('../models/User', () => ({ User: { findOne: mocks.userFindOne } }));
+vi.mock('../models/User', () => ({ User: { findOne: mocks.userFindOne, updateOne: vi.fn().mockResolvedValue({}) } }));
 vi.mock('../models/ExchangeListing', () => ({
   EXCHANGE_CURRENCIES: ['usd', 'asia', 'zain', 'master', 'ton', 'pound', 'riyal'],
   ExchangeListing: {
@@ -123,6 +123,16 @@ describe('createListing', () => {
     await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', prices: '[{"currency":"euro","amount":5}]' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(createListing(user, 'developer', { mode: 'sell', details: 'Level 70 account', prices: '[{"currency":"usd","amount":5},{"currency":"usd","amount":6}]' }, [img])).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('needs an ad watched just before posting when ads are set up', async () => {
+    mocks.settings.mockResolvedValue({ exchangePublic: false, adsgramBlockId: '50375' });
+    await expect(createListing(user, 'developer', { mode: 'trade', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'AD_REQUIRED' });
+    const withPass = { ...(user as object), exchangeAdPassAt: new Date(Date.now() - 60_000) } as never;
+    await createListing(withPass, 'developer', { mode: 'trade', details: 'Level 70 account' }, [img]);
+    expect(mocks.listingCreate).toHaveBeenCalled();
+    const expired = { ...(user as object), exchangeAdPassAt: new Date(Date.now() - 31 * 60_000) } as never;
+    await expect(createListing(expired, 'developer', { mode: 'trade', details: 'Level 70 account' }, [img])).rejects.toMatchObject({ code: 'AD_REQUIRED' });
   });
 
   it('puts the chosen cover photo first', async () => {

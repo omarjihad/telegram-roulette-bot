@@ -30,6 +30,11 @@ export interface IUser extends Document {
   contestJoinedAt?: Date | null;
   // Snake game: when the last free round was started (12h cooldown by default).
   lastFreeGameAt?: Date | null;
+  // Wheel spins bought with an ad: the (Baghdad) day they were counted on and how many.
+  adSpinDay?: string | null;
+  adSpinCount?: number;
+  // A watched ad that allows posting one exchange listing (valid for 30 minutes).
+  exchangeAdPassAt?: Date | null;
   // Language picked in the Mini App or with /language (null = not chosen, Arabic).
   language?: 'ar' | 'en' | null;
   totalSpins: number;
@@ -89,6 +94,9 @@ const userSchema = new Schema<IUser>(
     contestToken: { type: String },
     contestJoinedAt: { type: Date, default: null },
     lastFreeGameAt: { type: Date, default: null },
+    adSpinDay: { type: String, default: null },
+    adSpinCount: { type: Number, default: 0 },
+    exchangeAdPassAt: { type: Date, default: null },
     language: { type: String, enum: ['ar', 'en', null], default: null },
     totalSpins: { type: Number, default: 0 },
     lastSpinWon: { type: Boolean, default: null },

@@ -12,7 +12,6 @@ import { TasksPage } from './pages/TasksPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { AdminPage } from './pages/AdminPage';
-import { StorePage } from './pages/StorePage';
 import { ContestPage } from './pages/ContestPage';
 import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
@@ -24,6 +23,8 @@ import { hasStoredLang, setLang, tr, useLang } from './i18n';
 import { isPreviewMode } from './services/preview';
 import { clearCache } from './hooks/useCachedFetch';
 import { DailyLoginModal } from './components/DailyLoginModal';
+import { adErrorMessage } from './components/AdTaskCard';
+import { claimAfterAd, showRewardedAd } from './services/adsgram';
 
 type Stage = 'loading' | 'forced_sub' | 'captcha' | 'ready' | 'error';
 
@@ -77,10 +78,22 @@ export default function App() {
   }, []);
 
   const collectDailyLogin = useCallback(async () => {
-    const daily = await api.post<DailyLoginResponse>('/daily-login');
+    // Prize days (5 and 7) open after an ad watched to the end.
+    const blockId = me?.ads?.blockId;
+    let daily: DailyLoginResponse;
+    if (dailyLogin?.canClaim && dailyLogin.reward.adRequired && blockId) {
+      try {
+        await showRewardedAd(blockId);
+        daily = await claimAfterAd<DailyLoginResponse>('/daily-login');
+      } catch (err) {
+        throw new Error(adErrorMessage(err));
+      }
+    } else {
+      daily = await api.post<DailyLoginResponse>('/daily-login');
+    }
     setMe((current) => current ? { ...current, user: { ...current.user, spinPoints: daily.result.spinPoints, spinCredits: daily.result.spinCredits } } : current);
     return daily.result;
-  }, []);
+  }, [dailyLogin, me?.ads?.blockId]);
 
   const loadMe = useCallback(async () => {
     try {
@@ -161,7 +174,7 @@ export default function App() {
     <div className="app-shell">
       <div className="app-content">
         {preview && <PreviewBanner />}
-        {dailyLogin && <DailyLoginModal status={dailyLogin} onCollect={collectDailyLogin} onClose={() => setDailyLogin(null)} />}
+        {dailyLogin && <DailyLoginModal status={dailyLogin} adsOn={Boolean(me?.ads?.blockId)} onCollect={collectDailyLogin} onClose={() => setDailyLogin(null)} />}
         {me.isAdmin && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
             <button
@@ -194,9 +207,6 @@ export default function App() {
             </div>
             <HistoryPage />
           </>
-        )}
-        {tab === 'store' && (
-          <StorePage spinCredits={me.user.spinCredits} onBack={() => setTab('home')} refreshMe={loadMe} />
         )}
         </div>
       </div>

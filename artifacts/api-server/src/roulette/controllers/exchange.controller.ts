@@ -22,6 +22,8 @@ import {
   makeOffer,
   renewListingByUser,
   updateListing,
+  postAdStatus,
+  grantPostAdPass,
 } from '../services/exchange.service';
 
 /** Uploaded files; listing photos come with their small "thumbs" copy at the same index. */
@@ -49,6 +51,14 @@ export const getMyExchangeListings = asyncHandler(async (req: Request, res: Resp
 
 export const getExchangeListing = asyncHandler(async (req: Request, res: Response) => {
   res.json({ ok: true, ...(await getListing(req.dbUser!, req.adminRole ?? null, req.params.id)) });
+});
+
+export const getExchangePostAd = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await postAdStatus(req.dbUser!)) });
+});
+
+export const postExchangePostAd = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await grantPostAdPass(req.dbUser!, req.adminRole ?? null));
 });
 
 export const postExchangeListing = asyncHandler(async (req: Request, res: Response) => {

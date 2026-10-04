@@ -1,6 +1,6 @@
 import mongoose, { HydratedDocument } from 'mongoose';
 import { IUser, User } from '../models/User';
-import { AdView } from '../models/AdView';
+import { AdView, AdPurpose } from '../models/AdView';
 import { GameSession } from '../models/GameSession';
 import { getSettings, ISettings } from '../models/Settings';
 import { AppError } from '../utils/AppError';
@@ -58,7 +58,7 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
  * the Reward URL count; the client retries for a few seconds because the callback can land
  * just after the ad closes. Without a key (testing), the client's word is taken.
  */
-export async function consumeAdView(telegramId: number, purpose: 'ad_task' | 'snake_round' | 'claim_task') {
+export async function consumeAdView(telegramId: number, purpose: AdPurpose) {
   if (!env.ADSGRAM_REWARD_KEY) {
     await AdView.create({ telegramId, source: 'client', consumedAt: new Date(), consumedFor: purpose });
     return;
@@ -74,6 +74,18 @@ export async function consumeAdView(telegramId: number, purpose: 'ad_task' | 'sn
     { sort: { createdAt: 1 }, new: true }
   );
   if (!view) throw new AppError(t('لم يتم تأكيد مشاهدة الإعلان بعد', 'The ad view is not confirmed yet'), 409, 'AD_NOT_CONFIRMED');
+}
+
+/** Ads are only required where an Adsgram block is set up (otherwise nobody could pass). */
+export async function adsBlockId() {
+  const settings = await getSettings();
+  return settings.adsgramBlockId || null;
+}
+
+/** Spends one watched ad for an action that requires it; a no-op while ads aren't set up. */
+export async function requireAd(telegramId: number, purpose: AdPurpose) {
+  if (!(await adsBlockId())) return;
+  await consumeAdView(telegramId, purpose);
 }
 
 /** Adsgram's server-to-server Reward URL: one call per ad watched to the end. */

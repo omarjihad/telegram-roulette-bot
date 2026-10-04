@@ -3,11 +3,10 @@ import { miniAppAuth } from '../middleware/miniAppAuth';
 import { spinLimiter, claimLimiter, purchaseLimiter } from '../middleware/rateLimit';
 import { getMe, getForcedSubStatus, postLanguage } from '../controllers/user.controller';
 import { requestCaptcha, submitCaptcha } from '../controllers/captcha.controller';
-import { getWheelStatus, spin, spinWithPoints, getWheelPrizes, getRecentDailyWins } from '../controllers/roulette.controller';
+import { getWheelStatus, spin, spinWithPoints, spinWithAdController, getWheelPrizes, getRecentDailyWins } from '../controllers/roulette.controller';
 import { listMyInventory, claimPrize, shareCard, postClaimAdStep, postClaimShareSent } from '../controllers/inventory.controller';
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
-import { getStoreProducts, postStorePurchase } from '../controllers/store.controller';
 import { getContest, postJoinContest } from '../controllers/contest.controller';
 import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart } from '../controllers/games.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
@@ -23,6 +22,8 @@ import {
   postExchangeOffer,
   patchExchangeListing,
   postRenewExchangeListing,
+  getExchangePostAd,
+  postExchangePostAd,
 } from '../controllers/exchange.controller';
 import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
 import { getMediation, getMediationOfferTarget, postCancelMediationTicket, postMediationLookup, postMediationTicket } from '../controllers/mediation.controller';
@@ -46,6 +47,7 @@ router.get('/wheel/prizes', getWheelPrizes);
 router.get('/wheel/recent-wins', getRecentDailyWins);
 router.post('/wheel/spin', spinLimiter, spin);
 router.post('/points-wheel/spin', spinLimiter, spinWithPoints);
+router.post('/wheel/ad-spin', spinLimiter, spinWithAdController);
 router.get('/daily-login', getDailyLogin);
 router.post('/daily-login', postDailyLogin);
 router.get('/tasks', getMyTasks);
@@ -69,6 +71,8 @@ router.get('/exchange', getExchange);
 router.get('/exchange/listings', getExchangeListings);
 router.get('/exchange/listings/mine', getMyExchangeListings);
 router.get('/exchange/listings/:id', getExchangeListing);
+router.get('/exchange/post-ad', getExchangePostAd);
+router.post('/exchange/post-ad', postExchangePostAd);
 router.post('/exchange/listings', purchaseLimiter, uploadExchangeImages, postExchangeListing);
 router.delete('/exchange/listings/:id', deleteExchangeListing);
 router.patch('/exchange/listings/:id', purchaseLimiter, uploadExchangeImages, patchExchangeListing);
@@ -88,7 +92,5 @@ router.post('/contest/join', postJoinContest);
 router.get('/notifications', listMyNotifications);
 router.post('/notifications/read', markRead);
 
-router.get('/store/products', getStoreProducts);
-router.post('/store/purchase', purchaseLimiter, postStorePurchase);
 
 export default router;

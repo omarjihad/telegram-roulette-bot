@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { tr } from '../i18n';
 import { DailyLoginResponse, DailyLoginStatusResponse } from '../types';
-import { ApiError } from '../services/api';
 import { haptic } from '../hooks/useTelegramWebApp';
 
 function rewardDays() {
@@ -46,10 +45,13 @@ export function DailyLoginModal({
   status,
   onCollect,
   onClose,
+  adsOn = false,
 }: {
   status: Status;
   onCollect: () => Promise<Result>;
   onClose: () => void;
+  /** Whether ads are set up (prize days then need one). */
+  adsOn?: boolean;
 }) {
   const [collected, setCollected] = useState<Result | null>(null);
   const [collecting, setCollecting] = useState(false);
@@ -70,7 +72,7 @@ export function DailyLoginModal({
       setCollected(result);
       haptic('medium');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
+      setError(err instanceof Error && err.message ? err.message : tr('صار خطأ، حاول مرة ثانية.', 'Something went wrong, please try again.'));
     } finally {
       setCollecting(false);
     }
@@ -114,11 +116,18 @@ export function DailyLoginModal({
             {tr('⏰ جائزة الهدية لازم تستلمها من المخزون خلال 12 ساعة، وإلا تروح.', '⏰ Claim this prize from your bag within 12 hours, or it disappears.')}
           </p>
         )}
+        {canCollect && status.reward.adRequired && adsOn && (
+          <p className="daily-prize-deadline">{tr('🎁 هدية قيّمة! شاهد الإعلان للنهاية حتى تنفتح.', '🎁 A valuable gift! Watch the ad to the end to open it.')}</p>
+        )}
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, margin: '0 0 10px' }}>{error}</p>}
 
         {canCollect ? (
           <button className="btn btn-primary daily-collect" onClick={collect} disabled={collecting}>
-            {collecting ? tr('جاري الجمع...', 'Collecting...') : tr(`🎁 جمع (${rewardLabel(status.reward)})`, `🎁 Collect (${rewardLabel(status.reward)})`)}
+            {collecting
+              ? tr('جاري الجمع...', 'Collecting...')
+              : status.reward.adRequired && adsOn
+                ? tr(`📺 شاهد إعلان واستلم (${rewardLabel(status.reward)})`, `📺 Watch an ad to collect (${rewardLabel(status.reward)})`)
+                : tr(`🎁 جمع (${rewardLabel(status.reward)})`, `🎁 Collect (${rewardLabel(status.reward)})`)}
           </button>
         ) : (
           <>

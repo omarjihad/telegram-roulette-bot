@@ -80,15 +80,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
           </button>
         </div>
         <div className="home-stats">
-          <button className="home-stat home-stat-store" onClick={() => onNavigate('store')} title={tr('فتح المتجر', 'Open the store')}>
-            <span className="home-stat-icon">🏪</span>
-            <span className="home-stat-copy">
-              <span>{tr('المتجر', 'Store')}</span>
-              <strong>{me.user.spinCredits} <small>{tr('فرة', 'spins')}</small></strong>
-            </span>
-            <span className="home-stat-arrow">←</span>
-          </button>
-          <button className="home-stat home-stat-spins" onClick={() => onNavigate('store')} title={tr('فتح المتجر', 'Open the store')}>
+          <button className="home-stat home-stat-spins" onClick={() => onNavigate('wheel')} title={tr('فتح العجلة', 'Open the wheel')}>
             <span className="home-stat-icon">🎰</span>
             <span className="home-stat-copy">
               <span>{tr('نقاط عجلة النقاط', 'Points-wheel points')}</span>
@@ -141,19 +133,12 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
           <strong>{tr('المهام', 'Tasks')}</strong>
           <small>{tr('إعلانات ومهام بنقاط', 'Ads & tasks for points')}</small>
         </button>
-        <button className="art-tile" onClick={() => onNavigate('inventory')}>
+        <button className="art-tile art-tile-wide" onClick={() => onNavigate('inventory')}>
           <span className="art-bg" style={{ backgroundImage: 'url(/art/inventory.svg)' }} />
           <span className="art-shade" />
           <span className="art-tile-icon">🎒</span>
           <strong>{tr('المخزون', 'Inventory')}</strong>
           <small>{tr('جوائزك واستلامها', 'Your prizes')}</small>
-        </button>
-        <button className="art-tile" onClick={() => onNavigate('store')}>
-          <span className="art-bg" style={{ backgroundImage: 'url(/art/store.svg)' }} />
-          <span className="art-shade" />
-          <span className="art-tile-icon">🏪</span>
-          <strong>{tr('المتجر', 'Store')}</strong>
-          <small>{tr('بدّل فرّاتك بجوائز', 'Swap spins for prizes')}</small>
         </button>
       </div>
 

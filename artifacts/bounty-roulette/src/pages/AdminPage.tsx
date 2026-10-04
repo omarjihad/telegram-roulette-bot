@@ -8,7 +8,6 @@ interface AdminPrize {
   name: string;
   icon: string;
   imageUrl?: string | null;
-  storePrice?: number | null;
   baseWeight: number;
   dailyWeight: number;
   pointsWeight: number;
@@ -1998,27 +1997,6 @@ function PrizesTab() {
               </button>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span
-              style={{
-                fontSize: 13,
-                padding: '4px 10px',
-                borderRadius: 8,
-                background: p.storePrice ? 'rgba(213,155,255,0.15)' : 'rgba(255,255,255,0.06)',
-                color: p.storePrice ? 'var(--accent-glow)' : 'var(--text-dim)',
-              }}
-            >
-              {p.storePrice ? `🏪 بالمتجر: ${p.storePrice} فرة` : '🏪 مو موجودة بالمتجر'}
-            </span>
-            <button
-              className="btn btn-secondary"
-              style={{ padding: '4px 10px', fontSize: 12 }}
-              disabled={busyKey === p.key}
-              onClick={() => editStorePrice(p, load, setBusyKey)}
-            >
-              {p.storePrice ? '✏️ تعديل السعر' : '➕ أضفها للمتجر'}
-            </button>
-          </div>
            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                <button className="btn btn-secondary" disabled={busyKey === p.key || p.dailyIsUnlimited} onClick={() => adjustStock(p.key, 'add', 'daily')}>
                  ➕ يومي
@@ -2076,33 +2054,6 @@ async function editPrizeIcon(
   setBusyKey(prize.key);
   try {
     await api.patch(`/admin/prizes/${prize.key}`, { icon: icon.trim() });
-  } finally {
-    setBusyKey(null);
-  }
-  await reload();
-}
-
-async function editStorePrice(
-  prize: AdminPrize,
-  reload: () => Promise<void>,
-  setBusyKey: (k: string | null) => void
-) {
-  const raw = window.prompt(
-    'سعر هذي الجائزة بالمتجر (بعدد الفرات) — اترك الخانة فارغة عشان تشيلها من المتجر:',
-    prize.storePrice ? String(prize.storePrice) : ''
-  );
-  if (raw === null) return; // cancelled
-  const trimmed = raw.trim();
-  const storePrice = trimmed === '' ? null : Number(trimmed);
-  if (storePrice !== null && (!Number.isFinite(storePrice) || storePrice <= 0)) {
-    window.alert('السعر لازم يكون رقم موجب.');
-    return;
-  }
-  setBusyKey(prize.key);
-  try {
-    await api.post(`/admin/prizes/${prize.key}/store-price`, { storePrice });
-  } catch (err) {
-    window.alert(err instanceof ApiError ? err.message : 'فشل تحديث السعر');
   } finally {
     setBusyKey(null);
   }

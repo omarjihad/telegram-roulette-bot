@@ -1,5 +1,9 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+/** What a watched ad was spent on. */
+export const AD_PURPOSES = ['ad_task', 'snake_round', 'claim_task', 'daily_prize', 'exchange_post', 'wheel_ad_spin'] as const;
+export type AdPurpose = (typeof AD_PURPOSES)[number];
+
 /**
  * One completed rewarded ad, reported by Adsgram's server-to-server Reward URL.
  * The Mini App then spends it on something (the ad task reward or an extra snake round),
@@ -9,7 +13,7 @@ export interface IAdView extends Document {
   telegramId: number;
   source: 'adsgram_callback' | 'client';
   consumedAt?: Date | null;
-  consumedFor?: 'ad_task' | 'snake_round' | 'claim_task' | null;
+  consumedFor?: AdPurpose | null;
   createdAt: Date;
 }
 
@@ -18,7 +22,7 @@ const adViewSchema = new Schema<IAdView>(
     telegramId: { type: Number, required: true, index: true },
     source: { type: String, enum: ['adsgram_callback', 'client'], required: true },
     consumedAt: { type: Date, default: null },
-    consumedFor: { type: String, enum: ['ad_task', 'snake_round', 'claim_task', null], default: null },
+    consumedFor: { type: String, enum: [...AD_PURPOSES, null], default: null },
   },
   { timestamps: true }
 );

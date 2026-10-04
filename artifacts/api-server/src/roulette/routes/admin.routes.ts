@@ -12,7 +12,6 @@ import {
   adminSetPrizeActive,
   adminUploadPrizeImage,
   adminClearPrizeImage,
-  adminSetStorePrice,
 } from '../controllers/adminPrize.controller';
 import { uploadPrizeImage, uploadSettingsImage } from '../middleware/upload';
 import {
@@ -95,7 +94,6 @@ router.post('/prizes/:key/stock/set', adminSetStock);
 router.post('/prizes/:key/active', adminSetPrizeActive);
 router.post('/prizes/:key/image', uploadPrizeImage, adminUploadPrizeImage);
 router.delete('/prizes/:key/image', adminClearPrizeImage);
-router.post('/prizes/:key/store-price', adminSetStorePrice);
 
 // Withdrawals
 router.get('/withdrawals', adminListWithdrawals);

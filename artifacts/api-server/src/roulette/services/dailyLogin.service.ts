@@ -33,6 +33,8 @@ function rewardView(day: number, reward: ReturnType<typeof getDailyReward>, priz
     prizeName: prize?.name ?? null,
     prizeIcon: prize?.icon ?? null,
     prizeImageUrl: prize ? prizeImageUrl(prize.key, prize.hasImage) : null,
+    // The valuable days (prizes) open after watching an ad.
+    adRequired: reward.type === 'prize',
   };
 }
 

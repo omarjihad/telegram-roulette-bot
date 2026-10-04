@@ -35,6 +35,8 @@ export interface MeResponse {
   isAdmin: boolean;
   adminRole: 'owner' | 'developer' | null;
   // The invite race is hidden everywhere while this is false.
+  // Adsgram block for ads outside the games page (null = ads off) and today's ad spins.
+  ads?: { blockId: string | null; adSpinsLeft: number; adSpinsPerDay: number };
   contestEnabled?: boolean;
   // Snake game + ad task are open to everyone (otherwise only admins, others see "coming soon").
   gamesPublic?: boolean;
@@ -58,6 +60,7 @@ export type SpinResult =
       prizeKey: string;
       prizeIcon: string;
       prizeImageUrl: string | null;
+      adRequired?: boolean;
       userPrizeId: string;
       expiresAt: string;
       nextSpinAt: string;
@@ -180,6 +183,7 @@ export interface DailyLoginResponse {
       prizeName: string | null;
       prizeIcon: string | null;
       prizeImageUrl: string | null;
+      adRequired?: boolean;
     };
   };
 }

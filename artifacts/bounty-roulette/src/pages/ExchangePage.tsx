@@ -4,6 +4,8 @@ import { locale, tr } from '../i18n';
 import { api, ApiError } from '../services/api';
 import { getTelegramWebApp, haptic } from '../hooks/useTelegramWebApp';
 import { ImageViewer } from '../components/ImageViewer';
+import { adErrorMessage } from '../components/AdTaskCard';
+import { claimAfterAd, showRewardedAd } from '../services/adsgram';
 import {
   ExchangeCurrency,
   ExchangeListingDetail,
@@ -495,6 +497,17 @@ function PostForm({ status, flash, onPosted, initial }: { status: ExchangeStatus
         form.append('order', JSON.stringify(order));
         await api.form(`/exchange/listings/${initial.id}`, form, 'PATCH');
       } else {
+        // Posting costs one ad watched to the end (skipped while a recent one still counts).
+        const ad = await api.get<{ ok: true; required: boolean; blockId: string | null }>('/exchange/post-ad');
+        if (ad.required && ad.blockId) {
+          try {
+            await showRewardedAd(ad.blockId);
+            await claimAfterAd('/exchange/post-ad');
+          } catch (err) {
+            flash(adErrorMessage(err));
+            return;
+          }
+        }
         form.append('cover', String(cover));
         for (const [i, p] of photos.entries()) {
           form.append('images', await compressImage(p.file!), `photo-${i + 1}.jpg`);
@@ -598,7 +611,7 @@ function PostForm({ status, flash, onPosted, initial }: { status: ExchangeStatus
 
       <p className="card-sub ex-hint">{tr('⚠️ بنشرك للحساب أنت توافق على التعامل عن طريق وسيط فقط. ⏰ المنشور ينحذف تلقائياً بعد 4 أيام.', '⚠️ By posting you agree to deal through a middleman only. ⏰ Posts are removed automatically after 4 days.')}</p>
       <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
-        {busy ? tr('جاري الحفظ...', 'Saving...') : initial ? tr('💾 حفظ التعديلات', '💾 Save changes') : tr('🚀 نشر الحساب', '🚀 Post the account')}
+        {busy ? tr('جاري الحفظ...', 'Saving...') : initial ? tr('💾 حفظ التعديلات', '💾 Save changes') : tr('📺 شاهد إعلان وانشر الحساب', '📺 Watch an ad and post')}
       </button>
     </div>
   );

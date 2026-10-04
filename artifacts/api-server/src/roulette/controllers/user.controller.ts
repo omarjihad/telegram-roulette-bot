@@ -9,6 +9,7 @@ import { isContestEnabled, tryCountContestReferral } from '../services/contest.s
 import { prizeImageUrl } from '../services/prize.service';
 import mongoose from 'mongoose';
 import { getSettings } from '../models/Settings';
+import { adSpinsLeft, AD_SPINS_PER_DAY } from '../services/adSpin.service';
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const user = req.dbUser!;
@@ -38,6 +39,8 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
       spinCredits: user.spinCredits ?? 0,
     },
     wheel: { ready, nextSpinAt, lastSpin },
+    // Adsgram block for ads shown outside the games page; null while ads aren't set up.
+    ads: { blockId: (await getSettings()).adsgramBlockId || null, adSpinsLeft: adSpinsLeft(user), adSpinsPerDay: AD_SPINS_PER_DAY },
     contestEnabled: await isContestEnabled(),
     gamesPublic: (await getSettings()).gamesPublic,
     exchangePublic: (await getSettings()).exchangePublic,
