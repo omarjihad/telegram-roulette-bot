@@ -16,6 +16,8 @@ export interface ShowcaseResponse {
 
 export interface MeResponse {
   ok: true;
+  // MF Battle (developers only for now): where the game is hosted, null when not set.
+  battleUrl?: string | null;
   user: {
     telegramId: number;
     username?: string;

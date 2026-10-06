@@ -118,3 +118,18 @@ export function openSharePicker(preparedId: string, timeoutMs = 30_000): Promise
     view.postEvent('web_app_send_prepared_message', false, { id: preparedId });
   });
 }
+
+/**
+ * The Telegram launch data as a URL hash, so a page on another site (MF Battle on
+ * Cloudflare) opened from the Mini App is still signed in as this Telegram user.
+ */
+export function telegramLaunchHash(): string {
+  const tg = window.Telegram?.WebApp as (TelegramWebApp & { version?: string; platform?: string; themeParams?: Record<string, string> }) | undefined;
+  if (!tg?.initData) return '';
+  return [
+    `tgWebAppData=${encodeURIComponent(tg.initData)}`,
+    `tgWebAppVersion=${encodeURIComponent(tg.version ?? '')}`,
+    `tgWebAppPlatform=${encodeURIComponent(tg.platform ?? '')}`,
+    `tgWebAppThemeParams=${encodeURIComponent(JSON.stringify(tg.themeParams ?? {}))}`,
+  ].join('&');
+}

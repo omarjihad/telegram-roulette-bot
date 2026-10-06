@@ -28,6 +28,16 @@ import {
 import { uploadExchangeImages, uploadReportMedia } from '../middleware/upload';
 import { getMediation, getMediationOfferTarget, postCancelMediationTicket, postMediationLookup, postMediationTicket } from '../controllers/mediation.controller';
 import { getDeliveryContact, verifyDeliveryContact } from '../controllers/deliveryAccount.controller';
+import {
+  getBattle,
+  getBattleLayoutCode,
+  getBattleLeaderboard,
+  postBattleBuySkin,
+  postBattleEquipSkin,
+  postBattleLayoutShare,
+  putBattleLayout,
+  putBattleSettings,
+} from '../controllers/battle.controller';
 
 const router = Router();
 
@@ -68,6 +78,15 @@ router.post('/games/snake/start', postSnakeStart);
 router.post('/games/snake/finish', postSnakeFinish);
 router.post('/games/ziggurat/start', postZigguratStart);
 router.post('/games/ziggurat/finish', postZigguratFinish);
+// MF Battle (the online game's lobby, hosted on Cloudflare): developers only for now.
+router.get('/battle', getBattle);
+router.post('/battle/skins/:id/buy', purchaseLimiter, postBattleBuySkin);
+router.post('/battle/skins/:id/equip', postBattleEquipSkin);
+router.put('/battle/settings', putBattleSettings);
+router.put('/battle/layout', putBattleLayout);
+router.post('/battle/layout/share', purchaseLimiter, postBattleLayoutShare);
+router.get('/battle/layout/:code', getBattleLayoutCode);
+router.get('/battle/leaderboard', getBattleLeaderboard);
 
 router.get('/exchange', getExchange);
 router.get('/exchange/listings', getExchangeListings);

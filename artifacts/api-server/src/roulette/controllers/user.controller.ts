@@ -10,6 +10,7 @@ import { prizeImageUrl } from '../services/prize.service';
 import mongoose from 'mongoose';
 import { getSettings } from '../models/Settings';
 import { adSpinsLeft, AD_SPINS_PER_DAY } from '../services/adSpin.service';
+import { battleUrl } from '../services/battle.service';
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const user = req.dbUser!;
@@ -46,6 +47,8 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     exchangePublic: (await getSettings()).exchangePublic,
     language: user.language ?? null,
     isAdmin: req.adminRole !== null,
+    // MF Battle is open to developers only for now.
+    battleUrl: req.adminRole !== null ? battleUrl() : null,
     adminRole: req.adminRole,
   });
 });

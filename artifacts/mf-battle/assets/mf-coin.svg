@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1a8"/><stop offset=".35" stop-color="#ffc83d"/><stop offset=".7" stop-color="#e08a00"/><stop offset="1" stop-color="#ffd76a"/></linearGradient>
+    <radialGradient id="face" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#4a1d8f"/><stop offset=".6" stop-color="#2a0d5c"/><stop offset="1" stop-color="#160636"/></radialGradient>
+    <linearGradient id="txt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6c2"/><stop offset=".55" stop-color="#ffcb45"/><stop offset="1" stop-color="#f08c00"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="#7a4200"/>
+  <circle cx="64" cy="62" r="60" fill="url(#rim)"/>
+  <g stroke="#b86e00" stroke-width="3" stroke-linecap="round" opacity=".55">
+    <path d="M64 6v8M64 110v8M6 62h8M114 62h8M23 21l6 6M99 97l6 6M23 103l6-6M99 27l6-6"/>
+  </g>
+  <circle cx="64" cy="62" r="46" fill="#9c5a00"/>
+  <circle cx="64" cy="62" r="43" fill="url(#face)"/>
+  <circle cx="64" cy="62" r="43" fill="none" stroke="#ffd76a" stroke-width="2" stroke-dasharray="3 5" opacity=".7"/>
+  <text x="64" y="78" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="44" fill="url(#txt)" stroke="#5a2a00" stroke-width="2.5" paint-order="stroke" letter-spacing="-2">MF</text>
+  <path d="M44 30 q20 -12 40 0" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".35"/>
+  <path d="M98 30 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#fff8d6"/>
+</svg>

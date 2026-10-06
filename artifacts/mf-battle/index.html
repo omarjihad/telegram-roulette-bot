@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>MF Battle</title>
+  <link rel="icon" href="assets/mf-coin.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@600;800&family=Cairo:wght@500;700;900&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <!-- One landscape "stage": on a phone held upright it is turned sideways. -->
+  <div id="stage">
+    <div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div id="screen"></div>
+    <div id="panel" class="panel" hidden></div>
+    <div id="dialog" class="dialog-backdrop" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -29,6 +29,12 @@ const envSchema = z.object({
     .optional()
     .default('')
     .refine((v) => v === '' || /^https:\/\//.test(v), { message: 'MINI_APP_URL must be empty or start with https://' }),
+  // Where the MF Battle game is hosted (Cloudflare Pages), e.g. https://mf-battle.pages.dev
+  MF_BATTLE_URL: z
+    .string()
+    .optional()
+    .default('')
+    .refine((v) => v === '' || /^https:\/\//.test(v), { message: 'MF_BATTLE_URL must be empty or start with https://' }),
   SUPPORT_USERNAME: z.string().optional().default('support'),
   // Who the user is told to DM once their withdrawal is approved.
   DELIVERY_CONTACT_USERNAME: z.string().optional().default('kk66kk6'),

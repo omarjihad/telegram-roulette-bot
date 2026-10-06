@@ -5,6 +5,7 @@ import { useCountdown } from '../hooks/useCountdown';
 import { TabKey } from '../components/BottomNav';
 import { api } from '../services/api';
 import { getLang, setLang, tr } from '../i18n';
+import { haptic, telegramLaunchHash } from '../hooks/useTelegramWebApp';
 
 function LanguageToggle() {
   const next = getLang() === 'ar' ? 'en' : 'ar';
@@ -30,6 +31,16 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
 
   // Developers can use the exchange while it's being tested; members get "coming soon".
   const exchangeOpen = me.isAdmin || me.exchangePublic === true;
+
+  function openBattle() {
+    if (!me.battleUrl) {
+      setToast(tr('رابط MF Battle مو مضبوط بعد: حط MF_BATTLE_URL بإعدادات Railway.', 'MF Battle link not set yet: add MF_BATTLE_URL on Railway.'));
+      return;
+    }
+    haptic('medium');
+    const hash = telegramLaunchHash();
+    window.location.href = `${me.battleUrl.replace(/\/+$/, '')}/${hash ? `#${hash}` : ''}`;
+  }
 
   function comingSoon() {
     setToast(tr('🔜 قريباً! تحديث خرافي قادم… ترقّبوا 🔥', '🔜 Coming soon! Something huge is on the way… stay tuned 🔥'));
@@ -90,6 +101,20 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
           </button>
         </div>
       </section>
+
+      {/* MF Battle, the online game on Cloudflare: developers only for now. */}
+      {me.isAdmin && (
+        <button className="home-battle-card" onClick={openBattle}>
+          <span className="art-bg" style={{ backgroundImage: 'url(/art/battle.svg)' }} />
+          <span className="home-battle-shade" />
+          <span className="home-battle-copy">
+            <span className="home-section-label">{tr('⚔️ لعبة أونلاين · للمطورين', '⚔️ Online game · developers')}</span>
+            <strong>MF Battle</strong>
+            <span>{tr('كُل الأصغر منك وصير الأكبر بالساحة', 'Eat the smaller ones and rule the arena')}</span>
+          </span>
+          <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span>
+        </button>
+      )}
 
       <button className="home-exchange-card" onClick={exchangeOpen ? () => onNavigate('exchange') : comingSoon}>
         <span className="home-exchange-shade" />
