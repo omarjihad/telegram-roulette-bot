@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset=".7" stop-color="#7dd3fc"/><stop offset="1" stop-color="#bae6fd"/></linearGradient>
+    <linearGradient id="pipe" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#15803d"/><stop offset=".45" stop-color="#4ade80"/><stop offset="1" stop-color="#166534"/></linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde047"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".9">
+    <g transform="translate(70 80)"><circle r="22"/><circle cx="24" cy="-8" r="26"/><circle cx="52" r="20"/><rect x="0" y="0" width="52" height="20"/></g>
+    <g transform="translate(250 150) scale(.7)"><circle r="22"/><circle cx="24" cy="-8" r="26"/><circle cx="52" r="20"/><rect x="0" y="0" width="52" height="20"/></g>
+  </g>
+  <rect x="280" y="0" width="64" height="130" fill="url(#pipe)"/><rect x="272" y="112" width="80" height="26" rx="4" fill="url(#pipe)" stroke="#14532d" stroke-width="3"/>
+  <rect x="280" y="270" width="64" height="130" fill="url(#pipe)"/><rect x="272" y="262" width="80" height="26" rx="4" fill="url(#pipe)" stroke="#14532d" stroke-width="3"/>
+  <rect x="40" y="0" width="64" height="70" fill="url(#pipe)"/><rect x="32" y="52" width="80" height="26" rx="4" fill="url(#pipe)" stroke="#14532d" stroke-width="3"/>
+  <rect x="0" y="360" width="400" height="40" fill="#a16207"/><rect x="0" y="352" width="400" height="12" fill="#65a30d"/>
+  <g transform="translate(170 205) rotate(-14)">
+    <ellipse rx="44" ry="36" fill="url(#body)" stroke="#78350f" stroke-width="4"/>
+    <ellipse cx="-14" cy="8" rx="22" ry="13" fill="#fef3c7" stroke="#78350f" stroke-width="3" transform="rotate(-18)"/>
+    <circle cx="16" cy="-12" r="13" fill="#fff" stroke="#78350f" stroke-width="3"/><circle cx="20" cy="-11" r="5.5" fill="#1c1917"/>
+    <path d="M36 2 q24 4 22 14 q-12 6 -24 2 z" fill="#f97316" stroke="#78350f" stroke-width="3"/>
+  </g>
+  <g stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".8"><line x1="80" y1="190" x2="110" y2="190"/><line x1="70" y1="215" x2="105" y2="215"/><line x1="85" y1="240" x2="112" y2="240"/></g>
+</svg>
