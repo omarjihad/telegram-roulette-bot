@@ -8,7 +8,7 @@ import { listMyInventory, claimPrize, shareCard, postClaimAdStep, postClaimShare
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getContest, postJoinContest } from '../controllers/contest.controller';
-import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart } from '../controllers/games.controller';
+import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart, postZigguratFinish, postZigguratStart } from '../controllers/games.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
 import {
@@ -66,6 +66,8 @@ router.get('/games', getGames);
 router.post('/games/ad-task/claim', postAdTaskClaim);
 router.post('/games/snake/start', postSnakeStart);
 router.post('/games/snake/finish', postSnakeFinish);
+router.post('/games/ziggurat/start', postZigguratStart);
+router.post('/games/ziggurat/finish', postZigguratFinish);
 
 router.get('/exchange', getExchange);
 router.get('/exchange/listings', getExchangeListings);

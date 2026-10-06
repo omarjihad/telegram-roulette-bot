@@ -30,6 +30,8 @@ export interface IUser extends Document {
   contestJoinedAt?: Date | null;
   // Snake game: when the last free round was started (12h cooldown by default).
   lastFreeGameAt?: Date | null;
+  // Ziggurat game: when the last free round was started (same cooldown as the snake).
+  lastFreeZigguratAt?: Date | null;
   // Wheel spins bought with an ad: the (Baghdad) day they were counted on and how many.
   adSpinDay?: string | null;
   adSpinCount?: number;
@@ -94,6 +96,7 @@ const userSchema = new Schema<IUser>(
     contestToken: { type: String },
     contestJoinedAt: { type: Date, default: null },
     lastFreeGameAt: { type: Date, default: null },
+    lastFreeZigguratAt: { type: Date, default: null },
     adSpinDay: { type: String, default: null },
     adSpinCount: { type: Number, default: 0 },
     exchangeAdPassAt: { type: Date, default: null },

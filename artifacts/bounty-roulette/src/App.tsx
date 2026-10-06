@@ -17,6 +17,7 @@ import { GamesPage } from './pages/GamesPage';
 import { ReferralsPage } from './pages/ReferralsPage';
 import { ExchangePage } from './pages/ExchangePage';
 import { ProofsPage } from './pages/ProofsPage';
+import { ZigguratPage } from './pages/ZigguratPage';
 import { GamesHubPage } from './pages/GamesHubPage';
 import { PreviewBanner } from './components/PreviewBanner';
 import { hasStoredLang, setLang, tr, useLang } from './i18n';
@@ -194,9 +195,10 @@ export default function App() {
         {tab === 'contest' && contestOn && <ContestPage />}
         {tab === 'proofs' && <ProofsPage onBack={() => setTab('home')} isAdmin={me.isAdmin} />}
         {tab === 'games' && (
-          <GamesHubPage onBack={() => setTab('home')} onOpenSnake={() => setTab('snake')} snakeLocked={me.gamesPublic === false && !me.isAdmin} />
+          <GamesHubPage onBack={() => setTab('home')} onOpenSnake={() => setTab('snake')} onOpenZiggurat={() => setTab('ziggurat')} snakeLocked={me.gamesPublic === false && !me.isAdmin} />
         )}
         {tab === 'snake' && <GamesPage onBack={() => setTab('games')} refreshMe={loadMe} />}
+        {tab === 'ziggurat' && <ZigguratPage onBack={() => setTab('games')} refreshMe={loadMe} />}
         {tab === 'exchange' && <ExchangePage onBack={() => { setListingLink(null); setOfferLink(null); setTab('home'); }} initialListingId={listingLink} initialOfferId={offerLink} />}
         {tab === 'inventory' && <InventoryPage />}
         {tab === 'history' && (

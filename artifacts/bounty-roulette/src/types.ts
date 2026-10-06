@@ -241,7 +241,16 @@ export interface GamesResponse {
     freeReady: boolean;
     freeReadyAt: string;
   };
+  ziggurat: { pointsPerFloor: number; maxFloors: number; freeReady: boolean; freeReadyAt: string };
   adTask: { reward: number; adsPerSpin: number | null };
+}
+
+export interface ZigguratRound {
+  ok: true;
+  sessionId: string;
+  mode: 'free' | 'ad';
+  maxFloors: number;
+  pointsPerFloor: number;
 }
 
 export interface SnakeRound {

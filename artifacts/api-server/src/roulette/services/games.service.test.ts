@@ -22,7 +22,7 @@ vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
 vi.mock('../config/env', () => ({ env: mocks.env }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { claimAdTask, finishSnakeRound, gamesAllowed, recordAdsgramReward, startSnakeRound } from './games.service';
+import { claimAdTask, finishSnakeRound, finishZigguratRound, gamesAllowed, recordAdsgramReward, startSnakeRound, startZigguratRound } from './games.service';
 
 const settings = {
   gamesPublic: false,
@@ -33,6 +33,8 @@ const settings = {
   snakeAdMaxFood: 4,
   snakeDurationSec: 30,
   snakeFreeCooldownHours: 12,
+  zigguratPointsPerFloor: 0.02,
+  zigguratMaxFloors: 100,
 };
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 55 } as never;
 
@@ -121,5 +123,32 @@ describe('snake game & ads', () => {
     await expect(recordAdsgramReward('nope', '55')).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await recordAdsgramReward('secret', '55');
     expect(mocks.adCreate).toHaveBeenCalledWith({ telegramId: 55, source: 'adsgram_callback' });
+  });
+});
+
+describe('ziggurat game', () => {
+  it('pays 0.02 for every brick on the tower', async () => {
+    mocks.sessionFind.mockResolvedValue(session({ game: 'ziggurat', maxFood: 100, pointsPerFood: 0.02, durationSec: 1800 }));
+    mocks.sessionUpdate.mockResolvedValue({ modifiedCount: 1 });
+    const res = await finishZigguratRound(user, { sessionId: String(new mongoose.Types.ObjectId()), floors: 25 });
+    expect(res.reward).toBe(0.5);
+    expect(res.floors).toBe(25);
+  });
+
+  it('caps floors at what could be stacked in the time played', async () => {
+    mocks.sessionFind.mockResolvedValue(session({ game: 'ziggurat', maxFood: 100, pointsPerFood: 0.02, durationSec: 1800, startedAt: new Date(Date.now() - 3000) }));
+    mocks.sessionUpdate.mockResolvedValue({ modifiedCount: 1 });
+    const res = await finishZigguratRound(user, { sessionId: String(new mongoose.Types.ObjectId()), floors: 90 });
+    expect(res.floors).toBeLessThanOrEqual(10);
+  });
+
+  it('has its own free round, separate from the snake', async () => {
+    mocks.settings.mockResolvedValue({ ...settings, gamesPublic: true });
+    mocks.userUpdate.mockResolvedValue({ modifiedCount: 1 });
+    mocks.sessionCreate.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new mongoose.Types.ObjectId(), ...doc }));
+    const round = await startZigguratRound(user, null, 'free');
+    expect(round.pointsPerFloor).toBe(0.02);
+    expect(mocks.userUpdate.mock.calls[0][1]).toEqual({ $set: { lastFreeZigguratAt: expect.any(Date) } });
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ game: 'ziggurat' }));
   });
 });

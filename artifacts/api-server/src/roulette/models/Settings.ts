@@ -54,6 +54,9 @@ export interface ISettings extends Document {
   snakeAdMaxFood: number;
   snakeDurationSec: number;
   snakeFreeCooldownHours: number;
+  // Ziggurat: points for every brick that stays on the tower, and the most a round can pay for.
+  zigguratPointsPerFloor: number;
+  zigguratMaxFloors: number;
   // Set when a round was ended without a winner (too few invites, or ended manually).
   contestNoWinner: { round: number; reason: 'min_not_reached' | 'manual'; totalInvites: number; endedAt: Date } | null;
   contestRound: number;
@@ -98,6 +101,8 @@ const settingsSchema = new Schema<ISettings>(
     snakeAdMaxFood: { type: Number, default: 4, min: 1 },
     snakeDurationSec: { type: Number, default: 30, min: 10 },
     snakeFreeCooldownHours: { type: Number, default: 12, min: 0 },
+    zigguratPointsPerFloor: { type: Number, default: 0.02, min: 0 },
+    zigguratMaxFloors: { type: Number, default: 100, min: 1 },
     contestNoWinner: {
       type: new Schema({ round: Number, reason: String, totalInvites: Number, endedAt: Date }, { _id: false }),
       default: null,

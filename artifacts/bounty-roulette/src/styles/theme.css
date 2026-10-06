@@ -2221,3 +2221,8 @@ html[dir='ltr'] body { direction: ltr; }
 .daily-banner .art-shade { background: linear-gradient(0deg, var(--card-bg) 0%, rgba(30, 41, 59, 0) 70%); }
 
 .proofs-hero-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+
+/* Ziggurat game: the standalone game page full screen, over everything, with a back button. */
+.zq-frame-wrap { position: fixed; inset: 0; z-index: 2000; background: #1d0f4d; }
+.zq-frame { display: block; width: 100%; height: 100%; border: 0; }
+.zq-back { inset-inline-start: auto; right: 12px; top: calc(14px + env(safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }

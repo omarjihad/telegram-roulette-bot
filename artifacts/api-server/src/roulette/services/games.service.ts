@@ -17,6 +17,10 @@ const AD_CLAIM_WINDOW_MS = 15 * 60 * 1000;
 const FINISH_GRACE_MS = 30 * 1000;
 /** The snake moves one cell every ~150ms, so no bite can come faster than this. */
 const MIN_MS_PER_FOOD = 300;
+/** A new ziggurat brick needs at least this long to slide over the tower. */
+const MIN_MS_PER_FLOOR = 300;
+/** A ziggurat round has no clock; after this long it no longer pays. */
+const ZIGGURAT_MAX_MINUTES = 30;
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -32,6 +36,7 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
   const settings = await getSettings();
   const cooldownMs = settings.snakeFreeCooldownHours * HOUR_MS;
   const freeReadyAt = user.lastFreeGameAt ? new Date(user.lastFreeGameAt.getTime() + cooldownMs) : new Date(0);
+  const zigguratFreeReadyAt = user.lastFreeZigguratAt ? new Date(user.lastFreeZigguratAt.getTime() + cooldownMs) : new Date(0);
   const adTaskReward = settings.adTaskReward;
   return {
     allowed: gamesAllowed(settings, adminRole),
@@ -45,6 +50,12 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
       adMaxFood: settings.snakeAdMaxFood,
       freeReady: Date.now() >= freeReadyAt.getTime(),
       freeReadyAt,
+    },
+    ziggurat: {
+      pointsPerFloor: settings.zigguratPointsPerFloor,
+      maxFloors: settings.zigguratMaxFloors,
+      freeReady: Date.now() >= zigguratFreeReadyAt.getTime(),
+      freeReadyAt: zigguratFreeReadyAt,
     },
     adTask: {
       reward: adTaskReward,
@@ -129,7 +140,7 @@ export async function startSnakeRound(user: HydratedDocument<IUser>, adminRole: 
   }
 
   // Only one round at a time: an unfinished previous round is forfeited.
-  await GameSession.updateMany({ user: user._id, status: 'playing' }, { $set: { status: 'abandoned', finishedAt: now } });
+  await GameSession.updateMany({ user: user._id, status: 'playing', game: { $ne: 'ziggurat' } }, { $set: { status: 'abandoned', finishedAt: now } });
 
   const session = await GameSession.create({
     user: user._id,
@@ -183,6 +194,64 @@ export async function finishSnakeRound(
   return { reward, food, died, tooLate };
 }
 
+/** Ziggurat: a free round on the snake's cooldown, or one per ad watched. */
+export async function startZigguratRound(user: HydratedDocument<IUser>, adminRole: string | null, mode: 'free' | 'ad') {
+  const settings = await getSettings();
+  assertAllowed(settings, adminRole);
+  const now = new Date();
+
+  if (mode === 'free') {
+    const cutoff = new Date(now.getTime() - settings.snakeFreeCooldownHours * HOUR_MS);
+    const claimed = await User.updateOne(
+      { _id: user._id, $or: [{ lastFreeZigguratAt: null }, { lastFreeZigguratAt: { $lte: cutoff } }] },
+      { $set: { lastFreeZigguratAt: now } }
+    );
+    if (claimed.modifiedCount !== 1) throw new AppError(t('الجولة المجانية غير متاحة الآن', 'The free round is not available yet'), 429, 'GAME_COOLDOWN');
+  } else {
+    await consumeAdView(user.telegramId, 'ziggurat_round');
+  }
+
+  await GameSession.updateMany({ user: user._id, status: 'playing', game: 'ziggurat' }, { $set: { status: 'abandoned', finishedAt: now } });
+  const session = await GameSession.create({
+    game: 'ziggurat',
+    user: user._id,
+    telegramId: user.telegramId,
+    mode,
+    maxFood: settings.zigguratMaxFloors,
+    pointsPerFood: settings.zigguratPointsPerFloor,
+    durationSec: ZIGGURAT_MAX_MINUTES * 60,
+    startedAt: now,
+  });
+  return { sessionId: String(session._id), mode, maxFloors: session.maxFood, pointsPerFloor: session.pointsPerFood };
+}
+
+/**
+ * Ends a ziggurat round: every brick that stayed on the tower is worth pointsPerFloor.
+ * Capped at the round's maximum and at what could be stacked in the time played.
+ */
+export async function finishZigguratRound(user: HydratedDocument<IUser>, params: { sessionId: string; floors: number }) {
+  if (!mongoose.isValidObjectId(params.sessionId)) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
+  const session = await GameSession.findOne({ _id: params.sessionId, user: user._id, game: 'ziggurat' });
+  if (!session) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
+  if (session.status !== 'playing') throw new AppError('Round already finished', 409, 'GAME_FINISHED');
+
+  const now = new Date();
+  const elapsedMs = now.getTime() - session.startedAt.getTime();
+  const tooLate = elapsedMs > session.durationSec * 1000 + FINISH_GRACE_MS;
+  let floors = Math.max(0, Math.floor(Number(params.floors) || 0));
+  floors = Math.min(floors, session.maxFood, Math.floor(elapsedMs / MIN_MS_PER_FLOOR));
+  const reward = tooLate ? 0 : round3(floors * session.pointsPerFood);
+
+  const updated = await GameSession.updateOne(
+    { _id: session._id, status: 'playing' },
+    { $set: { status: tooLate ? 'abandoned' : 'finished', food: floors, reward, finishedAt: now } }
+  );
+  if (updated.modifiedCount !== 1) throw new AppError('Round already finished', 409, 'GAME_FINISHED');
+  await addPoints(user._id, reward);
+  if (tooLate) logger.warn({ telegramId: user.telegramId, sessionId: session._id }, 'ziggurat round finished too late');
+  return { reward, floors, tooLate };
+}
+
 // ───────────── Admin ─────────────
 
 const EDITABLE = [
@@ -194,6 +263,8 @@ const EDITABLE = [
   'snakeAdMaxFood',
   'snakeDurationSec',
   'snakeFreeCooldownHours',
+  'zigguratPointsPerFloor',
+  'zigguratMaxFloors',
 ] as const;
 
 export async function getGamesAdminSettings() {
@@ -222,7 +293,7 @@ export async function updateGamesAdminSettings(input: Record<string, unknown>) {
       settings.adsgramBlockId = id;
     } else {
       const n = Number(value);
-      const integer = key === 'snakeFreeMaxFood' || key === 'snakeAdMaxFood' || key === 'snakeDurationSec';
+      const integer = key === 'snakeFreeMaxFood' || key === 'snakeAdMaxFood' || key === 'snakeDurationSec' || key === 'zigguratMaxFloors';
       if (!Number.isFinite(n) || n < 0 || (integer && (!Number.isInteger(n) || n < 1))) {
         throw new AppError(`قيمة غير صالحة: ${key}`, 422, 'VALIDATION_ERROR');
       }

@@ -519,6 +519,8 @@ interface GamesAdminSettings {
   snakeAdMaxFood: number;
   snakeDurationSec: number;
   snakeFreeCooldownHours: number;
+  zigguratPointsPerFloor: number;
+  zigguratMaxFloors: number;
   rewardUrlConfigured: boolean;
   last24h: { ads: number; rounds: number };
 }
@@ -529,7 +531,9 @@ const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: s
   { key: 'snakeFreeMaxFood', label: '🎁 عدد التفاح بالجولة المجانية', hint: 'مثال: 7', step: '1' },
   { key: 'snakeAdMaxFood', label: '📺 عدد التفاح بجولة الإعلان', hint: 'مثال: 4 أو 5', step: '1' },
   { key: 'snakeDurationSec', label: '⏱️ مدة الجولة (ثانية)', hint: 'مثال: 30', step: '1' },
-  { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة)', hint: 'مثال: 12', step: '0.5' },
+  { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة) — الحية والزقورة', hint: 'مثال: 12', step: '0.5' },
+  { key: 'zigguratPointsPerFloor', label: '🏛️ نقاط كل طابوقة بالزقورة', hint: 'مثال: 0.02', step: '0.01' },
+  { key: 'zigguratMaxFloors', label: '🏛️ أعلى عدد طوابق ينحسب بالجولة', hint: 'مثال: 100', step: '1' },
 ];
 
 interface ExchangeAdminSettings {

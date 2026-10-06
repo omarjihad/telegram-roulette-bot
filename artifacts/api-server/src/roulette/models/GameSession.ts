@@ -1,7 +1,9 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
-/** One snake round. The server decides its limits; the client only reports what happened. */
+/** One game round (snake or ziggurat). The server decides its limits; the client only reports what happened. */
 export interface IGameSession extends Document {
+  // Rounds from before the ziggurat existed have no game: they are snake rounds.
+  game?: 'snake' | 'ziggurat';
   user: Types.ObjectId;
   telegramId: number;
   mode: 'free' | 'ad';
@@ -18,6 +20,7 @@ export interface IGameSession extends Document {
 
 const gameSessionSchema = new Schema<IGameSession>(
   {
+    game: { type: String, enum: ['snake', 'ziggurat'], default: 'snake' },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     telegramId: { type: Number, required: true, index: true },
     mode: { type: String, enum: ['free', 'ad'], required: true },

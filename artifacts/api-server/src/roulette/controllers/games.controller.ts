@@ -8,6 +8,8 @@ import {
   getGamesStatus,
   recordAdsgramReward,
   startSnakeRound,
+  startZigguratRound,
+  finishZigguratRound,
   updateGamesAdminSettings,
 } from '../services/games.service';
 
@@ -28,6 +30,17 @@ export const postSnakeStart = asyncHandler(async (req: Request, res: Response) =
 export const postSnakeFinish = asyncHandler(async (req: Request, res: Response) => {
   const { sessionId, food, died } = req.body as { sessionId?: string; food?: number; died?: boolean };
   res.json({ ok: true, ...(await finishSnakeRound(req.dbUser!, { sessionId: String(sessionId ?? ''), food: Number(food), died: Boolean(died) })) });
+});
+
+export const postZigguratStart = asyncHandler(async (req: Request, res: Response) => {
+  const mode = (req.body as { mode?: string }).mode;
+  if (mode !== 'free' && mode !== 'ad') throw new AppError('mode must be free or ad', 422, 'VALIDATION_ERROR');
+  res.json({ ok: true, ...(await startZigguratRound(req.dbUser!, req.adminRole ?? null, mode)) });
+});
+
+export const postZigguratFinish = asyncHandler(async (req: Request, res: Response) => {
+  const { sessionId, floors } = req.body as { sessionId?: string; floors?: number };
+  res.json({ ok: true, ...(await finishZigguratRound(req.dbUser!, { sessionId: String(sessionId ?? ''), floors: Number(floors) })) });
 });
 
 /** Adsgram Reward URL, e.g. https://<domain>/api/adsgram/reward?userid=[userId]&key=<ADSGRAM_REWARD_KEY> */

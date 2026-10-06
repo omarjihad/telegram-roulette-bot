@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 /** What a watched ad was spent on. */
-export const AD_PURPOSES = ['ad_task', 'snake_round', 'claim_task', 'daily_prize', 'exchange_post', 'wheel_ad_spin'] as const;
+export const AD_PURPOSES = ['ad_task', 'snake_round', 'claim_task', 'daily_prize', 'exchange_post', 'wheel_ad_spin', 'ziggurat_round'] as const;
 export type AdPurpose = (typeof AD_PURPOSES)[number];
 
 /**
