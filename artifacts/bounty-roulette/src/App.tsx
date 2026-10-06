@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTelegramWebApp, getTelegramWebApp } from './hooks/useTelegramWebApp';
 import { api } from './services/api';
 import { DailyLoginResponse, DailyLoginStatusResponse, MeResponse } from './types';
@@ -70,6 +70,7 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);
+  const dailyAutoShownRef = useRef(false);
 
   // Opening the app only reads the daily state; the reward is collected when the user
   // presses the collect button in the modal.
@@ -106,10 +107,15 @@ export default function App() {
       else if (!res.user.captchaPassed) setStage('captcha');
       else {
         setStage('ready');
-        try {
-          await openDailyLogin(true);
-        } catch {
-          // Daily reward availability must never block the app itself.
+        // Shown by itself once per app open; other pages refresh this data often, and the
+        // popup must not come back after the person closed it.
+        if (!dailyAutoShownRef.current) {
+          dailyAutoShownRef.current = true;
+          try {
+            await openDailyLogin(true);
+          } catch {
+            // Daily reward availability must never block the app itself.
+          }
         }
       }
     } catch (err: any) {

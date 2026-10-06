@@ -87,6 +87,7 @@ export function DailyLoginModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="modal-x" onClick={onClose} aria-label={tr('إغلاق', 'Close')}>✕</button>
         <div className="daily-banner" aria-hidden="true">
           <span className="art-bg" style={{ backgroundImage: 'url(/art/daily.svg)' }} />
           <span className="art-shade" />
