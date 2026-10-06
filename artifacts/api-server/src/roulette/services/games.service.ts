@@ -2,7 +2,7 @@ import mongoose, { HydratedDocument } from 'mongoose';
 import { IUser, User } from '../models/User';
 import { AdView, AdPurpose } from '../models/AdView';
 import { GameSession } from '../models/GameSession';
-import { getSettings, ISettings } from '../models/Settings';
+import { getSettings, ISettings, Settings } from '../models/Settings';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -250,6 +250,15 @@ export async function finishZigguratRound(user: HydratedDocument<IUser>, params:
   await addPoints(user._id, reward);
   if (tooLate) logger.warn({ telegramId: user.telegramId, sessionId: session._id }, 'ziggurat round finished too late');
   return { reward, floors, tooLate };
+}
+
+/** One-time move of the ziggurat rate to 0.01 per brick (later admin changes are kept). */
+export async function applyZigguratRateV2() {
+  const res = await Settings.updateOne(
+    { singleton: 'main', zigguratRateV2: { $ne: true } },
+    { $set: { zigguratPointsPerFloor: 0.01, zigguratRateV2: true } }
+  );
+  return res.modifiedCount > 0;
 }
 
 // ───────────── Admin ─────────────

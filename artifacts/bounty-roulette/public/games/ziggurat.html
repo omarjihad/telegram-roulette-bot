@@ -273,6 +273,9 @@ body {
   .final-n { font-size: 50px; }
   .stats dd { font-size: 18px; }
 }
+body.playing .rb::after, body.playing .goal-bar i { animation: none; }
+body.playing .score { text-shadow: var(--o3), 0 7px 0 var(--night); }
+
 @media (prefers-reduced-motion: reduce) {
   .rb::after, .goal-bar i, .record, .frieze i, .cta, .score.bump,
   .intro.show .ring, .over.show .ring, .banner.show { animation: none; }
@@ -345,7 +348,9 @@ body {
   /* ================= DOM ================= */
   const $ = (id) => document.getElementById(id);
   const cvs = $('scene');
-  const ctx = cvs.getContext('2d', { alpha: false });
+  const mainCtx = cvs.getContext('2d', { alpha: false });
+  // The drawing helpers paint on `ctx`; the slow-changing sky is painted on its own canvas.
+  let ctx = mainCtx;
   const hud = $('hud'), scoreEl = $('score'), metersEl = $('meters'), goalText = $('goalText'), goalBar = $('goalBar');
   const banner = $('banner'), pops = $('pops'), muteBtn = $('mute');
   const intro = $('intro'), over = $('over'), overCard = $('overCard');
@@ -641,13 +646,14 @@ body {
     overAt = time;
     overReadyAt = performance.now() + 1000;
     hud.classList.remove('on');
+    document.body.classList.remove('playing');
     banner.classList.remove('show');
     fillOver();
     clearTimeout(overTimer);
     overTimer = setTimeout(() => { if (mode === 'over') over.classList.add('show'); }, 650);
     if (lastRecord) {
       queueFireworks(5, 0.32, 0.7);
-      setTimeout(() => { if (mode === 'over') { sparkBurst(topRef(), 40, 1.5); confettiRain(120); } }, 700);
+      setTimeout(() => { if (mode === 'over') { sparkBurst(topRef(), 30, 1.5); confettiRain(70); } }, 700);
     }
   }
 
@@ -686,7 +692,7 @@ body {
   /* ================= confetti + fireworks (screen space) ================= */
   function confettiBurst(x, y, n, spread, up) {
     for (let i = 0; i < n; i++) {
-      if (confetti.length > 280) confetti.shift();
+      if (confetti.length > 140) confetti.shift();
       const a = -Math.PI / 2 + (Math.random() - 0.5) * spread, sp = up * (0.5 + Math.random() * 0.6);
       confetti.push({
         x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
@@ -697,7 +703,7 @@ body {
   }
   function confettiRain(n) {
     for (let i = 0; i < n; i++) {
-      if (confetti.length > 280) confetti.shift();
+      if (confetti.length > 140) confetti.shift();
       confetti.push({
         x: Math.random() * W, y: -20 - Math.random() * Hs * 0.6, vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
         r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 10, f: Math.random() * 6.28, vf: 6 + Math.random() * 8,
@@ -717,9 +723,9 @@ body {
     });
   }
   function burst(r) {
-    const n = 56, sc = clamp(Math.min(W, Hs) / 420, 0.8, 1.3);
+    const n = 36, sc = clamp(Math.min(W, Hs) / 420, 0.8, 1.3);
     for (let i = 0; i < n; i++) {
-      if (embers.length > 640) embers.shift();
+      if (embers.length > 300) embers.shift();
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.12, sp = (95 + Math.random() * 120) * sc;
       embers.push({ x: r.x, y: r.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 1 + Math.random() * 0.7,
         s: 2.2 + Math.random() * 1.6, cs: rgb(i % 3 === 0 ? r.c2 : r.c1) });
@@ -759,7 +765,7 @@ body {
       sfxLandmark();
       buzz([20, 40, 20, 40, 40]);
       sparkBurst(topRef(), 30, 1.4);
-      confettiRain(80);
+      confettiRain(50);
       queueFireworks(4, 0.3, 0.1);
       updateHud(false);
     }
@@ -835,6 +841,7 @@ body {
     Object.assign(cam, camT);
     updateHud(false);
     hud.classList.add('on');
+    document.body.classList.add('playing');
   }
 
   function transition(cb) {
@@ -1187,7 +1194,7 @@ body {
     const a = smooth(48, 62, skyLvl) * (1 - smooth(108, 128, skyLvl));
     if (a <= 0.01 || !AUR[0].g) return;
     ctx.globalCompositeOperation = 'lighter';
-    const step = 6;
+    const step = 10;
     for (const r of AUR) {
       const base = Hs * r.y;
       ctx.fillStyle = r.g;
@@ -1413,16 +1420,40 @@ body {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
 
+  // Performance: the sky (gradient, sun, stars, aurora, nebula, moon, planets) changes slowly,
+  // so it is painted at screen-pixel size about 12 times a second and copied in one step,
+  // instead of filling the whole screen with several gradients every frame.
+  let bgCv = null, bgCtx = null, bgAt = -1;
+  const BG_EVERY = 1 / 12;
+  function drawBackdrop() {
+    if (!bgCv || bgCv.width !== Math.round(W) || bgCv.height !== Math.round(Hs)) {
+      bgCv = document.createElement('canvas');
+      bgCv.width = Math.round(W); bgCv.height = Math.round(Hs);
+      bgCtx = bgCv.getContext('2d', { alpha: false });
+      bgAt = -1;
+    }
+    if (bgAt < 0 || time - bgAt >= BG_EVERY) {
+      bgAt = time;
+      const keepDpr = DPR;
+      ctx = bgCtx; DPR = 1;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      const g = ctx.createLinearGradient(0, 0, 0, Hs);
+      g.addColorStop(0, rgba(skyTop, 1)); g.addColorStop(0.55, rgba(skyMid, 1)); g.addColorStop(1, rgba(skyBot, 1));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hs);
+      drawNebula(); drawStars(); drawAurora(); drawSun(); drawMoon(); drawPlanets();
+      ctx = mainCtx; DPR = keepDpr;
+    }
+    ctx.drawImage(bgCv, 0, 0, W, Hs);
+  }
+
   function render() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     skyAt(skyLvl);
-    const g = ctx.createLinearGradient(0, 0, 0, Hs);
-    g.addColorStop(0, rgba(skyTop, 1)); g.addColorStop(0.55, rgba(skyMid, 1)); g.addColorStop(1, rgba(skyBot, 1));
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hs);
+    drawBackdrop();
     const night = smooth(40, 56, skyLvl);
-    drawNebula(); drawStars(); drawMeteor(); drawAurora();
-    drawSun(); drawRainbow(); drawMoon(); drawPlanets();
+    drawMeteor(); drawRainbow();
     drawClouds(); drawKites(); drawFireworks(night);
 
     for (let i = 0; i < debris.length; i++) if (!debris[i].front) drawDebris(debris[i]);
@@ -1603,9 +1634,20 @@ body {
   document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
   /* ================= boot ================= */
+  let lowRes = false, slowFrames = 0, timedFrames = 0;
+  // Watches the frame time for the first seconds of play; a slow phone gets a lighter canvas.
+  function watchSpeed(rawMs) {
+    if (lowRes || mode !== 'play' || DPR <= 1) return;
+    timedFrames++;
+    if (rawMs > 24) slowFrames++;
+    if (timedFrames >= 90) {
+      if (slowFrames > 30) { lowRes = true; resize(); }
+      timedFrames = 0; slowFrames = 0;
+    }
+  }
   function resize() {
     W = window.innerWidth || 1; Hs = window.innerHeight || 1;
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    DPR = Math.min(lowRes ? 1 : 1.5, window.devicePixelRatio || 1);
     cvs.width = Math.max(1, Math.round(W * DPR)); cvs.height = Math.max(1, Math.round(Hs * DPR));
     cvs.style.width = `${W}px`; cvs.style.height = `${Hs}px`;
     kPlay = Math.min(W * 0.6, Hs * 0.42) / (2 * S0 * C30);
@@ -1618,8 +1660,10 @@ body {
 
   let last = 0;
   function frame(now) {
-    const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+    const raw = last ? now - last : 16;
+    const dt = Math.min(0.05, raw / 1000);
     last = now;
+    watchSpeed(raw);
     update(dt); render();
     requestAnimationFrame(frame);
   }

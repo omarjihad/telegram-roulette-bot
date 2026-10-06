@@ -121,7 +121,7 @@ export async function previewGet(path: string): Promise<unknown> {
       return {
         ok: true, allowed: true, comingSoon: false, blockId: '', spinPoints: 3.6,
         snake: { durationSec: 30, pointsPerFood: 0.03, freeMaxFood: 7, adMaxFood: 4, freeReady: true, freeReadyAt: new Date(0).toISOString() },
-        ziggurat: { pointsPerFloor: 0.02, maxFloors: 100, freeReady: true, freeReadyAt: new Date(0).toISOString() },
+        ziggurat: { pointsPerFloor: 0.01, maxFloors: 100, freeReady: true, freeReadyAt: new Date(0).toISOString() },
         adTask: { reward: 0.2, adsPerSpin: 25 },
       };
     case '/contest':

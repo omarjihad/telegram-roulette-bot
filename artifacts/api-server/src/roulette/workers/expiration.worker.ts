@@ -14,6 +14,7 @@ import { processSpinReadyReminders } from './spinReady.worker';
 import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
 import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
 import { backfillDailyPrizeExpiry } from '../services/dailyLogin.service';
+import { applyZigguratRateV2 } from '../services/games.service';
 import { refreshProofs } from '../services/proofs.service';
 import { keepDeliveryAccountConnected } from '../services/deliveryAccount.service';
 import { releasePrizeReservation, restoreStockForPreviouslyExpiredPrizes } from '../services/prizeReservation.service';
@@ -30,6 +31,8 @@ export function startExpirationWorker() {
       if (checked > 0) logger.info({ checked, restored }, 'restored stock for previously expired prizes');
     })
     .catch((err) => logger.error({ err }, 'failed to restore stock for previously expired prizes'));
+
+  applyZigguratRateV2().catch((err) => logger.warn({ err }, 'failed to update the ziggurat rate'));
 
   backfillDailyPrizeExpiry()
     .then((count) => {

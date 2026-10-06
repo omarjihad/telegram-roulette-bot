@@ -52,11 +52,14 @@ function ZigguratPlayer({ round, onEnd }: { round: ZigguratRound; onEnd: (floors
       }
     };
     window.addEventListener('message', onMessage);
+    // The bot's page behind the game isn't drawn while it plays.
+    document.body.classList.add('zq-open');
     const back = getTelegramWebApp()?.BackButton;
     back?.onClick(end);
     back?.show();
     return () => {
       window.removeEventListener('message', onMessage);
+      document.body.classList.remove('zq-open');
       window.clearTimeout(overTimer);
       back?.offClick(end);
       back?.hide();
