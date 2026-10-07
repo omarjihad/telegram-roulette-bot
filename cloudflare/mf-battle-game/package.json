@@ -1,0 +1,9 @@
+{
+  "name": "mf-battle-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MF Battle online game server (Cloudflare Workers + Durable Objects). No dependencies: wrangler bundles src/index.js with the shared room in artifacts/mf-battle.",
+  "scripts": {
+    "deploy": "npx --yes wrangler@4 deploy"
+  }
+}
