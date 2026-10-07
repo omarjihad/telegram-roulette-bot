@@ -217,6 +217,13 @@ const TOUR_MODES = { longest: 'أكثر واحد يبقى متصدر يفوز', 
 /** A running tournament on the lobby: how to win and the time left (ticks every second). */
 function tourBannerHTML() {
   const t = state.tournament;
+  if (t && t.done) {
+    // The winner stays on the lobby for 5 minutes after the end.
+    if (new Date(t.until).getTime() <= Date.now()) return '';
+    const w = t.winner;
+    const val = w ? (t.mode === 'longest' ? `⏱️ تصدّر ${clock(Date.now() + w.leadSeconds * 1000)}` : `⚖️ ${fmt(w.mass)}`) : '';
+    return `<div class="tour-banner done"><b>🏁 خلصت البطولة</b><span>${w ? `🥇 الفائز: <b>${esc(w.name)}</b> ${val}` : 'ماكو فائز'}</span></div>`;
+  }
   if (!t || new Date(t.endsAt).getTime() <= Date.now()) return '';
   return `<div class="tour-banner"><b>🏆 بطولة شغالة</b><span>${TOUR_MODES[t.mode] || ''}</span><span class="tour-left" data-tour-left>${clock(t.endsAt)}</span></div>`;
 }
@@ -229,7 +236,11 @@ function clock(end) {
 }
 setInterval(() => {
   const el = document.querySelector('[data-tour-left]');
-  if (el && state.tournament) el.textContent = clock(state.tournament.endsAt);
+  if (el && state.tournament && !state.tournament.done) el.textContent = clock(state.tournament.endsAt);
+  // Time's up on the lobby: fetch the result (the winner) or hide the banner.
+  const t = state.tournament;
+  const over = t && (t.done ? new Date(t.until).getTime() : new Date(t.endsAt).getTime() + 15000) <= Date.now();
+  if (over && !state.game && panelEl.hidden && dialogEl.hidden) { state.tournament = null; refreshLobby(); }
 }, 1000);
 
 // ───────────── Lobby ─────────────
@@ -533,11 +544,27 @@ async function buyThrow(level) {
   } catch (e) { toast(e.message); }
 }
 
+/**
+ * Adsgram tells the bot's server about a watched ad itself, a few seconds after the ad
+ * closes. Until that arrives the server answers AD_NOT_CONFIRMED, so keep asking a while.
+ */
+async function afterAd(path) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await api(path, { method: 'POST' });
+    } catch (e) {
+      if (e.code !== 'AD_NOT_CONFIRMED' || attempt >= 14) throw e;
+      if (attempt === 0) toast('⏳ جاري تأكيد مشاهدة الإعلان…');
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
 async function adThrow(level, btn) {
   btn.disabled = true;
   try {
     await showAd(state.ads && state.ads.rewardBlockId, { demo: DEMO, base: API, hash: tgHash() });
-    const res = await api(`/battle/throws/${level}/ad`, { method: 'POST' });
+    const res = await afterAd(`/battle/throws/${level}/ad`);
     setProfile(res.profile);
     const t = res.profile.throws;
     if (level === 5 && t.x50Ads) toast('👍 باقي إعلان واحد ويفتح ×50');

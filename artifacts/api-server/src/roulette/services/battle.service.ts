@@ -184,15 +184,31 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
     shop: { throws: THROW_SHOP, sizes: START_SIZES, throwAdMinutes: THROW_AD_MINUTES },
     levels: Array.from({ length: LEVEL_TABLE_SIZE }, (_, i) => ({ level: i + 1, xp: battleLevel(0).levelXp + 50 * i ** 2, reward: i ? levelReward(i + 1) : 0 })),
     // A running tournament, shown on the lobby: its kind and when it ends.
-    tournament: await BattleTournament.findOne({ status: 'running', endsAt: { $gt: new Date() } })
-      .select('mode endsAt minutes')
-      .lean()
-      .then((x) => (x ? { mode: x.mode, endsAt: x.endsAt, minutes: x.minutes } : null)),
+    // or one that ended in the last 5 minutes (shows the winner).
+    tournament: await lobbyTournament(),
     // A separate game server close to the players (lower ping); null = this server.
     wsUrl: env.MF_BATTLE_WS_URL || null,
     week: { key: weekKey(), resetsAt: nextWeekStart() },
     // Adsgram blocks: the reward one (revenge) and the interstitial shown every second death.
     ads: { rewardBlockId: (await getSettings()).adsgramBlockId || null, interstitialBlockId: BATTLE_INTERSTITIAL_BLOCK },
+  };
+}
+
+async function lobbyTournament() {
+  const now = new Date();
+  const running = await BattleTournament.findOne({ status: 'running', endsAt: { $gt: now } }).select('mode endsAt minutes').lean();
+  if (running) return { mode: running.mode, endsAt: running.endsAt, minutes: running.minutes };
+  const ended = await BattleTournament.findOne({ status: 'ended', endedAt: { $gt: new Date(now.getTime() - 5 * 60000) } })
+    .sort({ endedAt: -1 })
+    .select('mode endsAt endedAt winner')
+    .lean();
+  if (!ended) return null;
+  const w = ended.winner;
+  return {
+    done: true,
+    mode: ended.mode,
+    until: new Date((ended.endedAt ?? ended.endsAt).getTime() + 5 * 60000),
+    winner: w ? { name: w.name, leadSeconds: Math.round(w.leadSeconds), mass: Math.round(w.finalMass ?? w.bestMass) } : null,
   };
 }
 

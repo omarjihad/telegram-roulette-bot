@@ -309,6 +309,14 @@ export function startGame(opts) {
     let closedByUs = false;
     let tour = null;
     const drawTour = () => {
+      if (tour && tour.done) {
+        if (Date.now() > tour.until) { tourEl.hidden = true; return; }
+        const w = tour.w;
+        const val = w ? (tour.m === 'longest' ? `⏱️ ${Math.floor(w[1] / 60)}:${String(w[1] % 60).padStart(2, '0')}` : `⚖️ ${w[1]}`) : '';
+        tourEl.innerHTML = w ? `<b>🏁 خلصت البطولة</b> · 🥇 الفائز: <b>${escName(w[0])}</b> ${val}` : '<b>🏁 خلصت البطولة</b> · ماكو فائز';
+        tourEl.hidden = false;
+        return;
+      }
       const sec = tour ? Math.floor((tour.end - Date.now()) / 1000) : -1;
       if (sec < 0) { tourEl.hidden = true; return; }
       const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
@@ -363,8 +371,16 @@ export function startGame(opts) {
         alive = true;
         hideOverlay();
       } else if (msg.t === 'tour') {
-        tour = msg.m ? { m: msg.m, end: Number(msg.end) || 0, ld: Array.isArray(msg.ld) ? msg.ld : null } : null;
+        tour = !msg.m ? null : msg.done
+          ? { done: true, m: msg.m, until: Number(msg.until) || 0, w: Array.isArray(msg.w) ? msg.w : null }
+          : { m: msg.m, end: Number(msg.end) || 0, ld: Array.isArray(msg.ld) ? msg.ld : null };
         drawTour();
+      } else if (msg.t === 'reset') {
+        // The room started over (a tournament began): a fresh map follows with the welcome.
+        cells.clear();
+        owners.clear();
+        popText(msg.x || '🏆 بدت البطولة!');
+        if (haptic) haptic('heavy');
       } else if (msg.t === 'chat') {
         say(`<b style="color:${hueColor(msg.h)}">${escName(msg.n)}:</b> ${escName(msg.x)}`, '#e2e8f0');
       } else if (msg.t === 'ev') {

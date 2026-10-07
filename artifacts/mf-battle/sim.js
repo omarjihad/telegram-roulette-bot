@@ -23,7 +23,7 @@ export const VIRUS_MASS = 100;
 export const PELLET_MASS = 13;
 
 const EJECT_MIN = 35;
-const PELLET_SPEED = 1700; // fades at 4/s, so a pellet flies about 425
+const PELLET_SPEED = 2400; // fades at 4/s, so a pellet flies about 600
 const PELLET_LIFE = 45; // seconds a pellet stays on the ground
 const MAX_PELLETS = 3000;
 const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
@@ -44,7 +44,7 @@ const THROW_RATES = [6, 9, 14, 23, 50, 100];
 const THROW_SHARE = [0, 0, 0, 0.008, 0.02, 0.05];
 export const throwRate = (level) => THROW_RATES[level] || THROW_RATES[0];
 /** How far a split half flies: enough to catch someone in front, never across the map. */
-export const splitFlight = (r) => Math.min(1300, 260 + r * 1.6);
+export const splitFlight = (r) => Math.min(1600, 340 + r * 2);
 export const sectionOf = (x, y) => {
   const n = WORLD / MAP_SECTIONS;
   const col = clamp(Math.floor(x / n), 0, MAP_SECTIONS - 1);

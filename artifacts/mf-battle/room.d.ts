@@ -34,11 +34,22 @@ export interface LeaderReport {
   current: { telegramId: number; name: string; mass: number } | null;
   players: number;
 }
+/** The running tournament (or one that just ended: done, winner, until) as the server reports it. */
+export interface TourInfo {
+  id?: string;
+  mode: string;
+  endsAt: number;
+  startedAt?: number;
+  leader?: [string, number] | null;
+  done?: boolean;
+  winner?: [string, number] | null;
+  until?: number;
+}
 export class BattleRoom {
   constructor(opts?: {
     bots?: number;
     log?: (msg: string, err?: unknown) => void;
-    report?: ((data: LeaderReport) => Promise<{ tour: { mode: string; endsAt: number; leader: [string, number] | null } | null }>) | null;
+    report?: ((data: LeaderReport) => Promise<{ tour: TourInfo | null }>) | null;
   });
   world: SimWorld;
   clients: Set<RoomClient>;
@@ -47,6 +58,7 @@ export class BattleRoom {
   leave(c: RoomClient): void;
   handle(c: RoomClient, msg: Record<string, unknown>): void;
   stop(): void;
+  startOver(note: string): void;
   close(): void;
   broadcast(msg: unknown): void;
 }

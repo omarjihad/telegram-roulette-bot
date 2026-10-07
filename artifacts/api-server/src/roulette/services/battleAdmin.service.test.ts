@@ -66,6 +66,18 @@ describe('MF Battle developer panel', () => {
     expect(res.tour).toMatchObject({ mode: 'longest', leader: ['Omar', 3] });
   });
 
+  it('after the end, rooms get the winner to show for 5 minutes', async () => {
+    const endedAt = new Date(Date.now() - 60000);
+    mocks.tourFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      _id: 'T0', status: 'ended', mode: 'final', endsAt: endedAt, endedAt,
+      winner: { telegramId: 5, name: 'Zaid', leadSeconds: 10, bestMass: 5000, finalMass: 4200 },
+    });
+    await new Promise((r) => setTimeout(r, 2100)); // past the 2-second cache of the running one
+    const res = await reportLeaders({ lead: [], current: null, players: 1, room: 'test2' });
+    expect(res.tour).toMatchObject({ done: true, winner: ['Zaid', 4200] });
+    expect((res.tour as { until: number }).until).toBe(endedAt.getTime() + 5 * 60000);
+  });
+
   it('refuses a second tournament while one runs', async () => {
     mocks.tourExists.mockResolvedValue(true);
     await expect(startTournament({ minutes: 30, mode: 'final', broadcast: false }, { id: 1 })).rejects.toThrow(/شغالة/);

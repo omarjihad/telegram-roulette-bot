@@ -137,11 +137,11 @@ export async function startTournament(input: { minutes: unknown; mode: unknown; 
 export async function reportLeaders(input: { lead?: unknown; current?: unknown; room?: unknown; players?: unknown }) {
   noteRoom(String(input.room || 'main'), Number(input.players) || 0);
   let t = await runningTournament();
-  if (!t) return { tour: null };
+  if (!t) return { tour: await endedTour() };
   const now = new Date();
   if (t.endsAt <= now) {
     void finishDueTournaments().catch((err) => logger.warn({ err }, 'tournament finish failed'));
-    return { tour: null };
+    return { tour: await endedTour() };
   }
   const inc: Record<string, number> = {};
   const set: Record<string, unknown> = {};
@@ -184,11 +184,42 @@ export async function reportLeaders(input: { lead?: unknown; current?: unknown; 
   const top = t.mode === 'longest' ? ranked(t)[0] : null;
   return {
     tour: {
+      id: String(t._id),
+      startedAt: t.startedAt.getTime(),
       mode: t.mode,
       endsAt: t.endsAt.getTime(),
       leader: (t.mode === 'longest' ? (top ? [top.name, Math.round(top.leadSeconds)] : null) : t.current ? [t.current.name, t.current.mass] : null) as [string, number] | null,
     },
   };
+}
+
+// After a tournament ends, the winner stays on the players' screens for 5 minutes.
+const SHOW_WINNER_MS = 5 * 60000;
+let endedCache: { value: IBattleTournament | null; at: number } = { value: null, at: 0 };
+async function recentEnded() {
+  if (Date.now() - endedCache.at < 5000) return endedCache.value;
+  const value = await BattleTournament.findOne({ status: 'ended', endedAt: { $gt: new Date(Date.now() - SHOW_WINNER_MS) } }).sort({ endedAt: -1 });
+  endedCache = { value, at: Date.now() };
+  return value;
+}
+
+/** A tournament that just ended, for the players' screens: who won and until when to show it. */
+export function endedView(t: Pick<IBattleTournament, 'mode' | 'endsAt' | 'endedAt' | 'winner'> & { _id: unknown }) {
+  const w = t.winner;
+  return {
+    id: String(t._id),
+    done: true as const,
+    mode: t.mode,
+    endsAt: new Date(t.endsAt).getTime(),
+    until: new Date(t.endedAt ?? t.endsAt).getTime() + SHOW_WINNER_MS,
+    // longest: seconds first; final: mass at the end.
+    winner: w ? ([w.name, t.mode === 'longest' ? Math.round(w.leadSeconds) : Math.round(w.finalMass ?? w.bestMass)] as [string, number]) : null,
+  };
+}
+
+async function endedTour() {
+  const t = await recentEnded();
+  return t && t.endedAt && Date.now() - new Date(t.endedAt).getTime() < SHOW_WINNER_MS ? endedView(t) : null;
 }
 
 async function tell(id: number, text: string) {
@@ -211,6 +242,7 @@ async function finish(t: IBattleTournament) {
   }
   await BattleTournament.updateOne({ _id: t._id }, { $set: { winner } });
   forgetRunning();
+  endedCache = { value: null, at: 0 };
 
   const lines = [
     '🏁 خلصت بطولة MF Battle',

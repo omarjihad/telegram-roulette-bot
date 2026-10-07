@@ -33,6 +33,7 @@ const pelletRow = (p, now) => [p.id, r1(p.x0), r1(p.y0), r1(p.vx), r1(p.vy), p.h
 
 export class BattleRoom {
   constructor({ bots = ROOM_BOTS, log = () => {}, report = null } = {}) {
+    this.bots = bots;
     this.world = createWorld({ bots, trackNet: true });
     this.clients = new Set();
     this.log = log;
@@ -40,6 +41,7 @@ export class BattleRoom {
     this.leadAcc = new Map(); // telegramId -> { name, s: seconds first, m: best mass } since the last report
     this.current = null; // the real player who is first right now
     this.tour = null; // the running tournament, as the last report said
+    this.tourSeen = null; // id of the last tournament this room started over for
     this.lastReport = 0;
     this.reporting = false;
     this.timer = null;
@@ -308,12 +310,36 @@ export class BattleRoom {
     Promise.resolve()
       .then(() => this.report({ lead, current: this.current, players: this.clients.size }))
       .then((res) => {
-        this.tour = (res && res.tour) || null;
-        const t = this.tour;
-        this.broadcast(t ? { t: 'tour', m: t.mode, end: t.endsAt, ld: t.leader || null } : { t: 'tour' });
+        const t = (res && res.tour) || null;
+        // A tournament that just started: everyone starts over on a fresh map, fair for all.
+        if (t && !t.done && t.id && t.id !== this.tourSeen) {
+          this.tourSeen = t.id;
+          if (Date.now() - (Number(t.startedAt) || 0) < 30000) this.startOver('🏆 بدت البطولة! الكل بدأ من جديد');
+        }
+        this.tour = t && !t.done ? t : null;
+        if (!t) this.broadcast({ t: 'tour' });
+        else if (t.done) this.broadcast({ t: 'tour', done: 1, m: t.mode, w: t.winner || null, until: t.until });
+        else this.broadcast({ t: 'tour', m: t.mode, end: t.endsAt, ld: t.leader || null });
       })
       .catch((err) => this.log('battle leader report failed', err))
       .finally(() => { this.reporting = false; });
+  }
+
+  /** A brand-new map: new food, viruses and bots; every player starts again at their start size. */
+  startOver(note) {
+    for (const c of this.clients) if (!c.owner.dead) this.record(c);
+    const old = this.world;
+    this.world = createWorld({ bots: this.bots, trackNet: true });
+    for (const c of this.clients) {
+      c.owner = this.world.addOwner({ name: c.who.name, skin: c.who.skin, mass: c.who.startMass ?? START_MASS, level: c.owner.level ?? c.who.level ?? 1 });
+      c.known = new Set();
+      c.needsWelcome = true;
+      c.canRevenge = false;
+      c.lastCenter = this.world.centerOf(c.owner);
+    }
+    old.owners.length = 0;
+    this.leadAcc = new Map();
+    this.broadcast({ t: 'reset', x: note });
   }
 
   record(c) {

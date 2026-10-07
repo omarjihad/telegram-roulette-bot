@@ -24,7 +24,10 @@ vi.mock('../models/BattleProfile', () => ({
   },
 }));
 vi.mock('../models/BattleLayoutCode', () => ({ BattleLayoutCode: { create: mocks.codeCreate, findOne: mocks.codeFindOne } }));
-vi.mock('../models/BattleTournament', () => ({ BattleTournament: { findOne: () => ({ select: () => ({ lean: async () => null }) }) } }));
+vi.mock('../models/BattleTournament', () => {
+  const none = { select: () => none, sort: () => none, lean: async () => null };
+  return { BattleTournament: { findOne: () => none } };
+});
 vi.mock('../models/BattleWeeklyStat', () => ({ BattleWeeklyStat: { updateOne: mocks.statUpdateOne } }));
 vi.mock('../bot/instance', () => ({ getBotInstance: () => ({ sendPhoto: mocks.sendPhoto, sendMessage: mocks.sendMessage }) }));
 vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockId: '123' }) }));
