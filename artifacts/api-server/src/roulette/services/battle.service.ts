@@ -7,6 +7,7 @@ import { BattleWeeklyStat } from '../models/BattleWeeklyStat';
 import { getSettings } from '../models/Settings';
 import { verifyTelegramInitData } from '../utils/telegramAuth';
 import { getAdminRole } from './admin.service';
+import { consumeAdView } from './games.service';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -23,26 +24,74 @@ export interface BattleSkin {
   id: string;
   name: { ar: string; en: string };
   price: number;
-  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  rarity: 'common' | 'rare' | 'legendary' | 'mythic';
+  pack?: 'onepiece';
 }
 
 /** Every skin in the game. The artwork lives in the game app; the server knows ids and prices. */
 export const BATTLE_SKINS: BattleSkin[] = [
-  { id: 'classic', name: { ar: 'كلاسيك', en: 'Classic' }, price: 0, rarity: 'common' },
+  { id: 'fly', name: { ar: 'الذبانة', en: 'Fly' }, price: 0, rarity: 'common' },
   { id: 'mf', name: { ar: 'MF', en: 'MF' }, price: 0, rarity: 'common' },
-  { id: 'ocean', name: { ar: 'المحيط', en: 'Ocean' }, price: 80, rarity: 'common' },
-  { id: 'lava', name: { ar: 'الحمم', en: 'Lava' }, price: 80, rarity: 'common' },
-  { id: 'neon', name: { ar: 'نيون', en: 'Neon' }, price: 150, rarity: 'rare' },
-  { id: 'toxic', name: { ar: 'سام', en: 'Toxic' }, price: 150, rarity: 'rare' },
-  { id: 'tiger', name: { ar: 'النمر', en: 'Tiger' }, price: 250, rarity: 'rare' },
-  { id: 'snake', name: { ar: 'الحية', en: 'Snake' }, price: 300, rarity: 'epic' },
-  { id: 'galaxy', name: { ar: 'المجرة', en: 'Galaxy' }, price: 400, rarity: 'epic' },
-  { id: 'ziggurat', name: { ar: 'الزقورة', en: 'Ziggurat' }, price: 500, rarity: 'epic' },
-  { id: 'skull', name: { ar: 'الجمجمة', en: 'Skull' }, price: 700, rarity: 'legendary' },
-  { id: 'crown', name: { ar: 'التاج', en: 'Crown' }, price: 900, rarity: 'legendary' },
-  { id: 'dragon', name: { ar: 'التنين', en: 'Dragon' }, price: 1200, rarity: 'legendary' },
+  { id: 'joyboy', name: { ar: 'جوي بوي', en: 'Joy Boy' }, price: 2999, rarity: 'mythic', pack: 'onepiece' },
+  { id: 'roger', name: { ar: 'روجر', en: 'Roger' }, price: 2499, rarity: 'mythic', pack: 'onepiece' },
+  { id: 'kaido', name: { ar: 'كايدو', en: 'Kaido' }, price: 1499, rarity: 'legendary', pack: 'onepiece' },
+  { id: 'zoro', name: { ar: 'زورو', en: 'Zoro' }, price: 1299, rarity: 'legendary', pack: 'onepiece' },
+  { id: 'sanji', name: { ar: 'سانجي', en: 'Sanji' }, price: 999, rarity: 'legendary', pack: 'onepiece' },
+  { id: 'imu', name: { ar: 'إيمو ساما', en: 'Imu-sama' }, price: 499, rarity: 'rare', pack: 'onepiece' },
+  { id: 'whitebeard', name: { ar: 'اللحية البيضاء', en: 'Whitebeard' }, price: 349, rarity: 'rare', pack: 'onepiece' },
+  { id: 'usopp', name: { ar: 'أوسوب', en: 'Usopp' }, price: 149, rarity: 'common', pack: 'onepiece' },
 ];
+export const DEFAULT_SKIN = 'fly';
+/** Limited packs: on sale for this many days after the game opens; owners keep them forever. */
+export const SKIN_PACKS = { onepiece: { name: { ar: 'حزمة ون بيس', en: 'One Piece pack' }, days: 7 } } as const;
+
+/** When a pack stops selling (null: the game has not opened to everyone yet, so it is on sale). */
+export function packEndsAt(pack: keyof typeof SKIN_PACKS) {
+  const launch = env.MF_BATTLE_LAUNCH_DATE ? new Date(env.MF_BATTLE_LAUNCH_DATE) : null;
+  if (!launch || Number.isNaN(launch.getTime())) return null;
+  return new Date(launch.getTime() + SKIN_PACKS[pack].days * 86400000);
+}
+function onSale(skin: BattleSkin, now = new Date()) {
+  if (!skin.pack) return true;
+  const end = packEndsAt(skin.pack);
+  return !end || now < end;
+}
+
+/** Throw speeds in the shop: ×1 and ×2 free, ×5 / ×10 bought, ×20 / ×50 opened by ads for 15 minutes. */
+export const THROW_SHOP = [
+  { level: 0, label: '×1', price: 0 },
+  { level: 1, label: '×2', price: 0 },
+  { level: 2, label: '×5', price: 400 },
+  { level: 3, label: '×10', price: 900 },
+  { level: 4, label: '×20', ads: 1, minutes: 15 },
+  { level: 5, label: '×50', ads: 2, minutes: 15 },
+] as const;
+export const THROW_AD_MINUTES = 15;
+/** Start sizes in the shop: each life starts with this mass. */
+export const START_SIZES = [
+  { mass: 20, price: 0 },
+  { mass: 50, price: 300 },
+  { mass: 100, price: 800 },
+  { mass: 200, price: 1800 },
+  { mass: 400, price: 3500 },
+] as const;
+
+/** Coins for reaching a level: every fifth level pays a big bonus. */
+export const levelReward = (level: number) => (level % 5 === 0 ? level * 60 : level * 15);
+export const LEVEL_TABLE_SIZE = 50;
+
+/** Throw levels this profile may use right now. */
+export function allowedThrows(p: Pick<IBattleProfile, 'throwOwned' | 'x20Until' | 'x50Until'>, now = Date.now()) {
+  const out: number[] = [];
+  for (let l = 0; l <= Math.max(1, p.throwOwned ?? 1); l++) out.push(l);
+  if (p.x20Until && new Date(p.x20Until).getTime() > now) out.push(4);
+  if (p.x50Until && new Date(p.x50Until).getTime() > now) out.push(5);
+  return out;
+}
+export const startMassOf = (p: Pick<IBattleProfile, 'sizeOwned'>) => START_SIZES[Math.min(START_SIZES.length - 1, Math.max(0, p.sizeOwned ?? 0))].mass;
+
 const FREE_SKINS = BATTLE_SKINS.filter((s) => s.price === 0).map((s) => s.id);
+const SKIN_IDS = new Set(BATTLE_SKINS.map((s) => s.id));
 
 /** The on-screen controls the layout editor can move. */
 export const BATTLE_CONTROL_IDS = ['joystick', 'split', 'throw', 'double', 'chat', 'leaderboard', 'mass', 'minimap', 'zoom', 'net'] as const;
@@ -68,7 +117,7 @@ async function profileFor(user: HydratedDocument<IUser>) {
       user: user._id,
       telegramId: user.telegramId,
       coins: STARTER_COINS,
-      skin: 'classic',
+      skin: DEFAULT_SKIN,
       ownedSkins: FREE_SKINS,
     });
   } catch {
@@ -96,8 +145,12 @@ function profileView(p: IBattleProfile) {
     coins: p.coins,
     ...battleLevel(p.xp ?? 0),
     kills: p.kills ?? 0,
-    skin: p.skin,
-    ownedSkins: Array.from(new Set([...FREE_SKINS, ...(p.ownedSkins ?? [])])),
+    // Old skins were retired: anything unknown shows as the default one.
+    skin: SKIN_IDS.has(p.skin) ? p.skin : DEFAULT_SKIN,
+    ownedSkins: Array.from(new Set([...FREE_SKINS, ...(p.ownedSkins ?? []).filter((id) => SKIN_IDS.has(id))])),
+    throws: { allowed: allowedThrows(p), owned: Math.max(1, p.throwOwned ?? 1), x20Until: p.x20Until ?? null, x50Until: p.x50Until ?? null, x50Ads: p.x50Ads ?? 0 },
+    sizeOwned: p.sizeOwned ?? 0,
+    startMass: startMassOf(p),
     settings: p.settings,
     layout: p.layout ?? {},
     bestMass: p.bestMass ?? 0,
@@ -112,7 +165,12 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
   return {
     player: { telegramId: user.telegramId, name: displayName(user), username: user.username ?? null, photoUrl: user.photoUrl ?? null },
     profile: profileView(profile),
-    skins: BATTLE_SKINS,
+    skins: BATTLE_SKINS.map((s) => ({ ...s, onSale: onSale(s) })),
+    packs: Object.fromEntries(Object.entries(SKIN_PACKS).map(([id, p]) => [id, { name: p.name, days: p.days, endsAt: packEndsAt(id as keyof typeof SKIN_PACKS) }])),
+    shop: { throws: THROW_SHOP, sizes: START_SIZES, throwAdMinutes: THROW_AD_MINUTES },
+    levels: Array.from({ length: LEVEL_TABLE_SIZE }, (_, i) => ({ level: i + 1, xp: battleLevel(0).levelXp + 50 * i ** 2, reward: i ? levelReward(i + 1) : 0 })),
+    // A separate game server close to the players (lower ping); null = this server.
+    wsUrl: env.MF_BATTLE_WS_URL || null,
     week: { key: weekKey(), resetsAt: nextWeekStart() },
     // Adsgram blocks: the reward one (revenge) and the interstitial shown every second death.
     ads: { rewardBlockId: (await getSettings()).adsgramBlockId || null, interstitialBlockId: BATTLE_INTERSTITIAL_BLOCK },
@@ -125,6 +183,7 @@ export async function buySkin(user: HydratedDocument<IUser>, adminRole: string |
   if (!skin) throw new AppError(t('السكن غير موجود', 'Skin not found'), 404, 'NOT_FOUND');
   const profile = await profileFor(user);
   if (profile.ownedSkins.includes(skin.id) || skin.price === 0) return { profile: profileView(profile) };
+  if (!onSale(skin)) throw new AppError(t('انتهى عرض هذه الحزمة', 'This pack is no longer on sale'), 409, 'PACK_ENDED');
   // Atomic: the coins are only taken while the player still has them and doesn't own it yet.
   const updated = await BattleProfile.findOneAndUpdate(
     { _id: profile._id, coins: { $gte: skin.price }, ownedSkins: { $ne: skin.id } },
@@ -307,6 +366,77 @@ export async function getLeaderboard(user: HydratedDocument<IUser>, adminRole: s
   };
 }
 
+const notEnough = () => new AppError(t('ما عندك عملات MF كافية', "You don't have enough MF coins"), 409, 'NOT_ENOUGH_COINS');
+
+/** Buys the next throw speed (×5, then ×10). */
+export async function buyThrow(user: HydratedDocument<IUser>, adminRole: string | null, level: number) {
+  assertBattleAllowed(adminRole);
+  const item = THROW_SHOP.find((x) => x.level === level);
+  if (!item || !('price' in item) || item.price <= 0) throw new AppError(t('هذه السرعة ما تنشرى', 'This speed is not for sale'), 400, 'BAD_THROW');
+  const profile = await profileFor(user);
+  if ((profile.throwOwned ?? 1) >= level) return { profile: profileView(profile) };
+  if ((profile.throwOwned ?? 1) !== level - 1) throw new AppError(t('اشتري السرعة اللي قبلها أول', 'Buy the speed before it first'), 409, 'THROW_ORDER');
+  const updated = await BattleProfile.findOneAndUpdate(
+    { _id: profile._id, coins: { $gte: item.price }, throwOwned: level - 1 },
+    { $inc: { coins: -item.price }, $set: { throwOwned: level } },
+    { new: true }
+  );
+  if (!updated) throw notEnough();
+  return { profile: profileView(updated) };
+}
+
+/** One watched ad toward ×20 (one ad) or ×50 (two ads): opens it for 15 minutes. */
+export async function throwAd(user: HydratedDocument<IUser>, adminRole: string | null, level: number) {
+  assertBattleAllowed(adminRole);
+  if (level !== 4 && level !== 5) throw new AppError(t('هذه السرعة ما تنفتح بإعلان', 'This speed does not open with ads'), 400, 'BAD_THROW');
+  await consumeAdView(user.telegramId, 'battle_throw');
+  const profile = await profileFor(user);
+  const until = new Date(Date.now() + THROW_AD_MINUTES * 60000);
+  if (level === 4) {
+    profile.x20Until = until;
+  } else if ((profile.x50Ads ?? 0) + 1 >= 2) {
+    profile.x50Until = until;
+    profile.x50Ads = 0;
+  } else {
+    profile.x50Ads = (profile.x50Ads ?? 0) + 1;
+  }
+  await profile.save();
+  return { profile: profileView(profile) };
+}
+
+/** Buys the next start size. */
+export async function buySize(user: HydratedDocument<IUser>, adminRole: string | null, index: number) {
+  assertBattleAllowed(adminRole);
+  const item = START_SIZES[index];
+  if (!item || index === 0) throw new AppError(t('الحجم غير موجود', 'Size not found'), 400, 'BAD_SIZE');
+  const profile = await profileFor(user);
+  if ((profile.sizeOwned ?? 0) >= index) return { profile: profileView(profile) };
+  if ((profile.sizeOwned ?? 0) !== index - 1) throw new AppError(t('اشتري الحجم اللي قبله أول', 'Buy the size before it first'), 409, 'SIZE_ORDER');
+  const updated = await BattleProfile.findOneAndUpdate(
+    { _id: profile._id, coins: { $gte: item.price }, sizeOwned: index - 1 },
+    { $inc: { coins: -item.price }, $set: { sizeOwned: index } },
+    { new: true }
+  );
+  if (!updated) throw notEnough();
+  return { profile: profileView(updated) };
+}
+
+/**
+ * Pays the coin reward of every level reached since the last payout (once each: the
+ * levelRewarded mark only moves forward, atomically). Returns the coins paid.
+ */
+export async function payLevelRewards(telegramId: number) {
+  const p = await BattleProfile.findOne({ telegramId }).select('xp levelRewarded');
+  if (!p) return 0;
+  const level = battleLevel(p.xp ?? 0).level;
+  const from = p.levelRewarded ?? 1;
+  if (level <= from) return 0;
+  let coins = 0;
+  for (let l = from + 1; l <= level; l++) coins += levelReward(l);
+  const done = await BattleProfile.updateOne({ telegramId, levelRewarded: from }, { $inc: { coins }, $set: { levelRewarded: level } });
+  return done.modifiedCount ? coins : 0;
+}
+
 /** Pays the coins and experience for one online kill; tells the game the new level. */
 export async function rewardBattleKill(telegramId: number, victimMass: number) {
   const got = killReward(victimMass);
@@ -318,7 +448,8 @@ export async function rewardBattleKill(telegramId: number, victimMass: number) {
   if (!before) return null;
   const was = battleLevel(before.xp ?? 0).level;
   const now = battleLevel((before.xp ?? 0) + got.xp).level;
-  return { coins: got.coins, level: now, levelUp: now > was };
+  const levelCoins = now > was ? await payLevelRewards(telegramId) : 0;
+  return { coins: got.coins + levelCoins, level: now, levelUp: now > was };
 }
 
 /**
@@ -334,13 +465,14 @@ export async function recordBattleMatch(user: Pick<IUser, 'telegramId' | 'firstN
     {
       $max: { maxMass: mass },
       $inc: { playSeconds: seconds, matches: 1 },
-      $set: { name: displayName(user as never), skin: profile?.skin ?? 'classic' },
+      $set: { name: displayName(user as never), skin: profile?.skin ?? DEFAULT_SKIN },
     },
     { upsert: true }
   );
   // Experience for playing too: a little for time alive and for how big you got.
   const xp = Math.min(300, Math.floor(seconds / 6) + Math.floor(mass / 100));
   await BattleProfile.updateOne({ telegramId: user.telegramId }, { $max: { bestMass: mass }, $inc: { totalMatches: 1, totalSeconds: seconds, xp } });
+  await payLevelRewards(user.telegramId);
 }
 
 /**
@@ -364,6 +496,9 @@ export async function battleIdentity(initData: string) {
     name: displayName(user).slice(0, 24),
     skin: profile.skin,
     level: battleLevel(profile.xp ?? 0).level,
+    startMass: startMassOf(profile),
+    // Checked on every throw, so a 15-minute ad unlock ends on time mid-game.
+    canThrow: (lv: number) => allowedThrows(profile).includes(lv),
     record: (match: { mass: number; seconds: number }) => recordBattleMatch(user, match),
     onKill: (victimMass: number) => rewardBattleKill(user.telegramId, victimMass),
   };

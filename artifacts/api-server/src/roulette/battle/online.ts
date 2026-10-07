@@ -16,6 +16,10 @@ export interface BattleIdentity {
   name: string;
   skin: string;
   level?: number;
+  /** Mass each life starts with (bought in the shop). */
+  startMass?: number;
+  /** Whether this throw speed is open to the player right now (bought / unlocked by ads). */
+  canThrow?: (level: number) => boolean;
   /** Saves a finished life to the weekly leaderboard. */
   record?: (match: { mass: number; seconds: number }) => Promise<void>;
   /** MF coins and experience for eating someone (online only); returns what was given. */
@@ -81,7 +85,7 @@ export class BattleRoom {
       ws.close();
       return null;
     }
-    const owner = this.world.addOwner({ name: who.name, skin: who.skin, mass: START_MASS, level: who.level ?? 1 });
+    const owner = this.world.addOwner({ name: who.name, skin: who.skin, mass: who.startMass ?? START_MASS, level: who.level ?? 1 });
     const client: Client = {
       ws,
       who,
@@ -117,7 +121,10 @@ export class BattleRoom {
         break;
       case 'throw':
         o.throwing = !!msg.on && !o.dead;
-        o.throwLevel = Math.floor(num(msg.lv, 0, THROW_SPEEDS.length - 1));
+        // Only speeds the player has (bought, or opened by ads and not expired yet).
+        let lv = Math.floor(num(msg.lv, 0, THROW_SPEEDS.length - 1));
+        while (lv > 0 && c.who.canThrow && !c.who.canThrow(lv)) lv--;
+        o.throwLevel = lv;
         break;
       case 'chat': {
         const text = cleanText(msg.x, 60);
@@ -144,7 +151,7 @@ export class BattleRoom {
         // Revenge (after a watched reward ad): 500 mass, near whoever ate you. Once per death.
         const revenge = !!msg.rv && c.canRevenge;
         const killer = revenge && o.killer && !o.killer.dead ? o.killer : null;
-        this.world.respawn(o, revenge ? REVENGE_MASS : START_MASS, killer ? this.world.centerOf(killer) : null);
+        this.world.respawn(o, revenge ? REVENGE_MASS : c.who.startMass ?? START_MASS, killer ? this.world.centerOf(killer) : null);
         c.canRevenge = false;
         break;
       }
@@ -247,7 +254,8 @@ export class BattleRoom {
       for (const v of w.viruses) if (inBox(v.x, v.y, v.r)) viruses.push(v.id, r1(v.x), r1(v.y), r1(v.r));
       const orbs: number[] = [];
       for (const b of w.orbs) if (inBox(b.x, b.y, b.r)) orbs.push(b.id, r1(b.x), r1(b.y));
-      this.send(c, { t: 's', c: cells, v: viruses, o: orbs, ow: ow.length ? ow : undefined, al: c.owner.dead ? 0 : 1 });
+      // ts: when this picture of the world was taken (the phone draws between two of them).
+      this.send(c, { t: 's', ts: Date.now(), c: cells, v: viruses, o: orbs, ow: ow.length ? ow : undefined, al: c.owner.dead ? 0 : 1 });
     }
   }
 

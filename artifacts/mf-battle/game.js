@@ -14,6 +14,7 @@ import {
 const BOT_TAUNTS = ['هههه 😂', 'تعال تعال', 'GG', 'منو بعد؟ 😎', 'ركض ركض 🏃', 'اكلتك 🍽️', 'لا تزعل 😅', 'جيبوا غيره'];
 const BOT_REPLIES = ['😂😂', 'شكو؟', 'تعال اذا رجّال 😤', 'GG', 'هسه اجيك 👀', 'هههه', 'ماكو مثلي 😎', 'منو انت؟', 'لا تهرب 🏃', '👍'];
 const ZOOM_MIN = 0.45;
+const INTERP = 100; // ms online positions are drawn behind the server, for smoothness
 const ZOOM_MAX = 2.4;
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -214,7 +215,7 @@ export function startGame(opts) {
   function practiceDriver() {
     const FOOD = settings.quality === 'low' ? 4500 : settings.quality === 'high' ? 7000 : 6000;
     const world = createWorld({ bots: 30, food: FOOD });
-    const me = world.addOwner({ name: player.name || 'أنت', skin: profile.skin || 'classic', mass: START_MASS, level: profile.level || 1 });
+    const me = world.addOwner({ name: player.name || 'أنت', skin: profile.skin || 'fly', mass: profile.startMass || START_MASS, level: profile.level || 1 });
     const d = {
       online: false,
       ready: true,
@@ -271,7 +272,7 @@ export function startGame(opts) {
       },
       respawn(revenge, killerName) {
         const k = revenge && killerName ? world.owners.find((o) => o.name === killerName && !o.dead) : null;
-        world.respawn(me, revenge ? REVENGE_MASS : START_MASS, k ? world.centerOf(k) : null);
+        world.respawn(me, revenge ? REVENGE_MASS : profile.startMass || START_MASS, k ? world.centerOf(k) : null);
         return k ? killerName : null;
       },
       close() {},
@@ -381,7 +382,13 @@ export function startGame(opts) {
         pellets.set(p.id, p);
       }
     }
+    // Server clock vs ours: the smallest gap seen is the closest to the true offset; it is
+    // allowed to creep back up slowly in case the clocks drift.
+    let clockGap = null;
     function onSnapshot(msg) {
+      const ts = msg.ts || performance.now();
+      const gap = ts - performance.now();
+      clockGap = clockGap === null || gap > clockGap ? gap : clockGap + (gap - clockGap) * 0.02;
       if (msg.ow) addOwners(msg.ow);
       const seen = new Set();
       const c = msg.c;
@@ -390,13 +397,13 @@ export function startGame(opts) {
         seen.add(id);
         const r = rad(c[i + 4]);
         let cell = cells.get(id);
+        const sample = { t: ts, x: c[i + 2], y: c[i + 3], r };
         if (!cell) {
-          cell = { id, x: c[i + 2], y: c[i + 3], r, m: c[i + 4], tx: c[i + 2], ty: c[i + 3], tr: r, owner: ownerOf(c[i + 1]) };
+          cell = { id, x: sample.x, y: sample.y, r, m: c[i + 4], s0: sample, s1: sample, lx: 0, ly: 0, owner: ownerOf(c[i + 1]) };
           cells.set(id, cell);
         }
-        cell.tx = c[i + 2];
-        cell.ty = c[i + 3];
-        cell.tr = r;
+        cell.s0 = cell.s1;
+        cell.s1 = sample;
         cell.m = c[i + 4];
         cell.owner = ownerOf(c[i + 1]);
       }
@@ -437,23 +444,31 @@ export function startGame(opts) {
       dots: () => dots,
       update(dt) {
         t += dt;
-        // Glide towards the latest server positions (the server sends 20 updates a second).
-        // Your own pieces are drawn a little ahead, the way you are steering, so turning
-        // answers at once instead of after the round trip to the server.
+        // Smooth motion: everything is drawn a short moment (INTERP) in the past, exactly
+        // between the two server updates around that moment, so late or bunched packets
+        // on a phone network don't make cells jump. Your own pieces are also drawn ahead
+        // the way you steer, so turning answers at once instead of after the round trip.
         const k = 1 - Math.exp(-dt * 16);
-        const lead = clamp((rtt || 80) / 2000 + 0.06, 0.06, 0.35);
+        const renderAt = performance.now() + (clockGap || 0) - INTERP;
+        const lead = clamp(((rtt || 80) / 2 + INTERP) / 1000, 0.08, 0.4);
         const dl = Math.hypot(input.dx, input.dy) || 1;
         const steer = paused || over ? 0 : input.m;
+        const lk = 1 - Math.exp(-dt * 8);
         for (const c of cells.values()) {
-          let tx = c.tx, ty = c.ty;
-          if (c.owner.id === meId && steer > 0) {
-            const ahead = speedOf(c.m) * steer * lead;
-            tx += (input.dx / dl) * ahead;
-            ty += (input.dy / dl) * ahead;
+          const a = c.s0, b = c.s1;
+          const f = b.t > a.t ? clamp((renderAt - a.t) / (b.t - a.t), 0, 1.25) : 1;
+          let tx = a.x + (b.x - a.x) * f;
+          let ty = a.y + (b.y - a.y) * f;
+          if (c.owner.id === meId) {
+            const ahead = steer > 0 ? speedOf(c.m) * steer * lead : 0;
+            c.lx += ((input.dx / dl) * ahead - c.lx) * lk;
+            c.ly += ((input.dy / dl) * ahead - c.ly) * lk;
+            tx += c.lx;
+            ty += c.ly;
           }
-          c.x += (tx - c.x) * k;
-          c.y += (ty - c.y) * k;
-          c.r += (c.tr - c.r) * k;
+          c.x = tx;
+          c.y = ty;
+          c.r += (b.r - c.r) * k;
         }
         for (const v of viruses) { v.x += (v.tx - v.x) * k; v.y += (v.ty - v.y) * k; }
         const now = performance.now();
@@ -829,6 +844,22 @@ export function startGame(opts) {
     void el.offsetWidth;
     el.classList.add('hit');
   }
+  // Throw speeds open to you: ×1/×2 free, ×5/×10 bought, ×20/×50 for 15 minutes after ads.
+  function throwsNow() {
+    const t = profile.throws || { owned: 1 };
+    const out = [];
+    for (let l = 0; l <= Math.max(1, t.owned || 1); l++) out.push(l);
+    if (t.x20Until && new Date(t.x20Until).getTime() > Date.now()) out.push(4);
+    if (t.x50Until && new Date(t.x50Until).getTime() > Date.now()) out.push(5);
+    return out;
+  }
+  function nextThrowLevel() {
+    const open = throwsNow();
+    const next = open.find((l) => l > throwLevel);
+    if (next !== undefined) return next;
+    popText('🛒 روح للمتجر واشتري رمي أسرع');
+    return 0;
+  }
   function setThrowLevel(i) {
     throwLevel = i;
     speedEl.textContent = `×${THROW_SPEEDS[i]}`;
@@ -845,7 +876,7 @@ export function startGame(opts) {
     if (id === 'throw') { e.preventDefault(); input.throwing = true; pulse(ctl.throw); throwPointer = e.pointerId; return; }
     if (id === 'double') {
       e.preventDefault();
-      setThrowLevel((throwLevel + 1) % THROW_SPEEDS.length);
+      setThrowLevel(nextThrowLevel());
       pulse(ctl.double);
       return;
     }

@@ -37,6 +37,9 @@ import {
   postBattleLayoutShare,
   putBattleLayout,
   putBattleSettings,
+  postBattleBuySize,
+  postBattleBuyThrow,
+  postBattleThrowAd,
 } from '../controllers/battle.controller';
 
 const router = Router();
@@ -82,6 +85,9 @@ router.post('/games/ziggurat/finish', postZigguratFinish);
 router.get('/battle', getBattle);
 router.post('/battle/skins/:id/buy', purchaseLimiter, postBattleBuySkin);
 router.post('/battle/skins/:id/equip', postBattleEquipSkin);
+router.post('/battle/throws/:level/buy', purchaseLimiter, postBattleBuyThrow);
+router.post('/battle/throws/:level/ad', purchaseLimiter, postBattleThrowAd);
+router.post('/battle/sizes/:index/buy', purchaseLimiter, postBattleBuySize);
 router.put('/battle/settings', putBattleSettings);
 router.put('/battle/layout', putBattleLayout);
 router.post('/battle/layout/share', purchaseLimiter, postBattleLayoutShare);

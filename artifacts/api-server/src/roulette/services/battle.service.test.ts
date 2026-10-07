@@ -30,7 +30,7 @@ vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockI
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { battleLevel, battleUrl, buySkin, killReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
+import { allowedThrows, battleLevel, battleUrl, buySkin, buyThrow, killReward, levelReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 7, firstName: 'Omar', username: 'omar' } as never;
 
@@ -38,8 +38,8 @@ function profile(over: Record<string, unknown> = {}) {
   return {
     _id: new mongoose.Types.ObjectId(),
     coins: 100,
-    skin: 'classic',
-    ownedSkins: ['classic', 'mf'],
+    skin: 'fly',
+    ownedSkins: ['fly', 'mf'],
     settings: { darkMode: true, chat: true, quality: 'medium', joystick: 'fixed' },
     layout: {},
     save: vi.fn(),
@@ -67,6 +67,7 @@ describe('MF Battle', () => {
     expect(battleLevel(49).level).toBe(1);
     expect(battleLevel(50).level).toBe(2);
     expect(battleLevel(4050)).toMatchObject({ level: 10, levelXp: 4050, nextXp: 5000 });
+    expect([levelReward(2), levelReward(5), levelReward(10)]).toEqual([30, 300, 600]);
   });
 
   it('defaults to the copy this server serves under /mf-battle', () => {
@@ -78,7 +79,7 @@ describe('MF Battle', () => {
     mocks.profileCreate.mockImplementation(async (doc: Record<string, unknown>) => profile(doc));
     const home = await getBattleHome(user, 'developer');
     expect(home.profile.coins).toBe(100);
-    expect(home.profile.ownedSkins).toEqual(expect.arrayContaining(['classic', 'mf']));
+    expect(home.profile.ownedSkins).toEqual(expect.arrayContaining(['fly', 'mf']));
     expect(home.player.name).toBe('Omar');
     expect(home.ads).toEqual({ rewardBlockId: '123', interstitialBlockId: 'int-52362' });
   });
@@ -87,11 +88,32 @@ describe('MF Battle', () => {
     mocks.profileFindOne.mockResolvedValue(profile({ coins: 50 }));
     mocks.profileFindOneAndUpdate.mockResolvedValue(null);
     mocks.profileFindById.mockResolvedValue(profile({ coins: 50 }));
-    await expect(buySkin(user, 'developer', 'neon')).rejects.toMatchObject({ code: 'NOT_ENOUGH_COINS' });
-    mocks.profileFindOneAndUpdate.mockResolvedValue(profile({ coins: 0, ownedSkins: ['classic', 'mf', 'neon'] }));
-    const res = await buySkin(user, 'developer', 'neon');
-    expect(res.profile.ownedSkins).toContain('neon');
-    expect(mocks.profileFindOneAndUpdate.mock.calls[1][1]).toEqual({ $inc: { coins: -150 }, $push: { ownedSkins: 'neon' } });
+    await expect(buySkin(user, 'developer', 'usopp')).rejects.toMatchObject({ code: 'NOT_ENOUGH_COINS' });
+    mocks.profileFindOneAndUpdate.mockResolvedValue(profile({ coins: 0, ownedSkins: ['fly', 'mf', 'usopp'] }));
+    const res = await buySkin(user, 'developer', 'usopp');
+    expect(res.profile.ownedSkins).toContain('usopp');
+    expect(mocks.profileFindOneAndUpdate.mock.calls[1][1]).toEqual({ $inc: { coins: -149 }, $push: { ownedSkins: 'usopp' } });
+  });
+
+  it('shows retired skins as the default one', async () => {
+    mocks.profileFindOne.mockResolvedValue(profile({ skin: 'dragon', ownedSkins: ['fly', 'dragon', 'zoro'] }));
+    const home = await getBattleHome(user, 'developer');
+    expect(home.profile.skin).toBe('fly');
+    expect(home.profile.ownedSkins).toEqual(['fly', 'mf', 'zoro']);
+    expect(home.skins).toHaveLength(10);
+    expect(home.skins.find((s) => s.id === 'joyboy')).toMatchObject({ price: 2999, rarity: 'mythic', pack: 'onepiece', onSale: true });
+  });
+
+  it('opens throw speeds in order, and ×20 / ×50 only with watched ads', async () => {
+    expect(allowedThrows({ throwOwned: 1, x20Until: null, x50Until: null })).toEqual([0, 1]);
+    expect(allowedThrows({ throwOwned: 3, x20Until: new Date(Date.now() + 60000), x50Until: new Date(Date.now() - 1) })).toEqual([0, 1, 2, 3, 4]);
+    mocks.profileFindOne.mockResolvedValue(profile({ coins: 5000, throwOwned: 1 }));
+    await expect(buyThrow(user, 'developer', 3)).rejects.toMatchObject({ code: 'THROW_ORDER' });
+    mocks.profileFindOneAndUpdate.mockResolvedValue(profile({ coins: 4600, throwOwned: 2 }));
+    const res = await buyThrow(user, 'developer', 2);
+    expect(res.profile.throws.allowed).toEqual([0, 1, 2]);
+    expect(mocks.profileFindOneAndUpdate.mock.calls.at(-1)?.[1]).toEqual({ $inc: { coins: -400 }, $set: { throwOwned: 2 } });
+    await expect(buyThrow(user, 'developer', 4)).rejects.toMatchObject({ code: 'BAD_THROW' });
   });
 
   it('keeps settings and layouts within the allowed values', () => {

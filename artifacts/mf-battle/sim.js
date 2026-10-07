@@ -18,7 +18,7 @@ export const THROW_SPEEDS = [1, 2, 5, 10, 20, 50];
 export const MAP_SECTIONS = 4;
 export const FOOD_COLORS = ['#ff3b6b', '#ff8a3d', '#ffc83d', '#a3ff3a', '#22e3ff', '#9b5cff', '#ff2bd6', '#4ade80', '#60a5fa'];
 export const BOT_NAMES = ['SASUKE', 'KONAN', 'زيد', 'دندون', 'BROKEN', 'Cherry', 'Shadow', 'علي', 'مصطفى', 'Sniper', 'Ghost', 'Ninja', 'حيدر', 'MF_Fan', 'Lulu', 'Rambo', 'King', 'سجاد', 'Pro_IQ', 'Viper', 'أبو حسين', 'Zero', 'Joker', 'كرار', 'Storm', 'Toxic', 'Hunter', 'منتظر', 'Blaze', 'Ace'];
-export const BOT_SKINS = ['classic', 'mf', 'ocean', 'lava', 'neon', 'toxic', 'tiger', 'snake', 'galaxy', 'ziggurat', 'skull', 'crown', 'dragon'];
+export const BOT_SKINS = ['fly', 'mf', 'usopp', 'whitebeard', 'imu', 'sanji', 'zoro', 'kaido', 'roger', 'joyboy'];
 export const VIRUS_MASS = 100;
 export const PELLET_MASS = 13;
 

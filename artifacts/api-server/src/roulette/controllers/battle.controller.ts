@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
+  buySize,
   buySkin,
+  buyThrow,
   equipSkin,
   getBattleHome,
   getLeaderboard,
@@ -9,6 +11,7 @@ import {
   saveLayout,
   saveSettings,
   shareLayout,
+  throwAd,
 } from '../services/battle.service';
 
 const role = (req: Request) => req.adminRole ?? null;
@@ -43,4 +46,16 @@ export const getBattleLayoutCode = asyncHandler(async (req: Request, res: Respon
 
 export const getBattleLeaderboard = asyncHandler(async (req: Request, res: Response) => {
   res.json({ ok: true, ...(await getLeaderboard(req.dbUser!, role(req), String(req.query.type ?? 'mass'))) });
+});
+
+export const postBattleBuyThrow = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await buyThrow(req.dbUser!, role(req), Number(req.params.level))) });
+});
+
+export const postBattleThrowAd = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await throwAd(req.dbUser!, role(req), Number(req.params.level))) });
+});
+
+export const postBattleBuySize = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, ...(await buySize(req.dbUser!, role(req), Number(req.params.index))) });
 });

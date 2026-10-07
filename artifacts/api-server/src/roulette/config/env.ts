@@ -35,6 +35,15 @@ const envSchema = z.object({
     .optional()
     .default('')
     .refine((v) => v === '' || /^https:\/\//.test(v), { message: 'MF_BATTLE_URL must be empty or start with https://' }),
+  // A separate MF Battle game server (close to the players, e.g. Railway EU West), as
+  // wss://…/api/battle/ws. Empty = the game connects to this server.
+  MF_BATTLE_WS_URL: z
+    .string()
+    .optional()
+    .default('')
+    .refine((v) => v === '' || /^wss:\/\//.test(v), { message: 'MF_BATTLE_WS_URL must be empty or start with wss://' }),
+  // When MF Battle opened to everyone (ISO date). Limited packs (One Piece) sell for 7 days after it.
+  MF_BATTLE_LAUNCH_DATE: z.string().optional().default(''),
   SUPPORT_USERNAME: z.string().optional().default('support'),
   // Who the user is told to DM once their withdrawal is approved.
   DELIVERY_CONTACT_USERNAME: z.string().optional().default('kk66kk6'),

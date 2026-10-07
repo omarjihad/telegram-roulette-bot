@@ -171,7 +171,7 @@ function message(title, text, withBack = true) {
   if (b) b.onclick = goRoulette;
 }
 
-const skinById = (id) => state.skins.find((s) => s.id === id) || state.skins[0] || { id: 'classic', name: { ar: 'كلاسيك' }, rarity: 'common', price: 0 };
+const skinById = (id) => state.skins.find((s) => s.id === id) || state.skins[0] || { id: 'fly', name: { ar: 'الذبانة' }, rarity: 'common', price: 0 };
 const owned = (id) => state.profile.ownedSkins.includes(id);
 
 function coinsHTML() {
@@ -180,8 +180,16 @@ function coinsHTML() {
 
 function avatarHTML() {
   const p = state.player;
+  const pr = state.profile;
   const initial = esc((p.name || '?').trim().charAt(0).toUpperCase());
-  return `<div class="avatar">${p.photoUrl ? `<img src="${esc(p.photoUrl)}" alt="" onerror="this.remove()" />` : ''}${p.photoUrl ? '' : initial}</div>`;
+  // A round frame that fills up with your progress to the next level; tap it for all levels.
+  const pct = Math.max(0, Math.min(1, ((pr.xp || 0) - (pr.levelXp || 0)) / Math.max(1, (pr.nextXp || 1) - (pr.levelXp || 0))));
+  const C = 2 * Math.PI * 27;
+  return `<button class="avatar-ring" data-act="levels" aria-label="اللفلات">
+    <svg viewBox="0 0 60 60" class="ring-svg"><circle cx="30" cy="30" r="27" class="ring-bg"/><circle cx="30" cy="30" r="27" class="ring-fg" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}"/></svg>
+    <span class="avatar">${p.photoUrl ? `<img src="${esc(p.photoUrl)}" alt="" onerror="this.remove()" />` : initial}</span>
+    <span class="ring-lvl">${pr.level || 1}</span>
+  </button>`;
 }
 
 /** A ranked player's Telegram photo (or their first letter) — not their in-game skin. */
@@ -189,11 +197,6 @@ function personPic(r, size) {
   const initial = esc((r.name || '?').trim().charAt(0).toUpperCase());
   const img = r.photoUrl ? `<img src="${esc(r.photoUrl)}" alt="" onerror="this.remove()" />` : '';
   return `<span class="person" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px">${initial}${img}</span>`;
-}
-
-function levelHTML(p) {
-  const pct = Math.round(((p.xp - p.levelXp) / Math.max(1, p.nextXp - p.levelXp)) * 100);
-  return `<span class="lvl" title="${fmt(p.xp)} / ${fmt(p.nextXp)} xp"><b>⭐ ${p.level || 1}</b><i><em style="width:${Math.max(0, Math.min(100, pct || 0))}%"></em></i></span>`;
 }
 
 function timeLeft(date) {
@@ -219,8 +222,8 @@ function renderLobby() {
       <div class="me">
         ${avatarHTML()}
         <div class="me-text">
-          <div class="me-name">${esc(state.player.name)} ${levelHTML(p)}</div>
-          <div class="me-sub">${state.player.username ? `@${esc(state.player.username)} · ` : ''}أفضل كتلة <b>${fmt(p.bestMass)}</b></div>
+          <div class="me-name">${esc(state.player.name)}</div>
+          <div class="me-sub">⭐ لفل <b>${p.level || 1}</b> · ${fmt(p.xp)}/${fmt(p.nextXp)} · أفضل كتلة <b>${fmt(p.bestMass)}</b></div>
         </div>
       </div>
       <div class="brand">MF BATTLE</div>
@@ -284,7 +287,9 @@ function onlineInfo() {
   const custom = new URLSearchParams(location.search).get('ws');
   if (custom) return { url: custom, initData: (tg && tg.initData) || 'demo' };
   if (DEMO) return null;
-  return { url: `${(API || location.origin).replace(/^http/, 'ws')}/api/battle/ws`, initData: (tg && tg.initData) || '' };
+  // A dedicated game server close to the players, if the bot set one; else the bot's own server.
+  const url = CFG.wsUrl || state.wsUrl || `${(API || location.origin).replace(/^http/, 'ws')}/api/battle/ws`;
+  return { url, initData: (tg && tg.initData) || '' };
 }
 
 function playGame() {
@@ -315,6 +320,7 @@ function playGame() {
       state.game = null;
       screenEl.hidden = false;
       renderLobby();
+      refreshLobby(); // new best, coins, level and ranking show up right away
     },
   });
 }
@@ -364,6 +370,7 @@ function openPanel(name) {
   else if (name === 'skins') renderSkins();
   else if (name === 'rank') renderRank('mass');
   else if (name === 'settings') renderSettings();
+  else if (name === 'levels') renderLevels();
 }
 
 function closePanel() {
@@ -403,13 +410,149 @@ function skinCard(s, mode) {
   </div>`;
 }
 
-function renderStore() {
-  const items = state.skins.filter((s) => s.price > 0).sort((a, b) => a.price - b.price);
-  panelEl.innerHTML = `${panelHead('🛒 المتجر')}<div class="p-body"><div class="grid">${items.map((s) => skinCard(s, 'store')).join('')}</div></div>`;
+let storeTab = 'skins';
+function renderStore(tab = storeTab) {
+  storeTab = tab;
+  const tabs = [['skins', '🎭 السكنات'], ['throws', '🎯 الرمي'], ['sizes', '🫧 الحجم']]
+    .map(([k, label]) => `<button class="tab ${k === tab ? 'on' : ''}" data-stab="${k}">${label}</button>`).join('');
+  let body = '';
+  if (tab === 'skins') body = storeSkinsHTML();
+  else if (tab === 'throws') body = storeThrowsHTML();
+  else body = storeSizesHTML();
+  panelEl.innerHTML = `${panelHead('🛒 المتجر')}<div class="tabs">${tabs}</div><div class="p-body">${body}</div>`;
   bindPanelClose();
-  panelEl.querySelectorAll('[data-buy]').forEach((b) => {
-    b.onclick = () => confirmBuy(b.getAttribute('data-buy'));
-  });
+  panelEl.querySelectorAll('[data-stab]').forEach((b) => { b.onclick = () => { sfx('open'); renderStore(b.getAttribute('data-stab')); }; });
+  panelEl.querySelectorAll('[data-buy]').forEach((b) => { b.onclick = () => confirmBuy(b.getAttribute('data-buy')); });
+  panelEl.querySelectorAll('[data-buy-throw]').forEach((b) => { b.onclick = () => buyThrow(Number(b.getAttribute('data-buy-throw'))); });
+  panelEl.querySelectorAll('[data-ad-throw]').forEach((b) => { b.onclick = () => adThrow(Number(b.getAttribute('data-ad-throw')), b); });
+  panelEl.querySelectorAll('[data-buy-size]').forEach((b) => { b.onclick = () => buySize(Number(b.getAttribute('data-buy-size'))); });
+}
+
+function storeSkinsHTML() {
+  const sale = state.skins.filter((s) => s.price > 0 && (s.onSale !== false || owned(s.id)));
+  const byRank = (a, b) => (RARITY[b.rarity]?.rank || 0) - (RARITY[a.rarity]?.rank || 0) || b.price - a.price;
+  const packs = {};
+  const loose = [];
+  for (const s of sale) (s.pack ? (packs[s.pack] = packs[s.pack] || []) : loose).push(s);
+  let html = '';
+  for (const [id, items] of Object.entries(packs)) {
+    const info = (state.packs && state.packs[id]) || { name: { ar: 'حزمة' }, days: 7, endsAt: null };
+    const when = info.endsAt ? `⏳ تنتهي بعد ${timeLeft(info.endsAt)}` : `⏳ متاحة ${info.days} أيام بس من إطلاق اللعبة`;
+    html += `<div class="pack-head"><b>🏴‍☠️ ${esc(info.name.ar)}</b><span>${when}</span><small>بعدها تنشال من المتجر، واللي اشتراها تبقى عنده.</small></div>
+      <div class="grid">${items.sort(byRank).map((s) => skinCard(s, 'store')).join('')}</div>`;
+  }
+  if (loose.length) html += `<div class="grid">${loose.sort(byRank).map((s) => skinCard(s, 'store')).join('')}</div>`;
+  return html || '<div class="center-msg"><p>ما اكو سكنات للبيع هسه.</p></div>';
+}
+
+const SPEED_LABELS = ['×1', '×2', '×5', '×10', '×20', '×50'];
+function storeThrowsHTML() {
+  const t = state.profile.throws || { owned: 1, allowed: [0, 1] };
+  const shop = (state.shop && state.shop.throws) || [];
+  const now = Date.now();
+  const left = (until) => {
+    const ms = new Date(until || 0).getTime() - now;
+    return ms > 0 ? `${Math.ceil(ms / 60000)} دقيقة` : null;
+  };
+  const cards = shop.map((x) => {
+    let status;
+    if (x.level <= 1) status = '<button class="btn" disabled>✓ مجاني للكل</button>';
+    else if ('price' in x) {
+      if (t.owned >= x.level) status = '<button class="btn" disabled>✓ مملوك</button>';
+      else if (t.owned < x.level - 1) status = `<button class="btn" disabled>اشتري ${SPEED_LABELS[x.level - 1]} أول</button>`;
+      else status = `<button class="btn ${state.profile.coins >= x.price ? 'btn-hot' : ''}" data-buy-throw="${x.level}"><img src="${COIN}" alt="" class="ic-coin" /> ${fmt(x.price)}</button>`;
+    } else {
+      const until = x.level === 4 ? t.x20Until : t.x50Until;
+      const on = left(until);
+      const progress = x.level === 5 && t.x50Ads ? ` (${t.x50Ads}/2)` : '';
+      status = on
+        ? `<button class="btn btn-cyan" disabled>✓ مفتوح · باقي ${on}</button>`
+        : `<button class="btn btn-violet" data-ad-throw="${x.level}">📺 ${x.ads === 1 ? 'شاهد إعلان' : 'شاهد إعلانين'}${progress}</button>`;
+    }
+    const note = x.level <= 1 ? 'للكل' : 'price' in x ? 'للأبد' : `${x.minutes} دقيقة بعد ${x.ads === 1 ? 'إعلان واحد' : 'إعلانين'}`;
+    return `<div class="shop-card ${t.allowed.includes(x.level) ? 'owned' : ''}"><div class="shop-big">${x.label}</div><div class="sn">سرعة الرمي</div><small>${note}</small>${status}</div>`;
+  }).join('');
+  return `<p class="shop-note">زر سرعة الرمي داخل اللعبة يتنقل بس بين السرعات المفتوحة إلك.</p><div class="grid">${cards}</div>`;
+}
+
+function storeSizesHTML() {
+  const sizes = (state.shop && state.shop.sizes) || [];
+  const ownedIdx = state.profile.sizeOwned || 0;
+  const cards = sizes.map((x, i) => {
+    let status;
+    if (i === 0) status = '<button class="btn" disabled>✓ مجاني</button>';
+    else if (ownedIdx >= i) status = '<button class="btn" disabled>✓ مملوك</button>';
+    else if (ownedIdx < i - 1) status = '<button class="btn" disabled>اشتري اللي قبله أول</button>';
+    else status = `<button class="btn ${state.profile.coins >= x.price ? 'btn-hot' : ''}" data-buy-size="${i}"><img src="${COIN}" alt="" class="ic-coin" /> ${fmt(x.price)}</button>`;
+    return `<div class="shop-card ${ownedIdx >= i ? 'owned' : ''} ${ownedIdx === i ? 'equipped' : ''}"><div class="shop-big">🫧 ${fmt(x.mass)}</div><div class="sn">تبدأ بكتلة ${fmt(x.mass)}</div>${status}</div>`;
+  }).join('');
+  return `<p class="shop-note">كل مرة تبدأ جولة (مو الانتقام) تبدأ بأكبر حجم عندك. هسه: <b>${fmt(state.profile.startMass || 20)}</b></p><div class="grid">${cards}</div>`;
+}
+
+async function buyThrow(level) {
+  const item = state.shop.throws.find((x) => x.level === level);
+  if (state.profile.coins < item.price) { toast(`تحتاج ${fmt(item.price - state.profile.coins)} عملة MF زيادة`); return; }
+  try {
+    const res = await api(`/battle/throws/${level}/buy`, { method: 'POST' });
+    setProfile(res.profile);
+    haptic('medium');
+    sfx('buy');
+    toast(`🎯 صارت عندك سرعة الرمي ${item.label}`);
+    renderStore('throws');
+  } catch (e) { toast(e.message); }
+}
+
+async function adThrow(level, btn) {
+  btn.disabled = true;
+  try {
+    await showAd(state.ads && state.ads.rewardBlockId, { demo: DEMO, base: API, hash: tgHash() });
+    const res = await api(`/battle/throws/${level}/ad`, { method: 'POST' });
+    setProfile(res.profile);
+    const t = res.profile.throws;
+    if (level === 5 && t.x50Ads) toast('👍 باقي إعلان واحد ويفتح ×50');
+    else toast(`🎯 انفتح ${SPEED_LABELS[level]} لمدة ${state.shop.throwAdMinutes || 15} دقيقة`);
+    haptic('medium');
+    renderStore('throws');
+  } catch (e) {
+    btn.disabled = false;
+    toast(e.message || 'ما اكو إعلان هسه، جرّب بعد شوية');
+  }
+}
+
+async function buySize(index) {
+  const item = state.shop.sizes[index];
+  if (state.profile.coins < item.price) { toast(`تحتاج ${fmt(item.price - state.profile.coins)} عملة MF زيادة`); return; }
+  try {
+    const res = await api(`/battle/sizes/${index}/buy`, { method: 'POST' });
+    setProfile(res.profile);
+    haptic('medium');
+    sfx('buy');
+    toast(`🫧 صرت تبدأ بكتلة ${fmt(item.mass)}`);
+    renderStore('sizes');
+  } catch (e) { toast(e.message); }
+}
+
+function renderLevels() {
+  const p = state.profile;
+  const rows = (state.levels || []).map((l) => {
+    const done = p.level > l.level;
+    const cur = p.level === l.level;
+    const next = state.levels.find((x) => x.level === l.level + 1);
+    const span = next ? next.xp - l.xp : 0;
+    const inLevel = cur ? Math.max(0, p.xp - l.xp) : 0;
+    const pct = cur && span ? Math.round((inLevel / span) * 100) : done ? 100 : 0;
+    return `<div class="lv-row ${done ? 'done' : ''} ${cur ? 'cur' : ''}">
+      <span class="lv-n">${l.level}</span>
+      <div class="lv-mid"><b>لفل ${l.level}</b><small>${l.level === 1 ? 'البداية' : `يحتاج ${fmt(l.xp)} خبرة`}${cur && next ? ` · عندك ${fmt(inLevel)} من ${fmt(span)}` : ''}</small><i><em style="width:${pct}%"></em></i></div>
+      <span class="lv-gift">${l.reward ? `<img src="${COIN}" alt="" class="ic-coin" /> ${fmt(l.reward)}` : '—'}${done ? ' ✓' : ''}</span>
+    </div>`;
+  }).join('');
+  panelEl.innerHTML = `${panelHead('⭐ اللفلات')}<div class="p-body">
+    <p class="shop-note">تاخذ خبرة من الأكل بالأونلاين (أكبر = أكثر) ومن وقت اللعب. كل لفل تطلعه يعطيك عملات MF، وكل 5 لفلات جائزة كبيرة.</p>
+    <div class="lv-list">${rows}</div></div>`;
+  bindPanelClose();
+  const cur = panelEl.querySelector('.lv-row.cur');
+  if (cur) cur.scrollIntoView({ block: 'center' });
 }
 
 function confirmBuy(id) {
@@ -764,6 +907,32 @@ function openEditor(onClose) {
 }
 
 // ───────────── Boot ─────────────
+async function loadHome() {
+  const res = await api('/battle');
+  state.player = res.player;
+  state.profile = res.profile;
+  state.skins = res.skins;
+  state.packs = res.packs || {};
+  state.shop = res.shop || { throws: [], sizes: [] };
+  state.levels = res.levels || [];
+  state.wsUrl = res.wsUrl || null;
+  state.week = res.week;
+  state.ads = res.ads || null;
+}
+
+let refreshing = false;
+async function refreshLobby() {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    await loadHome();
+    state.weekly = null;
+    if (!state.game && panelEl.hidden && dialogEl.hidden) renderLobby();
+  } catch (e) { /* offline for a moment: keep what is shown */ } finally {
+    refreshing = false;
+  }
+}
+
 async function boot() {
   fit();
   if (!API) return message('الإعداد ناقص', 'لازم تكتب عنوان سيرفر الروليت بملف config.js', false);
@@ -772,14 +941,11 @@ async function boot() {
   }
   screenEl.innerHTML = '<div class="center-msg"><img src="assets/mf-coin.svg" alt="" /><div class="spin"></div></div>';
   try {
-    const res = await api('/battle');
-    state.player = res.player;
-    state.profile = res.profile;
-    state.skins = res.skins;
-    state.week = res.week;
-    state.ads = res.ads || null;
+    await loadHome();
     setSoundEnabled(state.profile.settings.sound !== false);
     renderLobby();
+    // Keep the lobby fresh (coins, level, best, ranking) without leaving and coming back.
+    setInterval(() => { if (!state.game && panelEl.hidden && dialogEl.hidden && !document.hidden) refreshLobby(); }, 30000);
   } catch (e) {
     if (e.code === 'BATTLE_COMING_SOON') message('قريباً ⚔️', 'MF Battle قيد التجهيز، ترقبوه!');
     else message('تعذّر الاتصال', esc(e.message));
@@ -789,20 +955,52 @@ async function boot() {
 // ───────────── Demo data (open the page with ?demo=1 to preview without the bot) ─────────────
 const demo = {
   player: { telegramId: 1, name: 'عمر', username: 'omar', photoUrl: null },
-  profile: { coins: 1250, skin: 'skull', ownedSkins: ['classic', 'mf', 'ocean', 'neon', 'skull'], settings: { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, level: 7, xp: 1920, levelXp: 1800, nextXp: 2450, kills: 312, totalMatches: 1923, totalSeconds: 98000 },
-  skins: null,
+  profile: { coins: 3250, skin: 'zoro', ownedSkins: ['fly', 'mf', 'zoro'], settings: { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, level: 7, xp: 1920, levelXp: 1800, nextXp: 2450, kills: 312, totalMatches: 1923, totalSeconds: 98000, throws: { owned: 1, allowed: [0, 1], x20Until: null, x50Until: null, x50Ads: 0 }, sizeOwned: 0, startMass: 20 },
 };
 const DEMO_SKINS = [
-  ['classic', 'كلاسيك', 0, 'common'], ['mf', 'MF', 0, 'common'], ['ocean', 'المحيط', 80, 'common'], ['lava', 'الحمم', 80, 'common'],
-  ['neon', 'نيون', 150, 'rare'], ['toxic', 'سام', 150, 'rare'], ['tiger', 'النمر', 250, 'rare'], ['snake', 'الحية', 300, 'epic'],
-  ['galaxy', 'المجرة', 400, 'epic'], ['ziggurat', 'الزقورة', 500, 'epic'], ['skull', 'الجمجمة', 700, 'legendary'], ['crown', 'التاج', 900, 'legendary'], ['dragon', 'التنين', 1200, 'legendary'],
-].map(([id, ar, price, rarity]) => ({ id, name: { ar, en: id }, price, rarity }));
+  ['fly', 'الذبانة', 0, 'common'], ['mf', 'MF', 0, 'common'],
+  ['joyboy', 'جوي بوي', 2999, 'mythic', 'onepiece'], ['roger', 'روجر', 2499, 'mythic', 'onepiece'], ['kaido', 'كايدو', 1499, 'legendary', 'onepiece'],
+  ['zoro', 'زورو', 1299, 'legendary', 'onepiece'], ['sanji', 'سانجي', 999, 'legendary', 'onepiece'], ['imu', 'إيمو ساما', 499, 'rare', 'onepiece'],
+  ['whitebeard', 'اللحية البيضاء', 349, 'rare', 'onepiece'], ['usopp', 'أوسوب', 149, 'common', 'onepiece'],
+].map(([id, ar, price, rarity, pack]) => ({ id, name: { ar, en: id }, price, rarity, pack, onSale: true }));
+const DEMO_SHOP = {
+  throws: [{ level: 0, label: '×1', price: 0 }, { level: 1, label: '×2', price: 0 }, { level: 2, label: '×5', price: 400 }, { level: 3, label: '×10', price: 900 }, { level: 4, label: '×20', ads: 1, minutes: 15 }, { level: 5, label: '×50', ads: 2, minutes: 15 }],
+  sizes: [{ mass: 20, price: 0 }, { mass: 50, price: 300 }, { mass: 100, price: 800 }, { mass: 200, price: 1800 }, { mass: 400, price: 3500 }],
+  throwAdMinutes: 15,
+};
+const DEMO_LEVELS = Array.from({ length: 50 }, (_, i) => ({ level: i + 1, xp: 50 * i * i, reward: i ? ((i + 1) % 5 === 0 ? (i + 1) * 60 : (i + 1) * 15) : 0 }));
+function demoAllowed(t) {
+  const out = [];
+  for (let l = 0; l <= t.owned; l++) out.push(l);
+  if (t.x20Until && new Date(t.x20Until) > new Date()) out.push(4);
+  if (t.x50Until && new Date(t.x50Until) > new Date()) out.push(5);
+  return out;
+}
 const DEMO_NAMES = ['SASUKE', 'KONAN', 'عمر', 'BROKEN', 'CherryYT', 'دندون', 'زيد', 'mhmd'];
 async function demoApi(path, opts) {
   await new Promise((r) => setTimeout(r, 120));
   const p = demo.profile;
   const reset = new Date(Date.now() + 3.4 * 86400000).toISOString();
-  if (path === '/battle') return { ok: true, player: demo.player, profile: p, skins: DEMO_SKINS, week: { key: 'demo', resetsAt: reset }, ads: { rewardBlockId: 'demo-reward', interstitialBlockId: 'int-52362' } };
+  if (path === '/battle') return { ok: true, player: demo.player, profile: p, skins: DEMO_SKINS, packs: { onepiece: { name: { ar: 'حزمة ون بيس' }, days: 7, endsAt: null } }, shop: DEMO_SHOP, levels: DEMO_LEVELS, wsUrl: null, week: { key: 'demo', resetsAt: reset }, ads: { rewardBlockId: 'demo-reward', interstitialBlockId: 'int-52362' } };
+  const bt = path.match(/^\/battle\/throws\/(\d)\/(buy|ad)$/);
+  if (bt) {
+    const lv = Number(bt[1]);
+    if (bt[2] === 'buy') {
+      const item = DEMO_SHOP.throws[lv];
+      if (p.coins < item.price) { const e = new Error('ما عندك عملات MF كافية'); throw e; }
+      p.coins -= item.price; p.throws.owned = lv;
+    } else if (lv === 4) p.throws.x20Until = new Date(Date.now() + 900000).toISOString();
+    else if (p.throws.x50Ads >= 1) { p.throws.x50Until = new Date(Date.now() + 900000).toISOString(); p.throws.x50Ads = 0; } else p.throws.x50Ads = 1;
+    p.throws.allowed = demoAllowed(p.throws);
+    return { ok: true, profile: p };
+  }
+  const bs = path.match(/^\/battle\/sizes\/(\d)\/buy$/);
+  if (bs) {
+    const i = Number(bs[1]); const item = DEMO_SHOP.sizes[i];
+    if (p.coins < item.price) { const e = new Error('ما عندك عملات MF كافية'); throw e; }
+    p.coins -= item.price; p.sizeOwned = i; p.startMass = item.mass;
+    return { ok: true, profile: p };
+  }
   if (path.startsWith('/battle/leaderboard')) {
     const type = path.split('type=')[1] || 'mass';
     const base = type === 'mass' ? 90000 : type === 'time' ? 52000 : 260;

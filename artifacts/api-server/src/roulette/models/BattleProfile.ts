@@ -33,6 +33,16 @@ export interface IBattleProfile extends Document {
   // Experience from online games; the level comes from it (battleLevel()).
   xp: number;
   kills: number;
+  // Highest level whose coin reward was paid.
+  levelRewarded: number;
+  // Throw speeds: bought up to this level (0 ×1, 1 ×2 free, 2 ×5, 3 ×10); ×20 and ×50 open for
+  // 15 minutes after watching ads (×50 needs two: x50Ads counts the first).
+  throwOwned: number;
+  x20Until?: Date | null;
+  x50Until?: Date | null;
+  x50Ads: number;
+  // Start size bought (index into START_SIZES).
+  sizeOwned: number;
   totalMatches: number;
   totalSeconds: number;
   createdAt: Date;
@@ -57,6 +67,12 @@ const battleProfileSchema = new Schema<IBattleProfile>(
     bestMass: { type: Number, default: 0 },
     xp: { type: Number, default: 0, min: 0 },
     kills: { type: Number, default: 0, min: 0 },
+    levelRewarded: { type: Number, default: 1 },
+    throwOwned: { type: Number, default: 1, min: 1, max: 3 },
+    x20Until: { type: Date, default: null },
+    x50Until: { type: Date, default: null },
+    x50Ads: { type: Number, default: 0 },
+    sizeOwned: { type: Number, default: 0, min: 0 },
     totalMatches: { type: Number, default: 0 },
     totalSeconds: { type: Number, default: 0 },
   },
