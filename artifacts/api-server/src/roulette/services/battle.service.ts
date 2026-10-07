@@ -298,6 +298,10 @@ export async function recordBattleMatch(user: Pick<IUser, 'telegramId' | 'firstN
 }
 
 /** Where the MF Battle game is hosted (Cloudflare), shown to developers in the Mini App. */
+/** Where the API server itself serves the MF Battle files (same domain as the Mini App). */
+export const MF_BATTLE_PATH = '/mf-battle';
+
+/** MF Battle's address: MF_BATTLE_URL when set (e.g. Cloudflare), otherwise this server's /mf-battle. */
 export function battleUrl() {
-  return env.MF_BATTLE_URL || null;
+  return env.MF_BATTLE_URL || MF_BATTLE_PATH;
 }

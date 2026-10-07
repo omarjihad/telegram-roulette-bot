@@ -30,7 +30,7 @@ vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockI
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { buySkin, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
+import { battleUrl, buySkin, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 7, firstName: 'Omar', username: 'omar' } as never;
 
@@ -57,6 +57,10 @@ beforeEach(() => {
 describe('MF Battle', () => {
   it('is for developers only for now', async () => {
     await expect(getBattleHome(user, null)).rejects.toMatchObject({ code: 'BATTLE_COMING_SOON' });
+  });
+
+  it('defaults to the copy this server serves under /mf-battle', () => {
+    expect(battleUrl()).toBe('/mf-battle');
   });
 
   it('opens a new account with starter coins and the free skins', async () => {

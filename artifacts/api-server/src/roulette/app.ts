@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { MF_BATTLE_PATH } from './services/battle.service';
 import mongoose from 'mongoose';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -85,6 +86,16 @@ export function createApp() {
   // The registered web artifact serves the Vite build, not this API process.
   // Render runs both pieces in one container, so CLIENT_DIST_DIR enables the same
   // API process to serve the built Mini App there without requiring a second service.
+  // MF Battle (static files, no build) is served from this same domain under /mf-battle,
+  // so its Adsgram ads work with the bot's existing Adsgram platform (same app URL).
+  const battleDir = path.resolve(process.cwd(), 'artifacts/mf-battle');
+  if (fs.existsSync(path.join(battleDir, 'index.html'))) {
+    app.use(MF_BATTLE_PATH, express.static(battleDir, {
+      index: 'index.html',
+      setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+    }));
+  }
+
   const clientDistDir = env.CLIENT_DIST_DIR || path.resolve(process.cwd(), 'artifacts/bounty-roulette/dist/public');
   const clientIndexPath = path.join(clientDistDir, 'index.html');
   if (fs.existsSync(clientDistDir)) {
