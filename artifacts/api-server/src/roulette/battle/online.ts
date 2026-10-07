@@ -51,8 +51,8 @@ const num = (v: unknown, min: number, max: number, fallback = 0) => {
 const cleanText = (v: unknown, max: number) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 const r1 = (n: number) => Math.round(n);
 const ownerRow = (o: SimOwner): [number, string, string, number, number] => [o.id, o.name, o.skin, o.hue, o.level];
-/** A pellet as [id, x0, y0, vx, vy, hue, age in ms] — enough for the phone to draw its flight. */
-const pelletRow = (p: SimPellet, now: number) => [p.id, r1(p.x0), r1(p.y0), r1(p.vx), r1(p.vy), p.hue, r1((now - p.born) * 1000)];
+/** A pellet as [id, x0, y0, vx, vy, hue, age in ms, mass] — enough for the phone to draw its flight. */
+const pelletRow = (p: SimPellet, now: number) => [p.id, r1(p.x0), r1(p.y0), r1(p.vx), r1(p.vy), p.hue, r1((now - p.born) * 1000), r1(p.m)];
 
 export class BattleRoom {
   world: SimWorld;

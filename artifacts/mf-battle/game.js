@@ -8,7 +8,7 @@ import { skinSVG } from './skins.js';
 import { CONTROLS, byId, fullLayout, controlHTML, placeIn } from './controls.js';
 import {
   createWorld, FoodGrid, WORLD, START_MASS, REVENGE_MASS, EAT_RATIO, THROW_SPEEDS, MAP_SECTIONS,
-  FOOD_COLORS, rad, sectionOf, foodRadius, speedOf, pelletAt, pelletRadius, virusRadius,
+  FOOD_COLORS, rad, sectionOf, foodRadius, speedOf, pelletAt, pelletSize, virusRadius,
 } from './sim.js';
 
 const BOT_TAUNTS = ['هههه 😂', 'تعال تعال', 'GG', 'منو بعد؟ 😎', 'ركض ركض 🏃', 'اكلتك 🍽️', 'لا تزعل 😅', 'جيبوا غيره'];
@@ -373,8 +373,8 @@ export function startGame(opts) {
     // Thrown mass comes once, with its throw; it flies on the same curve as on the server.
     function addPellets(list) {
       const now = performance.now();
-      for (let i = 0; i < list.length; i += 7) {
-        const p = { id: list[i], x0: list[i + 1], y0: list[i + 2], vx: list[i + 3], vy: list[i + 4], hue: list[i + 5], born: now - list[i + 6], r: pelletRadius };
+      for (let i = 0; i < list.length; i += 8) {
+        const p = { id: list[i], x0: list[i + 1], y0: list[i + 2], vx: list[i + 3], vy: list[i + 4], hue: list[i + 5], born: now - list[i + 6], r: pelletSize(list[i + 7]) };
         const at = pelletAt(p, (now - p.born) / 1000);
         p.x = at.x;
         p.y = at.y;

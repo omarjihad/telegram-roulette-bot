@@ -22,11 +22,10 @@ export const BOT_SKINS = ['classic', 'mf', 'ocean', 'lava', 'neon', 'toxic', 'ti
 export const VIRUS_MASS = 100;
 export const PELLET_MASS = 13;
 
-const EJECT_COST = PELLET_MASS; // a throw takes exactly what the pellet carries: no mass is lost
 const EJECT_MIN = 35;
 const PELLET_SPEED = 1700; // fades at 4/s, so a pellet flies about 425
 const PELLET_LIFE = 45; // seconds a pellet stays on the ground
-const MAX_PELLETS = 1400;
+const MAX_PELLETS = 3000;
 const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
 const ORB_MASS = 100;
 const GRID = 300;
@@ -34,10 +33,15 @@ const GRID = 300;
 export const rad = (m) => Math.sqrt(m) * 10;
 export const virusRadius = (fed = 0) => rad(VIRUS_MASS) * 0.9 * (1 + fed * 0.05);
 export const pelletRadius = rad(PELLET_MASS) * 0.55;
+/** Bigger throws (fast levels on big cells) look bigger too. */
+export const pelletSize = (m) => Math.max(pelletRadius, rad(m) * 0.55);
 /** Bigger is slower (agar-style curve on the radius), but never stuck. */
 export const speedOf = (m) => Math.max(110, 2600 * Math.pow(rad(m), -0.439));
 /** Throws per second for each throw-speed level (×1 … ×50): ×50 empties a normal cell in about a second. */
 const THROW_RATES = [6, 9, 14, 23, 50, 100];
+// Share of the cell each throw takes (at least one normal pellet). ×50 takes 5% a throw at 100
+// throws a second, which empties any cell — even 23k — in about 1.3 seconds.
+const THROW_SHARE = [0, 0, 0, 0.008, 0.02, 0.05];
 export const throwRate = (level) => THROW_RATES[level] || THROW_RATES[0];
 /** How far a split half flies: enough to catch someone in front, never across the map. */
 export const splitFlight = (r) => Math.min(1300, 260 + r * 1.6);
@@ -158,8 +162,8 @@ export function createWorld(opts = {}) {
   }
   function later(seconds, fn) { w.timers.push({ at: w.time + seconds, fn }); }
 
-  function addPellet(o, x, y, ux, uy) {
-    const p = { id: nextId++, x0: x, y0: y, x, y, vx: ux * PELLET_SPEED, vy: uy * PELLET_SPEED, m: PELLET_MASS, r: pelletRadius, hue: o.hue, born: w.time, owner: o };
+  function addPellet(o, x, y, ux, uy, m = PELLET_MASS) {
+    const p = { id: nextId++, x0: x, y0: y, x, y, vx: ux * PELLET_SPEED, vy: uy * PELLET_SPEED, m, r: pelletSize(m), hue: o.hue, born: w.time, owner: o };
     w.pellets.push(p);
     if (cfg.trackNet) w.pelletAdded.push(p);
   }
@@ -260,15 +264,18 @@ export function createWorld(opts = {}) {
   };
 
   /** One throw from every piece that can afford it. */
-  w.eject = (o, dx, dy) => {
+  w.eject = (o, dx, dy, level = 0) => {
     const len = Math.hypot(dx, dy);
     const ux = len > 0.001 ? dx / len : 1;
     const uy = len > 0.001 ? dy / len : 0;
     for (const c of o.cells) {
       if (c.m < EJECT_MIN) continue;
-      c.m -= EJECT_COST;
+      // A throw takes exactly what the pellet carries: no mass is lost.
+      const m = Math.min(c.m - EJECT_MIN + PELLET_MASS, Math.max(PELLET_MASS, c.m * (THROW_SHARE[level] || 0)));
+      c.m -= m;
       c.r = rad(c.m);
-      addPellet(o, c.x + ux * (c.r + pelletRadius), c.y + uy * (c.r + pelletRadius), ux, uy);
+      const pr = pelletSize(m);
+      addPellet(o, c.x + ux * (c.r + pr), c.y + uy * (c.r + pr), ux, uy, m);
     }
     let extra = w.pellets.length - MAX_PELLETS;
     for (let i = 0; extra > 0 && i < w.pellets.length; i++) if (w.pellets[i].m > 0) { dropPellet(w.pellets[i]); extra--; }
@@ -432,7 +439,9 @@ export function createWorld(opts = {}) {
           // Before merging the pull is always weaker than the piece's own speed, so a piece
           // left far away never pins the rest of you in place.
           const base = speedOf(c.m);
-          const pull = w.time >= c.mergeAt ? Math.min(900, d * 1.2 + 60) : Math.min(base * 0.35, Math.max(0, d - c.r) * 0.25);
+          // After the merge time it is stronger, but still below the piece's speed, so the
+          // group keeps going where you steer while the pieces close in and join.
+          const pull = w.time >= c.mergeAt ? Math.min(base * 0.8, d * 1.2 + 40) : Math.min(base * 0.35, Math.max(0, d - c.r) * 0.25);
           vx += (dx / d) * pull;
           vy += (dy / d) * pull;
         }
@@ -467,7 +476,7 @@ export function createWorld(opts = {}) {
         } else {
           const overlap = a.r + b.r - d;
           if (overlap > 0) {
-            const push = Math.min(overlap * 0.25, 260 * dt);
+            const push = Math.min(overlap * 0.2, 180 * dt);
             const nx = dx / d;
             const ny = dy / d;
             a.x -= nx * push; a.y -= ny * push;
@@ -508,7 +517,7 @@ export function createWorld(opts = {}) {
         let n = 0;
         while (o.throwT <= 0 && n < 4) {
           const a = o.aim || o.dir;
-          w.eject(o, a.x || o.lastX || 1, a.y || o.lastY || 0);
+          w.eject(o, a.x || o.lastX || 1, a.y || o.lastY || 0, o.throwLevel);
           o.throwT += 1 / throwRate(o.throwLevel);
           n++;
         }

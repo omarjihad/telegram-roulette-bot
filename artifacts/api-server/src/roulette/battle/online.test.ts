@@ -52,8 +52,8 @@ describe('MF Battle online room', () => {
     await vi.advanceTimersByTimeAsync(300);
     const deltas = ws.sent.filter((m) => m.t === 'f');
     const thrown = deltas.flatMap((m) => m.pa as number[]);
-    expect(thrown.length % 7).toBe(0);
-    expect(thrown.length / 7).toBeGreaterThan(0);
+    expect(thrown.length % 8).toBe(0);
+    expect(thrown.length / 8).toBeGreaterThan(0);
     // Eat a bot: the killer is paid and told.
     const bot = r.world.owners.find((o) => o.bot && !o.dead)!;
     r.handle(c, { t: 'throw', on: false });
