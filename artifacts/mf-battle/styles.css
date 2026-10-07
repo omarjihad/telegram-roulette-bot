@@ -568,3 +568,5 @@ input { font: inherit; }
 .lvl i { width: calc(var(--u) * 10); height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 .lvl em { display: block; height: 100%; background: #a3ff3a; }
 .pod-skin .person { width: 100% !important; height: 100% !important; box-shadow: none !important; }
+/* First place on the in-game leaderboard: gold, with an outline. */
+.g-lb li.gold span, .g-lb li.gold b { color: #ffd34d; font-weight: 900; text-shadow: -1px -1px 0 #3c1e00, 1px -1px 0 #3c1e00, -1px 1px 0 #3c1e00, 1px 1px 0 #3c1e00; }

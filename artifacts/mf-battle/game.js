@@ -173,7 +173,7 @@ export function startGame(opts) {
     SH = s.h;
     SAFE = s.safe || { x: 0, y: 0, w: SW, h: SH };
     const devDpr = window.devicePixelRatio || 1;
-    dpr = settings.quality === 'low' ? 1 : settings.quality === 'high' ? Math.min(2, devDpr) : Math.min(1.5, devDpr);
+    dpr = settings.quality === 'low' ? 1 : settings.quality === 'high' ? Math.min(2, devDpr) : Math.min(1.25, devDpr);
     canvas.width = Math.round(SW * dpr);
     canvas.height = Math.round(SH * dpr);
     canvas.style.width = `${SW}px`;
@@ -186,7 +186,7 @@ export function startGame(opts) {
   let paused = false;
   let over = false;
   let raf = 0;
-  let deathsSinceAd = 0;
+  let topId = 0; // who is first right now (their name is drawn in gold)
   let throwLevel = 0;
   let bestRank = 99;
   const input = { dx: 1, dy: 0, m: 0, throwing: false };
@@ -229,7 +229,7 @@ export function startGame(opts) {
       foodEach: (x0, y0, x1, y1, fn) => world.foods.each(x0, y0, x1, y1, fn),
       ping: () => null,
       ranking() {
-        return world.ranking().map((r) => ({ name: r.o.name, m: r.m, me: r.o === me }));
+        return world.ranking().map((r) => ({ id: r.o.id, name: r.o.name, m: r.m, me: r.o === me }));
       },
       dots() {
         const out = [];
@@ -324,7 +324,7 @@ export function startGame(opts) {
         for (const id of msg.pr) pellets.delete(id);
       } else if (msg.t === 'ow') addOwners(msg.ow);
       else if (msg.t === 'lb') {
-        ranking = msg.r.map(([id, m]) => ({ name: ownerOf(id).name, m, me: id === meId }));
+        ranking = msg.r.map(([id, m]) => ({ id, name: ownerOf(id).name, m, me: id === meId }));
         if (msg.me && msg.me[0] > 8) ranking.push({ name: ownerOf(meId).name, m: msg.me[1], me: true, rank: msg.me[0] });
         dots = [];
         for (let i = 0; i < msg.mm.length; i += 4) if (msg.mm[i] !== meId) dots.push({ x: msg.mm[i + 1], y: msg.mm[i + 2], m: msg.mm[i + 3] });
@@ -618,8 +618,11 @@ export function startGame(opts) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.lineWidth = fs * 0.18;
-        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-        ctx.fillStyle = '#fff';
+        const first = own.id === topId;
+        // First place: gold name with a dark outline so it stands out on any skin.
+        ctx.lineWidth = fs * (first ? 0.26 : 0.18);
+        ctx.strokeStyle = first ? 'rgba(60,30,0,0.95)' : 'rgba(0,0,0,0.75)';
+        ctx.fillStyle = first ? '#ffd34d' : '#fff';
         ctx.strokeText(own.name, c.x, c.y);
         ctx.fillText(own.name, c.x, c.y);
         if (c.r * s > 26) {
@@ -727,7 +730,8 @@ export function startGame(opts) {
     const myIdx = ranked.findIndex((r) => r.me);
     const myRank = myIdx < 0 ? 0 : ranked[myIdx].rank || myIdx + 1;
     if (myRank && myRank < bestRank) bestRank = myRank;
-    const row = (r, i) => `<li class="${r.me ? 'me' : ''}"><span>${r.rank || i + 1}. ${escName(r.name)}</span><b>${short(r.m)}</b></li>`;
+    topId = ranked[0] ? ranked[0].id || 0 : 0;
+    const row = (r, i) => `<li class="${r.me ? 'me' : ''} ${(r.rank || i + 1) === 1 ? 'gold' : ''}"><span>${r.rank || i + 1}. ${escName(r.name)}</span><b>${short(r.m)}</b></li>`;
     lbEl.innerHTML = ranked.slice(0, 8).map(row).join('') + (myIdx >= 8 ? row(ranked[myIdx], myIdx) : '');
 
     // Mini map: 3×3 numbered sections; you see who is in your section only.
@@ -991,7 +995,6 @@ export function startGame(opts) {
   function died(info) {
     over = true;
     paused = false;
-    deathsSinceAd++;
     input.throwing = false;
     releaseJoy();
     closeChat();
@@ -1013,7 +1016,10 @@ export function startGame(opts) {
         ${ads.reward ? `<button class="btn g-revenge" data-revenge>🔥 الانتقام والبدء بـ ${REVENGE_MASS} <small>📺 شاهد إعلان</small></button>` : ''}
         <p class="g-note" data-msg>${info.counts ? 'جولة أونلاين: انحسبت بالترتيب الأسبوعي ✅' : 'جولة تدريب ضد بوتات، ما تنحسب بالترتيب الأسبوعي.'}</p>
         <div class="g-row"><button class="btn btn-hot" data-again>🔁 العب من جديد</button><button class="btn" data-quit>🏠 القائمة</button></div>`);
-      c.querySelector('[data-again]').onclick = () => { hideOverlay(); over = false; bestRank = 99; D.respawn(false); };
+      c.querySelector('[data-again]').onclick = () => {
+        hideOverlay();
+        beforeRound(() => { over = false; bestRank = 99; D.respawn(false); });
+      };
       c.querySelector('[data-quit]').onclick = exit;
       const rev = c.querySelector('[data-revenge]');
       if (rev) {
@@ -1021,7 +1027,7 @@ export function startGame(opts) {
           rev.disabled = true;
           try {
             await showAd(ads.reward);
-            deathsSinceAd = 0; // a watched reward ad counts as the ad for these deaths
+            storage.set(NO_AD_KEY, '0'); // a watched reward ad counts as the ad
             hideOverlay();
             over = false;
             const near = D.respawn(true, info.killer);
@@ -1034,14 +1040,28 @@ export function startGame(opts) {
       }
     };
 
-    setTimeout(async () => {
-      // Every second death shows an ad first (unless a reward ad was watched since the last one).
-      if (deathsSinceAd >= 2 && ads.interstitial) {
-        try { await showAd(ads.interstitial); } catch (e) { /* no ad right now */ }
-        deathsSinceAd = 0;
-      }
-      if (over) card();
-    }, 900);
+    setTimeout(() => { if (over) card(); }, 900);
+  }
+
+  // Ads: after 3 matches in a row without any ad, the 4th starts with one (no reward).
+  // Kept on the phone, so it carries over between visits.
+  const NO_AD_KEY = 'mfb-rounds-no-ad';
+  function beforeRound(go) {
+    const n = Number(storage.get(NO_AD_KEY)) || 0;
+    if (n < 3 || !ads.interstitial) {
+      storage.set(NO_AD_KEY, String(n + 1));
+      go();
+      return;
+    }
+    showOverlay('<h2>📺 إعلان قصير</h2><p>بعده تبدأ الجولة.</p><div class="spin" style="margin:6px auto"></div>');
+    Promise.resolve()
+      .then(() => showAd(ads.interstitial))
+      .catch(() => { /* no ad right now: just play */ })
+      .finally(() => {
+        storage.set(NO_AD_KEY, '1');
+        hideOverlay();
+        go();
+      });
   }
 
   let lastT = 0;
@@ -1069,7 +1089,7 @@ export function startGame(opts) {
 
   resize();
   setThrowLevel(0);
-  start(opts.online);
+  beforeRound(() => start(opts.online));
   raf = requestAnimationFrame(frame);
 
   return {

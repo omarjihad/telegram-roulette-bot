@@ -22,11 +22,11 @@ export const BOT_SKINS = ['classic', 'mf', 'ocean', 'lava', 'neon', 'toxic', 'ti
 export const VIRUS_MASS = 100;
 export const PELLET_MASS = 13;
 
-const EJECT_COST = 16;
+const EJECT_COST = PELLET_MASS; // a throw takes exactly what the pellet carries: no mass is lost
 const EJECT_MIN = 35;
 const PELLET_SPEED = 1700; // fades at 4/s, so a pellet flies about 425
 const PELLET_LIFE = 45; // seconds a pellet stays on the ground
-const MAX_PELLETS = 900;
+const MAX_PELLETS = 1400;
 const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
 const ORB_MASS = 100;
 const GRID = 300;
@@ -34,10 +34,11 @@ const GRID = 300;
 export const rad = (m) => Math.sqrt(m) * 10;
 export const virusRadius = (fed = 0) => rad(VIRUS_MASS) * 0.9 * (1 + fed * 0.05);
 export const pelletRadius = rad(PELLET_MASS) * 0.55;
-/** Bigger is slower, but never stuck. */
-export const speedOf = (m) => Math.max(85, 1000 * Math.pow(m, -0.4));
-/** Throws per second for each throw-speed level: ×10 ≈ 14 a second, ×50 = 50 a second. */
-export const throwRate = (level) => 5 + THROW_SPEEDS[level] * 0.9;
+/** Bigger is slower (agar-style curve on the radius), but never stuck. */
+export const speedOf = (m) => Math.max(110, 2600 * Math.pow(rad(m), -0.439));
+/** Throws per second for each throw-speed level (×1 … ×50): ×50 empties a normal cell in about a second. */
+const THROW_RATES = [6, 9, 14, 23, 50, 100];
+export const throwRate = (level) => THROW_RATES[level] || THROW_RATES[0];
 /** How far a split half flies: enough to catch someone in front, never across the map. */
 export const splitFlight = (r) => Math.min(1300, 260 + r * 1.6);
 export const sectionOf = (x, y) => {
@@ -278,7 +279,8 @@ export function createWorld(opts = {}) {
     const room = MAX_CELLS - o.cells.length;
     w.events.push({ type: 'pop', owner: o });
     if (room <= 0) return;
-    const pieces = Math.min(room, Math.max(2, Math.floor(c.m / 40)), 9);
+    // Straight to the most pieces you can have (16 in all), all the same size.
+    const pieces = Math.min(room, Math.max(1, Math.floor(c.m / MIN_SPLIT) - 1));
     const each = c.m / (pieces + 1);
     c.m = each;
     c.r = rad(each);
@@ -286,8 +288,8 @@ export function createWorld(opts = {}) {
     for (let i = 0; i < pieces; i++) {
       const a = (i / pieces) * Math.PI * 2 + rand(-0.2, 0.2);
       const p = newCell(o, c.x, c.y, each);
-      p.bx = Math.cos(a) * 1400;
-      p.by = Math.sin(a) * 1400;
+      p.bx = Math.cos(a) * 1200;
+      p.by = Math.sin(a) * 1200;
       p.mergeAt = c.mergeAt;
       o.cells.push(p);
     }
@@ -427,7 +429,10 @@ export function createWorld(opts = {}) {
         const dx = cx - c.x, dy = cy - c.y;
         const d = Math.hypot(dx, dy);
         if (d > 1) {
-          const pull = w.time >= c.mergeAt ? Math.min(900, d * 1.2 + 60) : Math.min(160, Math.max(0, d - c.r) * 0.25);
+          // Before merging the pull is always weaker than the piece's own speed, so a piece
+          // left far away never pins the rest of you in place.
+          const base = speedOf(c.m);
+          const pull = w.time >= c.mergeAt ? Math.min(900, d * 1.2 + 60) : Math.min(base * 0.35, Math.max(0, d - c.r) * 0.25);
           vx += (dx / d) * pull;
           vy += (dy / d) * pull;
         }
