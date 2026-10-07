@@ -14,6 +14,7 @@ export interface BattleControl {
 export interface BattleSettings {
   darkMode: boolean;
   chat: boolean;
+  sound: boolean;
   quality: BattleQuality;
   joystick: BattleJoystick;
 }
@@ -45,6 +46,7 @@ const battleProfileSchema = new Schema<IBattleProfile>(
     settings: {
       darkMode: { type: Boolean, default: true },
       chat: { type: Boolean, default: true },
+      sound: { type: Boolean, default: true },
       quality: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
       joystick: { type: String, enum: ['fixed', 'floating'], default: 'fixed' },
     },

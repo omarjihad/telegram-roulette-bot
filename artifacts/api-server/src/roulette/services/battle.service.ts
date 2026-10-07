@@ -134,6 +134,7 @@ export function cleanSettings(input: unknown, current: BattleSettings): BattleSe
   return {
     darkMode: typeof v.darkMode === 'boolean' ? v.darkMode : current.darkMode,
     chat: typeof v.chat === 'boolean' ? v.chat : current.chat,
+    sound: typeof v.sound === 'boolean' ? v.sound : current.sound ?? true,
     quality: QUALITIES.includes(v.quality as never) ? (v.quality as BattleSettings['quality']) : current.quality,
     joystick: JOYSTICKS.includes(v.joystick as never) ? (v.joystick as BattleSettings['joystick']) : current.joystick,
   };

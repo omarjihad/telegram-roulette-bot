@@ -79,8 +79,8 @@ describe('MF Battle', () => {
   });
 
   it('keeps settings and layouts within the allowed values', () => {
-    const cur = { darkMode: true, chat: true, quality: 'medium', joystick: 'fixed' } as const;
-    expect(cleanSettings({ darkMode: false, quality: 'ultra', joystick: 'floating' }, cur)).toEqual({ darkMode: false, chat: true, quality: 'medium', joystick: 'floating' });
+    const cur = { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' } as const;
+    expect(cleanSettings({ darkMode: false, sound: false, quality: 'ultra', joystick: 'floating' }, cur)).toEqual({ darkMode: false, chat: true, sound: false, quality: 'medium', joystick: 'floating' });
     expect(cleanLayout({ split: { x: 2, y: -1, s: 9, o: 0 }, hack: { x: 0.5, y: 0.5, s: 1, o: 1 } })).toEqual({ split: { x: 1, y: 0, s: 2, o: 0.2 } });
   });
 

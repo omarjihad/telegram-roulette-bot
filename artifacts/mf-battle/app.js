@@ -1,5 +1,7 @@
 import { skinSVG, RARITY } from './skins.js';
 import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture } from './controls.js';
+import { sfx, setSoundEnabled, unlockSound } from './sound.js';
+import { startGame } from './game.js';
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const CFG = window.MF_BATTLE_CONFIG || {};
@@ -13,7 +15,7 @@ const panelEl = document.getElementById('panel');
 const dialogEl = document.getElementById('dialog');
 const toastEl = document.getElementById('toast');
 
-const state = { player: null, profile: null, skins: [], week: null, weekly: null, editor: null };
+const state = { player: null, profile: null, skins: [], week: null, weekly: null, editor: null, game: null };
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -55,6 +57,7 @@ function fit() {
   stage.style.setProperty('--pad-t', `${pad.t}px`);
   stage.style.setProperty('--pad-b', `${pad.b}px`);
   if (state.editor) state.editor.relayout();
+  if (state.game) state.game.resize();
 }
 
 /** A screen point (pointer event) in stage coordinates. */
@@ -63,6 +66,8 @@ function toStage(clientX, clientY) {
 }
 
 window.addEventListener('resize', fit);
+// Browsers allow sound only after a tap.
+window.addEventListener('pointerdown', unlockSound, { once: true });
 
 // ───────────── Telegram ─────────────
 function tgHash() {
@@ -85,6 +90,7 @@ function goRoulette() {
 }
 
 function onBack() {
+  if (state.game) return state.game.back();
   if (!dialogEl.hidden) return closeDialog();
   if (state.editor) return state.editor.requestExit();
   if (!panelEl.hidden) return closePanel();
@@ -129,6 +135,7 @@ async function api(path, opts = {}) {
 // ───────────── UI helpers ─────────────
 let toastTimer = 0;
 function toast(text) {
+  if (/تعذر|تحتاج|غير|ما عندك|خطأ|لازم/.test(text)) sfx('error');
   toastEl.textContent = text;
   toastEl.hidden = false;
   clearTimeout(toastTimer);
@@ -207,8 +214,8 @@ function renderLobby() {
         <div class="skin-stats"><span>🎮 <b>${fmt(p.totalMatches)}</b> مباراة</span><span>⏱️ <b>${Math.floor((p.totalSeconds || 0) / 60)}</b> دقيقة</span></div>
       </section>
       <section class="center">
-        <div class="mode"><div><b>كلاسيك</b><small>خريطة مفتوحة · كُل الأصغر منك واكبر</small></div><span class="dot-live"></span></div>
-        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>كلاسيك · غرف أونلاين</small></button>
+        <div class="mode"><div><b>تدريب</b><small>ضد ${14} بوت · كُل الأصغر منك واكبر</small></div><span class="dot-live"></span></div>
+        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>تدريب ضد البوتات · الأونلاين قريباً</small></button>
         <div class="tiles">
           <button class="tile t-store" data-act="store"><span class="ic">🛒</span>المتجر</button>
           <button class="tile t-skins" data-act="skins"><span class="ic">🎭</span>السكنات</button>
@@ -216,7 +223,7 @@ function renderLobby() {
         </div>
       </section>
       <section class="weekly" id="weekly">
-        <h3>🏆 أكبر حجم <small>الأسبوع</small></h3>
+        <div class="w-head"><b>🏆 أبطال الأسبوع</b></div>
         <div class="w-empty"><div class="spin" style="margin:auto"></div></div>
       </section>
     </div>`;
@@ -229,10 +236,31 @@ function bindActs(root) {
     el.onclick = () => {
       haptic('light');
       const act = el.getAttribute('data-act');
-      if (act === 'roulette') goRoulette();
-      else if (act === 'play') toast('⚔️ الساحة قيد التجهيز، اللعب قريباً!');
-      else openPanel(act);
+      if (act === 'roulette') { sfx('close'); goRoulette(); }
+      else if (act === 'play') playGame();
+      else { sfx('open'); openPanel(act); }
     };
+  });
+}
+
+// ───────────── The game ─────────────
+function playGame() {
+  if (state.game) return;
+  sfx('open');
+  closeDialog();
+  screenEl.hidden = true;
+  state.game = startGame({
+    stage,
+    player: state.player,
+    profile: state.profile,
+    toStage,
+    getSize: () => ({ w: SW, h: SH }),
+    haptic,
+    onExit: () => {
+      state.game = null;
+      screenEl.hidden = false;
+      renderLobby();
+    },
   });
 }
 
@@ -241,14 +269,32 @@ async function renderWeekly() {
   if (!box) return;
   try {
     if (!state.weekly) state.weekly = await api('/battle/leaderboard?type=mass');
-    const rows = state.weekly.rows.slice(0, 5);
-    const list = rows.length
-      ? rows.map((r) => `<div class="w-row"><span class="rk">${r.rank}</span>${skinSVG(r.skin, 26)}<span class="nm">${esc(r.name)}</span><span class="vl">${fmt(r.value)}</span></div>`).join('')
-      : '<div class="w-empty">ما اكو نتائج بعد هالأسبوع.<br/>كن أول واحد بالترتيب! 🔥</div>';
-    box.innerHTML = `<h3>🏆 أكبر حجم هالأسبوع <small>⏳ يتصفّر بعد ${timeLeft(state.weekly.resetsAt)}</small></h3>${list}<button class="link-btn" data-act="rank">كل الترتيب ←</button>`;
+    const w = state.weekly;
+    const rows = w.rows;
+    const spot = (r, place) => {
+      const cls = ['first', 'second', 'third'][place - 1];
+      if (!r) return `<div class="pod ${cls} empty"><div class="pod-skin">?</div><div class="pod-name">—</div><div class="pod-base"><b>${place}</b></div></div>`;
+      return `<div class="pod ${cls} ${r.me ? 'me' : ''}">
+        ${place === 1 ? '<span class="pod-crown">👑</span>' : ''}
+        <div class="pod-skin">${skinSVG(r.skin, 64)}</div>
+        <div class="pod-name">${esc(r.name)}</div>
+        <div class="pod-val">${fmt(r.value)}</div>
+        <div class="pod-base"><b>${place}</b></div>
+      </div>`;
+    };
+    const rest = rows.slice(3, 5).map((r) => `<div class="w-row ${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>${skinSVG(r.skin, 22)}<span class="nm">${esc(r.name)}</span><span class="vl">${fmt(r.value)}</span></div>`).join('');
+    box.innerHTML = `
+      <div class="w-head"><b>🏆 أبطال الأسبوع</b><span>أكبر حجم</span></div>
+      <div class="podium">${spot(rows[1], 2)}${spot(rows[0], 1)}${spot(rows[2], 3)}</div>
+      ${rows.length ? rest : '<div class="w-empty">الساحة تنتظر أبطالها، كن أول واحد هنا 🔥</div>'}
+      <div class="w-foot">
+        <span class="w-me">ترتيبك <b>${w.me.rank ? `#${w.me.rank}` : '—'}</b></span>
+        <span class="w-time">⏳ ${timeLeft(w.resetsAt)}</span>
+      </div>
+      <button class="w-all" data-act="rank">كل الترتيب ←</button>`;
     bindActs(box);
   } catch (e) {
-    box.innerHTML = '<h3>🏆 الترتيب</h3><div class="w-empty">تعذّر تحميل الترتيب</div>';
+    box.innerHTML = '<div class="w-head"><b>🏆 أبطال الأسبوع</b></div><div class="w-empty">تعذّر تحميل الترتيب</div>';
   }
 }
 
@@ -266,6 +312,7 @@ function openPanel(name) {
 }
 
 function closePanel() {
+  sfx('close');
   panelEl.hidden = true;
   panelEl.innerHTML = '';
   renderLobby();
@@ -326,6 +373,7 @@ function confirmBuy(id) {
       setProfile(res.profile);
       closeDialog();
       haptic('medium');
+      sfx('buy');
       toast(`🎉 صار عندك سكن ${s.name.ar}`);
       renderStore();
     } catch (e) {
@@ -347,6 +395,7 @@ function renderSkins() {
         const res = await api(`/battle/skins/${b.getAttribute('data-equip')}/equip`, { method: 'POST' });
         setProfile(res.profile);
         haptic('light');
+        sfx('equip');
         renderSkins();
       } catch (e) {
         toast(e.message);
@@ -397,6 +446,7 @@ function renderSettings() {
   panelEl.innerHTML = `${panelHead('⚙️ الإعدادات')}<div class="p-body"><div class="set-list">
     ${sw('darkMode', '🌙 الوضع المظلم', 'خلفية داكنة داخل اللعبة')}
     ${sw('chat', '💬 الشات', 'إظهار رسائل اللاعبين')}
+    ${sw('sound', '🔊 الأصوات', 'أصوات الأزرار واللعبة')}
     ${seg('quality', '✨ جودة اللعب', 'خفيف للأجهزة الضعيفة', [['low', 'خفيف'], ['medium', 'متوسط'], ['high', 'قوي']])}
     ${seg('joystick', '🕹️ الجويستك', 'ثابت بمكانه أو يتحرك ويه إصبعك', [['fixed', 'ثابت'], ['floating', 'متحرك']])}
     <div class="set-wide"><button class="controls-btn" data-controls>🎛️ إعدادات التحكم — رتّب الأزرار، حجمها وشفافيتها</button></div>
@@ -406,6 +456,8 @@ function renderSettings() {
     b.onclick = () => {
       const k = b.getAttribute('data-sw');
       s[k] = !s[k];
+      if (k === 'sound') setSoundEnabled(s[k]);
+      sfx('toggle');
       b.classList.toggle('on', s[k]);
       b.setAttribute('aria-checked', String(s[k]));
       haptic('light');
@@ -416,12 +468,13 @@ function renderSettings() {
     b.onclick = () => {
       const k = b.getAttribute('data-seg');
       s[k] = b.getAttribute('data-v');
+      sfx('toggle');
       panelEl.querySelectorAll(`[data-seg="${k}"]`).forEach((x) => x.classList.toggle('on', x === b));
       haptic('light');
       saveSettingsSoon();
     };
   });
-  panelEl.querySelector('[data-controls]').onclick = openEditor;
+  panelEl.querySelector('[data-controls]').onclick = () => { sfx('open'); openEditor(); };
 }
 
 // ───────────── Control layout editor ─────────────
@@ -669,6 +722,7 @@ async function boot() {
     state.profile = res.profile;
     state.skins = res.skins;
     state.week = res.week;
+    setSoundEnabled(state.profile.settings.sound !== false);
     renderLobby();
   } catch (e) {
     if (e.code === 'BATTLE_COMING_SOON') message('قريباً ⚔️', 'MF Battle قيد التجهيز، ترقبوه!');
@@ -679,7 +733,7 @@ async function boot() {
 // ───────────── Demo data (open the page with ?demo=1 to preview without the bot) ─────────────
 const demo = {
   player: { telegramId: 1, name: 'عمر', username: 'omar', photoUrl: null },
-  profile: { coins: 1250, skin: 'skull', ownedSkins: ['classic', 'mf', 'ocean', 'neon', 'skull'], settings: { darkMode: true, chat: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, totalMatches: 1923, totalSeconds: 98000 },
+  profile: { coins: 1250, skin: 'skull', ownedSkins: ['classic', 'mf', 'ocean', 'neon', 'skull'], settings: { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, totalMatches: 1923, totalSeconds: 98000 },
   skins: null,
 };
 const DEMO_SKINS = [
