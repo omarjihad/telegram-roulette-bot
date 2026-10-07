@@ -5,6 +5,8 @@ import { connectDatabase, disconnectDatabase } from "./roulette/config/database"
 import { createBot } from "./roulette/bot";
 import { startExpirationWorker } from "./roulette/workers/expiration.worker";
 import { initializeDeliveryAccount, shutdownDeliveryAccount } from "./roulette/services/deliveryAccount.service";
+import { attachBattleOnline } from "./roulette/battle/online";
+import { battleIdentity } from "./roulette/services/battle.service";
 
 const rawPort = process.env["PORT"];
 
@@ -23,6 +25,9 @@ if (Number.isNaN(port) || port <= 0) {
 const server = app.listen(port, '0.0.0.0', () => {
   logger.info({ port }, "Server listening");
 });
+
+// MF Battle online room (WebSocket on the same server, /api/battle/ws).
+const battleOnline = attachBattleOnline(server, battleIdentity);
 
 const active = env.GAMEPLAY_ENABLED && env.OWNER_ID > 0;
 const bot = createBot(active && env.BOT_POLLING_ENABLED);
@@ -45,6 +50,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   setTimeout(() => process.exit(1), 10000).unref();
+  battleOnline.close();
   await bot.stopPolling().catch(() => undefined);
   // Before the database closes: frees the delivery account for the new server right away.
   await shutdownDeliveryAccount().catch(() => undefined);

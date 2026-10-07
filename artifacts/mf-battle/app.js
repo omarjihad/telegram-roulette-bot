@@ -1,5 +1,5 @@
 import { skinSVG, RARITY } from './skins.js';
-import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture } from './controls.js';
+import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture, placeIn } from './controls.js';
 import { sfx, setSoundEnabled, unlockSound } from './sound.js';
 import { startGame } from './game.js';
 import { showAd } from './ads.js';
@@ -16,7 +16,8 @@ const panelEl = document.getElementById('panel');
 const dialogEl = document.getElementById('dialog');
 const toastEl = document.getElementById('toast');
 
-const state = { player: null, profile: null, skins: [], week: null, weekly: null, editor: null, game: null };
+const state = { player: null, profile: null, skins: [], week: null, weekly: null, editor: null, game: null, mode: 'online' };
+try { state.mode = localStorage.getItem('mfb-mode') === 'practice' ? 'practice' : 'online'; } catch (e) { /* private mode */ }
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -26,6 +27,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 let rotated = false;
 let SW = 0;
 let SH = 0;
+// The part of the stage that is safe for buttons (no notch, no Telegram buttons over it).
+let SAFE = { x: 0, y: 0, w: 1, h: 1 };
 const probe = document.createElement('div');
 probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
 document.body.appendChild(probe);
@@ -45,11 +48,14 @@ function fit() {
   stage.classList.toggle('rotated', rotated);
   stage.style.setProperty('--u', `${(SH / 100).toFixed(2)}px`);
   // Room for the phone's notch and Telegram's own buttons (in screen terms), mapped onto the stage.
+  // Telegram reports both the device's safe area and its own buttons' area (fullscreen);
+  // env() is the browser's view of the same notch. Take whichever is bigger.
   const ps = getComputedStyle(probe);
-  const top = (parseFloat(ps.paddingTop) || 0) + tgInset('--tg-content-safe-area-inset-top');
-  const bottom = parseFloat(ps.paddingBottom) || 0;
-  const left = parseFloat(ps.paddingLeft) || 0;
-  const right = parseFloat(ps.paddingRight) || 0;
+  const side = (name, css) => Math.max(parseFloat(ps[css]) || 0, tgInset(`--tg-safe-area-inset-${name}`)) + tgInset(`--tg-content-safe-area-inset-${name}`);
+  const top = side('top', 'paddingTop');
+  const bottom = side('bottom', 'paddingBottom');
+  const left = side('left', 'paddingLeft');
+  const right = side('right', 'paddingRight');
   const pad = rotated
     ? { l: 14 + top, r: 14 + bottom, t: 10 + right, b: 10 + left }
     : { l: 14 + left, r: 14 + right, t: 10 + top, b: 10 + bottom };
@@ -57,6 +63,11 @@ function fit() {
   stage.style.setProperty('--pad-r', `${pad.r}px`);
   stage.style.setProperty('--pad-t', `${pad.t}px`);
   stage.style.setProperty('--pad-b', `${pad.b}px`);
+  // Buttons keep a smaller margin than the lobby, but never go under the notch / Telegram buttons.
+  const g = rotated
+    ? { l: top, r: bottom, t: right, b: left }
+    : { l: left, r: right, t: top, b: bottom };
+  SAFE = { x: 6 + g.l, y: 6 + g.t, w: Math.max(100, SW - 12 - g.l - g.r), h: Math.max(100, SH - 12 - g.t - g.b) };
   if (state.editor) state.editor.relayout();
   if (state.game) state.game.resize();
 }
@@ -215,8 +226,11 @@ function renderLobby() {
         <div class="skin-stats"><span>🎮 <b>${fmt(p.totalMatches)}</b> مباراة</span><span>⏱️ <b>${Math.floor((p.totalSeconds || 0) / 60)}</b> دقيقة</span></div>
       </section>
       <section class="center">
-        <div class="mode"><div><b>تدريب</b><small>ضد 26 بوت · كُل الأصغر منك واكبر</small></div><span class="dot-live"></span></div>
-        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>تدريب ضد البوتات · الأونلاين قريباً</small></button>
+        <div class="modes">
+          <button class="mode-btn ${state.mode === 'online' ? 'on' : ''}" data-mode="online"><b>🌐 أونلاين</b><small>ويّا المطورين · ينحسب بالترتيب</small></button>
+          <button class="mode-btn ${state.mode === 'online' ? '' : 'on'}" data-mode="practice"><b>🤖 تدريب</b><small>ضد 26 بوت · بدون نت</small></button>
+        </div>
+        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>${state.mode === 'online' ? 'أونلاين ويّا المطورين والبوتات' : 'تدريب ضد البوتات'}</small></button>
         <div class="tiles">
           <button class="tile t-store" data-act="store"><span class="ic">🛒</span>المتجر</button>
           <button class="tile t-skins" data-act="skins"><span class="ic">🎭</span>السكنات</button>
@@ -229,6 +243,14 @@ function renderLobby() {
       </section>
     </div>`;
   bindActs(screenEl);
+  screenEl.querySelectorAll('[data-mode]').forEach((b) => {
+    b.onclick = () => {
+      haptic('light');
+      state.mode = b.getAttribute('data-mode');
+      try { localStorage.setItem('mfb-mode', state.mode); } catch (e) { /* private mode */ }
+      renderLobby();
+    };
+  });
   renderWeekly();
 }
 
@@ -245,6 +267,14 @@ function bindActs(root) {
 }
 
 // ───────────── The game ─────────────
+/** Where the online room lives (the bot's server) and how to sign in to it. */
+function onlineInfo() {
+  const custom = new URLSearchParams(location.search).get('ws');
+  if (custom) return { url: custom, initData: (tg && tg.initData) || 'demo' };
+  if (DEMO) return null;
+  return { url: `${(API || location.origin).replace(/^http/, 'ws')}/api/battle/ws`, initData: (tg && tg.initData) || '' };
+}
+
 function playGame() {
   if (state.game) return;
   sfx('open');
@@ -255,10 +285,11 @@ function playGame() {
     player: state.player,
     profile: state.profile,
     toStage,
-    getSize: () => ({ w: SW, h: SH }),
+    getSize: () => ({ w: SW, h: SH, safe: SAFE }),
+    online: state.mode === 'online' ? onlineInfo() : null,
     haptic,
     openControls: (done) => openEditor(done),
-    showAd: (blockId) => showAd(blockId, { demo: DEMO }),
+    showAd: (blockId) => showAd(blockId, { demo: DEMO, base: API, hash: tgHash() }),
     ads: {
       reward: CFG.rewardBlockId || (state.ads && state.ads.rewardBlockId) || null,
       interstitial: CFG.interstitialBlockId || (state.ads && state.ads.interstitialBlockId) || 'int-52362',
@@ -528,12 +559,11 @@ function openEditor(onClose) {
     const c = byId[id];
     const p = layout[id];
     const el = els[id];
-    const w = c.w * p.s;
-    const h = c.h * p.s;
-    el.style.width = `${w}px`;
-    el.style.height = `${h}px`;
-    el.style.left = `${p.x * SW - w / 2}px`;
-    el.style.top = `${p.y * SH - h / 2}px`;
+    const r = placeIn(SAFE, c, p);
+    el.style.width = `${r.w}px`;
+    el.style.height = `${r.h}px`;
+    el.style.left = `${r.left}px`;
+    el.style.top = `${r.top}px`;
     el.style.opacity = String(p.o);
     el.classList.toggle('sel', sel === id);
   }
@@ -561,8 +591,8 @@ function openEditor(onClose) {
   function clampInside(id) {
     const c = byId[id];
     const p = layout[id];
-    const hw = (c.w * p.s) / 2 / SW;
-    const hh = (c.h * p.s) / 2 / SH;
+    const hw = (c.w * p.s) / 2 / SAFE.w;
+    const hh = (c.h * p.s) / 2 / SAFE.h;
     p.x = Math.min(Math.max(hw, p.x), 1 - hw);
     p.y = Math.min(Math.max(hh, p.y), 1 - hh);
   }
@@ -592,8 +622,8 @@ function openEditor(onClose) {
       const from = { x: layout[c.id].x, y: layout[c.id].y };
       const move = (ev) => {
         const pt = toStage(ev.clientX, ev.clientY);
-        layout[c.id].x = from.x + (pt.x - start.x) / SW;
-        layout[c.id].y = from.y + (pt.y - start.y) / SH;
+        layout[c.id].x = from.x + (pt.x - start.x) / SAFE.w;
+        layout[c.id].y = from.y + (pt.y - start.y) / SAFE.h;
         clampInside(c.id);
         dirty = true;
         place(c.id);

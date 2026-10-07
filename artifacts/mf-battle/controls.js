@@ -4,14 +4,15 @@
 
 export const CONTROLS = [
   { id: 'joystick', name: 'الجويستك', shape: 'round', w: 132, h: 132, x: 0.15, y: 0.72, label: '' },
-  { id: 'split', name: 'انقسام', shape: 'round', w: 88, h: 88, x: 0.9, y: 0.78, label: 'انقسام' },
-  { id: 'throw', name: 'رمي', shape: 'round', w: 72, h: 72, x: 0.78, y: 0.88, label: 'رمي' },
-  { id: 'double', name: 'سرعة الرمي (×1 → ×50)', shape: 'round', w: 60, h: 60, x: 0.92, y: 0.56, label: '×50' },
-  { id: 'chat', name: 'الشات', shape: 'box', w: 220, h: 78, x: 0.2, y: 0.14, label: 'اكتب رسالة…' },
-  { id: 'leaderboard', name: 'المتصدرين', shape: 'box', w: 150, h: 132, x: 0.88, y: 0.22, label: 'المتصدرين' },
-  { id: 'mass', name: 'الكتلة', shape: 'pill', w: 150, h: 36, x: 0.5, y: 0.07, label: 'الكتلة: 0' },
-  { id: 'minimap', name: 'الخريطة', shape: 'box', w: 92, h: 92, x: 0.07, y: 0.38, label: 'الخريطة' },
-  { id: 'zoom', name: 'التقريب', shape: 'pill-v', w: 44, h: 96, x: 0.04, y: 0.62, label: '+ −' },
+  { id: 'split', name: 'انقسام', shape: 'round', w: 88, h: 88, x: 0.91, y: 0.8, label: 'انقسام' },
+  { id: 'throw', name: 'رمي', shape: 'round', w: 72, h: 72, x: 0.78, y: 0.89, label: 'رمي' },
+  { id: 'double', name: 'سرعة الرمي (×1 → ×50)', shape: 'round', w: 60, h: 60, x: 0.93, y: 0.55, label: '×50' },
+  { id: 'chat', name: 'الشات', shape: 'box', w: 210, h: 74, x: 0.34, y: 0.13, label: 'اكتب رسالة…' },
+  { id: 'leaderboard', name: 'المتصدرين', shape: 'box', w: 150, h: 132, x: 0.9, y: 0.2, label: 'المتصدرين' },
+  { id: 'mass', name: 'الكتلة', shape: 'pill', w: 150, h: 34, x: 0.62, y: 0.06, label: 'الكتلة: 0' },
+  { id: 'net', name: 'FPS و Ping', shape: 'pill', w: 130, h: 26, x: 0.62, y: 0.17, label: '60fps · 40ms' },
+  { id: 'minimap', name: 'الخريطة', shape: 'box', w: 92, h: 92, x: 0.07, y: 0.36, label: 'الخريطة' },
+  { id: 'zoom', name: 'التقريب', shape: 'pill-v', w: 44, h: 96, x: 0.035, y: 0.72, label: '+ −' },
 ];
 
 export const byId = Object.fromEntries(CONTROLS.map((c) => [c.id, c]));
@@ -33,6 +34,13 @@ export function fullLayout(saved = {}) {
 
 export function defaultLayout() {
   return fullLayout({});
+}
+
+/** Where the controls may go: the screen minus the phone's notch and Telegram's buttons. */
+export function placeIn(rect, c, p) {
+  const w = c.w * p.s;
+  const h = c.h * p.s;
+  return { w, h, left: rect.x + p.x * rect.w - w / 2, top: rect.y + p.y * rect.h - h / 2 };
 }
 
 /** Inner look of one control (used by the editor and the shared picture). */

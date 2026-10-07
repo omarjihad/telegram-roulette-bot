@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MF Battle ad</title>
+  <!-- Opened inside MF Battle when the game runs on another domain (Cloudflare): the ad plays
+       from the bot's own domain, so the bot's existing Adsgram platform accepts it. -->
+  <style>html, body { margin: 0; height: 100%; background: transparent; }</style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+</head>
+<body>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.hash.slice(1));
+      var block = params.get('mfbBlock');
+      function done(ok, msg) {
+        window.parent.postMessage({ mfbAd: ok ? 'done' : 'error', msg: msg || '' }, '*');
+      }
+      if (!block || !window.Adsgram) { done(false, 'تعذّر تحميل الإعلانات'); return; }
+      try {
+        window.Adsgram.init({ blockId: block }).show().then(function (res) {
+          if (res && res.done === false) done(false, 'لازم تكمل الإعلان');
+          else done(true);
+        }).catch(function (e) {
+          done(false, (e && e.description) || 'ما اكو إعلان هسه، جرّب بعد شوية');
+        });
+      } catch (e) {
+        done(false, 'ما اكو إعلان هسه، جرّب بعد شوية');
+      }
+    })();
+  </script>
+</body>
+</html>

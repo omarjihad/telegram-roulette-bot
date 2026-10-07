@@ -1,10 +1,12 @@
 import { HydratedDocument } from 'mongoose';
 import { customAlphabet } from 'nanoid';
-import { IUser } from '../models/User';
+import { IUser, User } from '../models/User';
 import { BattleControl, BattleProfile, BattleSettings, IBattleProfile } from '../models/BattleProfile';
 import { BattleLayoutCode } from '../models/BattleLayoutCode';
 import { BattleWeeklyStat } from '../models/BattleWeeklyStat';
 import { getSettings } from '../models/Settings';
+import { verifyTelegramInitData } from '../utils/telegramAuth';
+import { getAdminRole } from './admin.service';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -43,7 +45,7 @@ export const BATTLE_SKINS: BattleSkin[] = [
 const FREE_SKINS = BATTLE_SKINS.filter((s) => s.price === 0).map((s) => s.id);
 
 /** The on-screen controls the layout editor can move. */
-export const BATTLE_CONTROL_IDS = ['joystick', 'split', 'throw', 'double', 'chat', 'leaderboard', 'mass', 'minimap', 'zoom'] as const;
+export const BATTLE_CONTROL_IDS = ['joystick', 'split', 'throw', 'double', 'chat', 'leaderboard', 'mass', 'minimap', 'zoom', 'net'] as const;
 
 const QUALITIES = ['low', 'medium', 'high'] as const;
 const JOYSTICKS = ['fixed', 'floating'] as const;
@@ -297,7 +299,30 @@ export async function recordBattleMatch(user: Pick<IUser, 'telegramId' | 'firstN
   await BattleProfile.updateOne({ telegramId: user.telegramId }, { $max: { bestMass: mass }, $inc: { totalMatches: 1, totalSeconds: seconds } });
 }
 
-/** Where the MF Battle game is hosted (Cloudflare), shown to developers in the Mini App. */
+/**
+ * Who is joining the online room: checks the signed Telegram initData (like every API
+ * call), that the account may use MF Battle (developers for now), and loads the skin.
+ */
+export async function battleIdentity(initData: string) {
+  let parsed;
+  try {
+    parsed = verifyTelegramInitData(initData);
+  } catch {
+    throw new AppError(t('افتح اللعبة من داخل البوت', 'Open the game from the bot'), 401, 'UNAUTHORIZED');
+  }
+  const user = await User.findOne({ telegramId: parsed.user.id });
+  if (!user) throw new AppError(t('افتح البوت أول مرة', 'Open the bot first'), 401, 'UNAUTHORIZED');
+  if (user.isBanned) throw new AppError(t('حسابك محظور', 'Your account is banned'), 403, 'BANNED');
+  assertBattleAllowed(await getAdminRole(user.telegramId));
+  const profile = await profileFor(user);
+  return {
+    telegramId: user.telegramId,
+    name: displayName(user).slice(0, 24),
+    skin: profile.skin,
+    record: (match: { mass: number; seconds: number }) => recordBattleMatch(user, match),
+  };
+}
+
 /** Where the API server itself serves the MF Battle files (same domain as the Mini App). */
 export const MF_BATTLE_PATH = '/mf-battle';
 

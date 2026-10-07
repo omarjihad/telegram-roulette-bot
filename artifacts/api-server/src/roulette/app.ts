@@ -92,7 +92,11 @@ export function createApp() {
   if (fs.existsSync(path.join(battleDir, 'index.html'))) {
     app.use(MF_BATTLE_PATH, express.static(battleDir, {
       index: 'index.html',
-      setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+      setHeaders: (res, filePath) => {
+        res.setHeader('Cache-Control', 'no-cache');
+        // The ad page is shown inside the game when the game itself runs on Cloudflare.
+        if (path.basename(filePath) === 'ad.html') res.removeHeader('X-Frame-Options');
+      },
     }));
   }
 
