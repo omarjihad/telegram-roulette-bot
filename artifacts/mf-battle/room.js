@@ -318,8 +318,8 @@ export class BattleRoom {
         }
         this.tour = t && !t.done ? t : null;
         if (!t) this.broadcast({ t: 'tour' });
-        else if (t.done) this.broadcast({ t: 'tour', done: 1, m: t.mode, w: t.winner || null, until: t.until });
-        else this.broadcast({ t: 'tour', m: t.mode, end: t.endsAt, ld: t.leader || null });
+        else if (t.done) this.broadcast({ t: 'tour', done: 1, m: t.mode, w: t.winner || null, until: t.until, pz: t.prize || '' });
+        else this.broadcast({ t: 'tour', m: t.mode, end: t.endsAt, ld: t.leader || null, pz: t.prize || '' });
       })
       .catch((err) => this.log('battle leader report failed', err))
       .finally(() => { this.reporting = false; });

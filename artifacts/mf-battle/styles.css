@@ -697,3 +697,5 @@ select.adm-input { appearance: none; }
 .adm .set-row .lbl { min-width: 0; }
 .tour-banner.done { background: linear-gradient(135deg, rgba(163, 255, 58, 0.16), rgba(255, 200, 61, 0.16)); border-color: rgba(163, 255, 58, 0.55); }
 .tour-banner.done span b { color: var(--gold); }
+.tour-banner .tour-prize { flex-basis: 100%; text-align: center; color: #fff; font-weight: 800; }
+.adm-text.short { min-height: 56px; }

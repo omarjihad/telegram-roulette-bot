@@ -22,6 +22,8 @@ export interface IBattleTournament extends Document {
   endsAt: Date;
   startedBy: number;
   announced: boolean;
+  // The prize / description the developer wrote (shown to players and in the messages).
+  prize: string;
   // telegramId -> entry (only players who were first at some point).
   standings: Record<string, BattleTournamentEntry>;
   // Who is first right now, as last reported by a game room.
@@ -41,6 +43,7 @@ const battleTournamentSchema = new Schema<IBattleTournament>(
     endsAt: { type: Date, required: true, index: true },
     startedBy: { type: Number, required: true },
     announced: { type: Boolean, default: false },
+    prize: { type: String, default: '', maxlength: 300 },
     standings: { type: Schema.Types.Mixed, default: {} },
     current: { type: Schema.Types.Mixed, default: null },
     winner: { type: Schema.Types.Mixed, default: null },

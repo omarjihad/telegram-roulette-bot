@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   statUpdateOne: vi.fn(),
   sendPhoto: vi.fn(),
   sendMessage: vi.fn(),
+  adExists: vi.fn(),
+  adCreate: vi.fn(),
+  consumeAdView: vi.fn(),
 }));
 
 vi.mock('../models/BattleProfile', () => ({
@@ -28,13 +31,15 @@ vi.mock('../models/BattleTournament', () => {
   const none = { select: () => none, sort: () => none, lean: async () => null };
   return { BattleTournament: { findOne: () => none } };
 });
+vi.mock('../models/AdView', () => ({ AdView: { exists: mocks.adExists, create: mocks.adCreate } }));
+vi.mock('./games.service', () => ({ consumeAdView: mocks.consumeAdView }));
 vi.mock('../models/BattleWeeklyStat', () => ({ BattleWeeklyStat: { updateOne: mocks.statUpdateOne } }));
 vi.mock('../bot/instance', () => ({ getBotInstance: () => ({ sendPhoto: mocks.sendPhoto, sendMessage: mocks.sendMessage }) }));
 vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockId: '123' }) }));
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { allowedThrows, battleLevel, battleUrl, buySkin, buyThrow, killReward, levelReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
+import { battleAdView, allowedThrows, battleLevel, battleUrl, buySkin, buyThrow, killReward, levelReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 7, firstName: 'Omar', username: 'omar' } as never;
 
@@ -147,5 +152,19 @@ describe('MF Battle', () => {
     mocks.profileFindOne.mockReturnValue({ select: () => Promise.resolve({ skin: 'neon' }) });
     await recordBattleMatch(user, { mass: 5400, seconds: 320 });
     expect(mocks.statUpdateOne.mock.calls[0][1]).toMatchObject({ $max: { maxMass: 5400 }, $inc: { playSeconds: 320, matches: 1 } });
+  });
+
+  it('throw-speed ads: uses the game\'s word when Adsgram is late, once per 20 seconds', async () => {
+    const { AppError } = await import('../utils/AppError');
+    mocks.consumeAdView.mockRejectedValue(new AppError('x', 409, 'AD_NOT_CONFIRMED'));
+    mocks.adExists.mockResolvedValueOnce(null);
+    await battleAdView(7);
+    expect(mocks.adCreate).toHaveBeenCalledWith(expect.objectContaining({ telegramId: 7, source: 'client', consumedFor: 'battle_throw' }));
+    mocks.adExists.mockResolvedValueOnce({ _id: 'x' });
+    await expect(battleAdView(7)).rejects.toMatchObject({ code: 'AD_TOO_SOON' });
+    mocks.consumeAdView.mockResolvedValue(undefined);
+    mocks.adCreate.mockClear();
+    await battleAdView(7);
+    expect(mocks.adCreate).not.toHaveBeenCalled();
   });
 });

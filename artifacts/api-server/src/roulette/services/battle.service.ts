@@ -9,6 +9,7 @@ import { getSettings } from '../models/Settings';
 import { verifyTelegramInitData } from '../utils/telegramAuth';
 import { getAdminRole } from './admin.service';
 import { consumeAdView } from './games.service';
+import { AdView } from '../models/AdView';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -196,17 +197,18 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
 
 async function lobbyTournament() {
   const now = new Date();
-  const running = await BattleTournament.findOne({ status: 'running', endsAt: { $gt: now } }).select('mode endsAt minutes').lean();
-  if (running) return { mode: running.mode, endsAt: running.endsAt, minutes: running.minutes };
+  const running = await BattleTournament.findOne({ status: 'running', endsAt: { $gt: now } }).select('mode endsAt minutes prize').lean();
+  if (running) return { mode: running.mode, endsAt: running.endsAt, minutes: running.minutes, prize: running.prize || '' };
   const ended = await BattleTournament.findOne({ status: 'ended', endedAt: { $gt: new Date(now.getTime() - 5 * 60000) } })
     .sort({ endedAt: -1 })
-    .select('mode endsAt endedAt winner')
+    .select('mode endsAt endedAt winner prize')
     .lean();
   if (!ended) return null;
   const w = ended.winner;
   return {
     done: true,
     mode: ended.mode,
+    prize: ended.prize || '',
     until: new Date((ended.endedAt ?? ended.endsAt).getTime() + 5 * 60000),
     winner: w ? { name: w.name, leadSeconds: Math.round(w.leadSeconds), mass: Math.round(w.finalMass ?? w.bestMass) } : null,
   };
@@ -420,11 +422,28 @@ export async function buyThrow(user: HydratedDocument<IUser>, adminRole: string 
   return { profile: profileView(updated) };
 }
 
+/**
+ * A watched ad for a throw speed. Adsgram's own confirmation is used when it has arrived;
+ * it often comes late (or not at all from the Cloudflare page), so the game's word that the
+ * ad was watched is accepted too, at most once every 20 seconds per player (an ad is longer).
+ */
+export async function battleAdView(telegramId: number) {
+  try {
+    await consumeAdView(telegramId, 'battle_throw');
+    return;
+  } catch (err) {
+    if (!(err instanceof AppError) || err.code !== 'AD_NOT_CONFIRMED') throw err;
+  }
+  const recent = await AdView.exists({ telegramId, consumedFor: 'battle_throw', createdAt: { $gte: new Date(Date.now() - 20000) } });
+  if (recent) throw new AppError(t('استنى شوية وجرّب الإعلان مرة ثانية', 'Wait a moment and try the ad again'), 429, 'AD_TOO_SOON');
+  await AdView.create({ telegramId, source: 'client', consumedAt: new Date(), consumedFor: 'battle_throw' });
+}
+
 /** One watched ad toward ×20 (one ad) or ×50 (two ads): opens it for 15 minutes. */
 export async function throwAd(user: HydratedDocument<IUser>, adminRole: string | null, level: number) {
   await assertBattleAllowed(adminRole);
   if (level !== 4 && level !== 5) throw new AppError(t('هذه السرعة ما تنفتح بإعلان', 'This speed does not open with ads'), 400, 'BAD_THROW');
-  await consumeAdView(user.telegramId, 'battle_throw');
+  await battleAdView(user.telegramId);
   const profile = await profileFor(user);
   const until = new Date(Date.now() + THROW_AD_MINUTES * 60000);
   // Never shortens a longer unlock (a permanent one from the developers).

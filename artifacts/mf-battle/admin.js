@@ -101,6 +101,7 @@ function tourHTML() {
         <div class="adm-title">🟢 بطولة شغالة · ${m.name}</div>
         <div class="adm-big" data-left>${left(t.endsAt)}</div>
         <small>${m.how}</small>
+        ${t.prize ? `<div class="adm-now">🎁 ${ctx.esc(t.prize)}</div>` : ''}
         <div class="adm-now">👑 المتصدر هسه: <b>${t.current ? `${ctx.esc(t.current.name)} (${ctx.fmt(t.current.mass)})` : '—'}</b></div>
       </div>
       <div class="adm-card"><div class="adm-title">📊 وقت التصدر</div>${rows || '<small>محد تصدر بعد.</small>'}</div>
@@ -118,6 +119,10 @@ function tourHTML() {
       <div class="adm-title">⏱️ مدة البطولة (بالدقائق)</div>
       <div class="adm-line"><input class="adm-input" type="number" min="1" max="10080" value="30" data-min /></div>
       <div class="seg wrap">${QUICK_MINUTES.map(([v, l]) => `<button data-quick="${v}">${l}</button>`).join('')}</div>
+    </div>
+    <div class="adm-card">
+      <div class="adm-title">🎁 الجائزة / وصف البطولة <small>(اختياري)</small></div>
+      <textarea class="adm-input adm-text short" maxlength="300" placeholder="مثلاً: الفائز ياخذ 5000 عملة MF وسكن جوي بوي" data-prize></textarea>
     </div>
     <div class="adm-card">
       <div class="adm-title">🎯 نوع البطولة</div>
@@ -162,13 +167,14 @@ function bindTour() {
       const minutes = Math.floor(Number(q('[data-min]').value));
       if (!(minutes >= 1 && minutes <= 10080)) return ctx.toast('اكتب مدة من 1 إلى 10080 دقيقة');
       const broadcast = b.getAttribute('data-start') === '1';
+      const prize = q('[data-prize]').value.trim();
       confirmDo(
         '🏆 بدء بطولة',
-        `المدة: <b>${dur(minutes * 60)}</b><br>النوع: <b>${MODES[mode].name}</b><br>${broadcast ? '📢 تنرسل إذاعة بالبطولة.' : 'بدون إذاعة.'}`,
+        `المدة: <b>${dur(minutes * 60)}</b><br>النوع: <b>${MODES[mode].name}</b><br>${prize ? `الجائزة: <b>${ctx.esc(prize)}</b><br>` : ''}${broadcast ? '📢 تنرسل إذاعة بالبطولة.' : 'بدون إذاعة.'}`,
         'ابدأ',
         async () => {
           try {
-            const res = await ctx.api('/battle/admin/tournament', { method: 'POST', body: { minutes, mode, broadcast } });
+            const res = await ctx.api('/battle/admin/tournament', { method: 'POST', body: { minutes, mode, broadcast, prize } });
             ctx.haptic('medium');
             ctx.sfx('buy');
             ctx.toast(res.broadcast ? `🚀 بدت البطولة · الإذاعة لـ ${ctx.fmt(res.broadcast.total)} ${res.broadcast.to === 'all' ? 'مستخدم' : 'مطور'}` : '🚀 بدت البطولة');

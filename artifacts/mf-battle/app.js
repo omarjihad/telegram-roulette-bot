@@ -18,7 +18,8 @@ const dialogEl = document.getElementById('dialog');
 const toastEl = document.getElementById('toast');
 
 const state = { player: null, profile: null, skins: [], week: null, weekly: null, editor: null, game: null, mode: 'online' };
-try { state.mode = localStorage.getItem('mfb-mode') === 'practice' ? 'practice' : 'online'; } catch (e) { /* private mode */ }
+// Online only (practice against bots was removed); the demo page still plays offline.
+state.mode = 'online';
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -222,10 +223,10 @@ function tourBannerHTML() {
     if (new Date(t.until).getTime() <= Date.now()) return '';
     const w = t.winner;
     const val = w ? (t.mode === 'longest' ? `⏱️ تصدّر ${clock(Date.now() + w.leadSeconds * 1000)}` : `⚖️ ${fmt(w.mass)}`) : '';
-    return `<div class="tour-banner done"><b>🏁 خلصت البطولة</b><span>${w ? `🥇 الفائز: <b>${esc(w.name)}</b> ${val}` : 'ماكو فائز'}</span></div>`;
+    return `<div class="tour-banner done"><b>🏁 خلصت البطولة</b><span>${w ? `🥇 الفائز: <b>${esc(w.name)}</b> ${val}` : 'ماكو فائز'}</span>${t.prize ? `<span class="tour-prize">🎁 ${esc(t.prize)}</span>` : ''}</div>`;
   }
   if (!t || new Date(t.endsAt).getTime() <= Date.now()) return '';
-  return `<div class="tour-banner"><b>🏆 بطولة شغالة</b><span>${TOUR_MODES[t.mode] || ''}</span><span class="tour-left" data-tour-left>${clock(t.endsAt)}</span></div>`;
+  return `<div class="tour-banner"><b>🏆 بطولة شغالة</b><span>${TOUR_MODES[t.mode] || ''}</span><span class="tour-left" data-tour-left>${clock(t.endsAt)}</span>${t.prize ? `<span class="tour-prize">🎁 الجائزة: ${esc(t.prize)}</span>` : ''}</div>`;
 }
 function clock(end) {
   const sec = Math.max(0, Math.floor((new Date(end).getTime() - Date.now()) / 1000));
@@ -273,12 +274,8 @@ function renderLobby() {
         <div class="skin-stats"><span>🎮 <b>${fmt(p.totalMatches)}</b> مباراة</span><span>⏱️ <b>${Math.floor((p.totalSeconds || 0) / 60)}</b> دقيقة</span></div>
       </section>
       <section class="center">
-        <div class="modes">
-          <button class="mode-btn ${state.mode === 'online' ? 'on' : ''}" data-mode="online"><b>🌐 أونلاين</b><small>ويّا المطورين · ينحسب بالترتيب</small></button>
-          <button class="mode-btn ${state.mode === 'online' ? '' : 'on'}" data-mode="practice"><b>🤖 تدريب</b><small>ضد 30 بوت · بدون نت</small></button>
-        </div>
         ${tourBannerHTML()}
-        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>${state.mode === 'online' ? 'أونلاين ويّا المطورين والبوتات' : 'تدريب ضد البوتات'}</small></button>
+        <button class="play" data-act="play"><b>ابدأ اللعب</b><small>🌐 أونلاين · ينحسب بالترتيب</small></button>
         <div class="tiles">
           <button class="tile t-store" data-act="store"><span class="ic">🛒</span>المتجر</button>
           <button class="tile t-skins" data-act="skins"><span class="ic">🎭</span>السكنات</button>
@@ -292,14 +289,6 @@ function renderLobby() {
       </section>
     </div>`;
   bindActs(screenEl);
-  screenEl.querySelectorAll('[data-mode]').forEach((b) => {
-    b.onclick = () => {
-      haptic('light');
-      state.mode = b.getAttribute('data-mode');
-      try { localStorage.setItem('mfb-mode', state.mode); } catch (e) { /* private mode */ }
-      renderLobby();
-    };
-  });
   renderWeekly();
 }
 
@@ -553,9 +542,10 @@ async function afterAd(path) {
     try {
       return await api(path, { method: 'POST' });
     } catch (e) {
-      if (e.code !== 'AD_NOT_CONFIRMED' || attempt >= 14) throw e;
+      // Spaced out so the server's anti-spam limit (3 calls in 10 s) is never hit.
+      if (!['AD_NOT_CONFIRMED', 'RATE_LIMITED'].includes(e.code) || attempt >= 3) throw e;
       if (attempt === 0) toast('⏳ جاري تأكيد مشاهدة الإعلان…');
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 4000));
     }
   }
 }
@@ -1053,7 +1043,7 @@ function demoAdmin() {
 function demoAdminAct(path, opts) {
   const b = (opts && opts.body) || {};
   if (path === '/battle/admin/tournament') {
-    demo.tournament = { mode: b.mode, minutes: b.minutes, endsAt: new Date(Date.now() + b.minutes * 60000).toISOString(), startedAt: new Date().toISOString() };
+    demo.tournament = { mode: b.mode, minutes: b.minutes, prize: b.prize || '', endsAt: new Date(Date.now() + b.minutes * 60000).toISOString(), startedAt: new Date().toISOString() };
     return { ok: true, broadcast: b.broadcast ? { total: 5, to: 'developers' } : null };
   }
   if (path === '/battle/admin/tournament/end' || path === '/battle/admin/tournament/cancel') { demo.tournament = null; return { ok: true }; }

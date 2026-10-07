@@ -44,6 +44,7 @@ export interface TourInfo {
   done?: boolean;
   winner?: [string, number] | null;
   until?: number;
+  prize?: string;
 }
 export class BattleRoom {
   constructor(opts?: {

@@ -79,6 +79,7 @@ export function tournamentView(t: IBattleTournament | null) {
     modeName: TOURNAMENT_MODES[t.mode].ar,
     how: TOURNAMENT_MODES[t.mode].how,
     minutes: t.minutes,
+    prize: t.prize || '',
     startedAt: t.startedAt,
     endsAt: t.endsAt,
     current: t.current ? { telegramId: t.current.telegramId, name: t.current.name, mass: t.current.mass } : null,
@@ -93,13 +94,14 @@ function startText(t: IBattleTournament) {
     '',
     `⏱️ المدة: ${fmtMinutes(t.minutes)} — تخلص الساعة ${baghdadTime(t.endsAt)}`,
     `🎯 طريقة الفوز: ${TOURNAMENT_MODES[t.mode].how}.`,
+    ...(t.prize ? [`🎁 الجائزة: ${t.prize}`] : []),
     '',
     'ادخل هسه، كُل الأصغر منك وتصدّر الساحة 🔥',
   ].join('\n');
 }
 
 /** Starts a tournament; with broadcast, every player is told how long it lasts and how to win. */
-export async function startTournament(input: { minutes: unknown; mode: unknown; broadcast: unknown }, actor: { id: number; username?: string }) {
+export async function startTournament(input: { minutes: unknown; mode: unknown; broadcast: unknown; prize?: unknown }, actor: { id: number; username?: string }) {
   const minutes = Math.floor(Number(input.minutes));
   if (!Number.isFinite(minutes) || minutes < 1 || minutes > MAX_MINUTES) throw new AppError('حدد مدة البطولة بالدقائق (1 إلى 10080)', 422, 'VALIDATION_ERROR');
   const mode = input.mode === 'final' ? 'final' : input.mode === 'longest' ? 'longest' : null;
@@ -114,6 +116,7 @@ export async function startTournament(input: { minutes: unknown; mode: unknown; 
     endsAt: new Date(now.getTime() + minutes * 60000),
     startedBy: actor.id,
     announced: input.broadcast === true,
+    prize: String(input.prize ?? '').replace(/\s+/g, ' ').trim().slice(0, 300),
   });
   forgetRunning();
   await writeAudit({ actorId: actor.id, actorUsername: actor.username, action: 'battle.tournament.start', target: String(t._id), metadata: { minutes, mode, broadcast: t.announced } });
@@ -188,6 +191,7 @@ export async function reportLeaders(input: { lead?: unknown; current?: unknown; 
       startedAt: t.startedAt.getTime(),
       mode: t.mode,
       endsAt: t.endsAt.getTime(),
+      prize: t.prize || '',
       leader: (t.mode === 'longest' ? (top ? [top.name, Math.round(top.leadSeconds)] : null) : t.current ? [t.current.name, t.current.mass] : null) as [string, number] | null,
     },
   };
@@ -204,12 +208,13 @@ async function recentEnded() {
 }
 
 /** A tournament that just ended, for the players' screens: who won and until when to show it. */
-export function endedView(t: Pick<IBattleTournament, 'mode' | 'endsAt' | 'endedAt' | 'winner'> & { _id: unknown }) {
+export function endedView(t: Pick<IBattleTournament, 'mode' | 'endsAt' | 'endedAt' | 'winner' | 'prize'> & { _id: unknown }) {
   const w = t.winner;
   return {
     id: String(t._id),
     done: true as const,
     mode: t.mode,
+    prize: t.prize || '',
     endsAt: new Date(t.endsAt).getTime(),
     until: new Date(t.endedAt ?? t.endsAt).getTime() + SHOW_WINNER_MS,
     // longest: seconds first; final: mass at the end.
@@ -247,6 +252,7 @@ async function finish(t: IBattleTournament) {
   const lines = [
     '🏁 خلصت بطولة MF Battle',
     `🎯 النوع: ${TOURNAMENT_MODES[t.mode].ar} · المدة: ${fmtMinutes(t.minutes)}`,
+    ...(t.prize ? [`🎁 الجائزة: ${t.prize}`] : []),
     '',
     winner
       ? `🥇 الفائز: ${winner.name} (${winner.telegramId})\n⏱️ وقت التصدر: ${fmtDuration(winner.leadSeconds)}\n⚖️ أعلى كتلة: ${winner.bestMass}${winner.finalMass ? `\n🏁 كتلته بالنهاية: ${winner.finalMass}` : ''}`
@@ -267,6 +273,7 @@ async function finish(t: IBattleTournament) {
         `🎯 نوع البطولة: ${TOURNAMENT_MODES[t.mode].ar}`,
         `⏱️ تصدرت ${fmtDuration(winner.leadSeconds)}`,
         `⚖️ أعلى كتلة وصلتها: ${winner.bestMass}${winner.finalMass ? `\n🏁 كتلتك بآخر ثانية: ${winner.finalMass}` : ''}`,
+        ...(t.prize ? [`🎁 جائزتك: ${t.prize}`] : []),
         '',
         'المطورين راح يتواصلون وياك بخصوص الجائزة 🎁',
       ].join('\n')

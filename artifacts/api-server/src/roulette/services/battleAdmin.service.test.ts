@@ -83,6 +83,10 @@ describe('MF Battle developer panel', () => {
     await expect(startTournament({ minutes: 30, mode: 'final', broadcast: false }, { id: 1 })).rejects.toThrow(/شغالة/);
     mocks.tourExists.mockResolvedValue(false);
     await expect(startTournament({ minutes: 0, mode: 'final', broadcast: false }, { id: 1 })).rejects.toThrow(/مدة/);
+    mocks.tourCreate.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: 'N', standings: {}, ...doc }));
+    const res = await startTournament({ minutes: 10, mode: 'final', broadcast: false, prize: '  5000 عملة   وسكن ' }, { id: 1 });
+    expect(mocks.tourCreate.mock.calls[0][0].prize).toBe('5000 عملة وسكن');
+    expect(res.tournament?.prize).toBe('5000 عملة وسكن');
   });
 
   it('picks the longest leader and tells the developers and the winner', async () => {

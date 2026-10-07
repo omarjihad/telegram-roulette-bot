@@ -323,7 +323,8 @@ export function startGame(opts) {
       const ss = String(sec % 60).padStart(2, '0');
       const time = sec >= 3600 ? `${Math.floor(sec / 3600)}:${mm}:${ss}` : `${mm}:${ss}`;
       const lead = tour.ld ? ` · 👑 ${escName(tour.ld[0])} ${tour.m === 'longest' ? `(${Math.floor(tour.ld[1] / 60)}:${String(tour.ld[1] % 60).padStart(2, '0')})` : `(${tour.ld[1]})`}` : '';
-      tourEl.innerHTML = `<b>🏆 بطولة</b> ${time}${lead}`;
+      const prize = tour.pz ? ` · 🎁 ${escName(tour.pz.length > 40 ? `${tour.pz.slice(0, 40)}…` : tour.pz)}` : '';
+      tourEl.innerHTML = `<b>🏆 بطولة</b> ${time}${lead}${prize}`;
       tourEl.hidden = false;
     };
     const tourTimer = setInterval(drawTour, 1000);
@@ -372,8 +373,8 @@ export function startGame(opts) {
         hideOverlay();
       } else if (msg.t === 'tour') {
         tour = !msg.m ? null : msg.done
-          ? { done: true, m: msg.m, until: Number(msg.until) || 0, w: Array.isArray(msg.w) ? msg.w : null }
-          : { m: msg.m, end: Number(msg.end) || 0, ld: Array.isArray(msg.ld) ? msg.ld : null };
+          ? { done: true, m: msg.m, until: Number(msg.until) || 0, w: Array.isArray(msg.w) ? msg.w : null, pz: String(msg.pz || '') }
+          : { m: msg.m, end: Number(msg.end) || 0, ld: Array.isArray(msg.ld) ? msg.ld : null, pz: String(msg.pz || '') };
         drawTour();
       } else if (msg.t === 'reset') {
         // The room started over (a tournament began): a fresh map follows with the welcome.
