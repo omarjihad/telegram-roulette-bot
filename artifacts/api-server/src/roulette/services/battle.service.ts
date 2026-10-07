@@ -4,6 +4,7 @@ import { IUser } from '../models/User';
 import { BattleControl, BattleProfile, BattleSettings, IBattleProfile } from '../models/BattleProfile';
 import { BattleLayoutCode } from '../models/BattleLayoutCode';
 import { BattleWeeklyStat } from '../models/BattleWeeklyStat';
+import { getSettings } from '../models/Settings';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -12,6 +13,9 @@ import { getBotInstance } from '../bot/instance';
 
 /** MF coins a new MF Battle account starts with. */
 export const STARTER_COINS = 100;
+
+/** The Adsgram interstitial block shown in MF Battle (no reward). */
+export const BATTLE_INTERSTITIAL_BLOCK = 'int-52362';
 
 export interface BattleSkin {
   id: string;
@@ -94,6 +98,8 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
     profile: profileView(profile),
     skins: BATTLE_SKINS,
     week: { key: weekKey(), resetsAt: nextWeekStart() },
+    // Adsgram blocks: the reward one (revenge) and the interstitial shown every second death.
+    ads: { rewardBlockId: (await getSettings()).adsgramBlockId || null, interstitialBlockId: BATTLE_INTERSTITIAL_BLOCK },
   };
 }
 

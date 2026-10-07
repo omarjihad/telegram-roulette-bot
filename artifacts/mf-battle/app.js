@@ -2,6 +2,7 @@ import { skinSVG, RARITY } from './skins.js';
 import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture } from './controls.js';
 import { sfx, setSoundEnabled, unlockSound } from './sound.js';
 import { startGame } from './game.js';
+import { showAd } from './ads.js';
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const CFG = window.MF_BATTLE_CONFIG || {};
@@ -90,9 +91,9 @@ function goRoulette() {
 }
 
 function onBack() {
-  if (state.game) return state.game.back();
   if (!dialogEl.hidden) return closeDialog();
   if (state.editor) return state.editor.requestExit();
+  if (state.game) return state.game.back();
   if (!panelEl.hidden) return closePanel();
   goRoulette();
 }
@@ -214,7 +215,7 @@ function renderLobby() {
         <div class="skin-stats"><span>🎮 <b>${fmt(p.totalMatches)}</b> مباراة</span><span>⏱️ <b>${Math.floor((p.totalSeconds || 0) / 60)}</b> دقيقة</span></div>
       </section>
       <section class="center">
-        <div class="mode"><div><b>تدريب</b><small>ضد ${14} بوت · كُل الأصغر منك واكبر</small></div><span class="dot-live"></span></div>
+        <div class="mode"><div><b>تدريب</b><small>ضد 26 بوت · كُل الأصغر منك واكبر</small></div><span class="dot-live"></span></div>
         <button class="play" data-act="play"><b>ابدأ اللعب</b><small>تدريب ضد البوتات · الأونلاين قريباً</small></button>
         <div class="tiles">
           <button class="tile t-store" data-act="store"><span class="ic">🛒</span>المتجر</button>
@@ -256,6 +257,12 @@ function playGame() {
     toStage,
     getSize: () => ({ w: SW, h: SH }),
     haptic,
+    openControls: (done) => openEditor(done),
+    showAd: (blockId) => showAd(blockId, { demo: DEMO }),
+    ads: {
+      reward: CFG.rewardBlockId || (state.ads && state.ads.rewardBlockId) || null,
+      interstitial: CFG.interstitialBlockId || (state.ads && state.ads.interstitialBlockId) || 'int-52362',
+    },
     onExit: () => {
       state.game = null;
       screenEl.hidden = false;
@@ -478,7 +485,7 @@ function renderSettings() {
 }
 
 // ───────────── Control layout editor ─────────────
-function openEditor() {
+function openEditor(onClose) {
   let layout = fullLayout(state.profile.layout);
   let sel = null;
   let dirty = false;
@@ -628,6 +635,7 @@ function openEditor() {
   function close() {
     ed.remove();
     state.editor = null;
+    if (onClose) onClose(state.profile.layout);
   }
   async function save() {
     try {
@@ -722,6 +730,7 @@ async function boot() {
     state.profile = res.profile;
     state.skins = res.skins;
     state.week = res.week;
+    state.ads = res.ads || null;
     setSoundEnabled(state.profile.settings.sound !== false);
     renderLobby();
   } catch (e) {
@@ -746,7 +755,7 @@ async function demoApi(path, opts) {
   await new Promise((r) => setTimeout(r, 120));
   const p = demo.profile;
   const reset = new Date(Date.now() + 3.4 * 86400000).toISOString();
-  if (path === '/battle') return { ok: true, player: demo.player, profile: p, skins: DEMO_SKINS, week: { key: 'demo', resetsAt: reset } };
+  if (path === '/battle') return { ok: true, player: demo.player, profile: p, skins: DEMO_SKINS, week: { key: 'demo', resetsAt: reset }, ads: { rewardBlockId: 'demo-reward', interstitialBlockId: 'int-52362' } };
   if (path.startsWith('/battle/leaderboard')) {
     const type = path.split('type=')[1] || 'mass';
     const base = type === 'mass' ? 90000 : type === 'time' ? 52000 : 260;

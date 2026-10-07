@@ -6,7 +6,7 @@ export const CONTROLS = [
   { id: 'joystick', name: 'الجويستك', shape: 'round', w: 132, h: 132, x: 0.15, y: 0.72, label: '' },
   { id: 'split', name: 'انقسام', shape: 'round', w: 88, h: 88, x: 0.9, y: 0.78, label: 'انقسام' },
   { id: 'throw', name: 'رمي', shape: 'round', w: 72, h: 72, x: 0.78, y: 0.88, label: 'رمي' },
-  { id: 'double', name: 'سرعة الرمي ×2', shape: 'round', w: 60, h: 60, x: 0.92, y: 0.56, label: '2x' },
+  { id: 'double', name: 'سرعة الرمي (×1 → ×50)', shape: 'round', w: 60, h: 60, x: 0.92, y: 0.56, label: '×50' },
   { id: 'chat', name: 'الشات', shape: 'box', w: 220, h: 78, x: 0.2, y: 0.14, label: 'اكتب رسالة…' },
   { id: 'leaderboard', name: 'المتصدرين', shape: 'box', w: 150, h: 132, x: 0.88, y: 0.22, label: 'المتصدرين' },
   { id: 'mass', name: 'الكتلة', shape: 'pill', w: 150, h: 36, x: 0.5, y: 0.07, label: 'الكتلة: 0' },

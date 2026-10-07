@@ -26,6 +26,7 @@ vi.mock('../models/BattleProfile', () => ({
 vi.mock('../models/BattleLayoutCode', () => ({ BattleLayoutCode: { create: mocks.codeCreate, findOne: mocks.codeFindOne } }));
 vi.mock('../models/BattleWeeklyStat', () => ({ BattleWeeklyStat: { updateOne: mocks.statUpdateOne } }));
 vi.mock('../bot/instance', () => ({ getBotInstance: () => ({ sendPhoto: mocks.sendPhoto, sendMessage: mocks.sendMessage }) }));
+vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockId: '123' }) }));
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
@@ -65,6 +66,7 @@ describe('MF Battle', () => {
     expect(home.profile.coins).toBe(100);
     expect(home.profile.ownedSkins).toEqual(expect.arrayContaining(['classic', 'mf']));
     expect(home.player.name).toBe('Omar');
+    expect(home.ads).toEqual({ rewardBlockId: '123', interstitialBlockId: 'int-52362' });
   });
 
   it('buys a skin only with enough coins', async () => {
