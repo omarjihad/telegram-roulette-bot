@@ -8,7 +8,7 @@ export const CONTROLS = [
   { id: 'throw', name: 'رمي', shape: 'round', w: 72, h: 72, x: 0.78, y: 0.89, label: 'رمي' },
   { id: 'double', name: 'سرعة الرمي (×1 → ×50)', shape: 'round', w: 60, h: 60, x: 0.93, y: 0.55, label: '×50' },
   { id: 'chat', name: 'الشات', shape: 'box', w: 210, h: 74, x: 0.34, y: 0.13, label: 'اكتب رسالة…' },
-  { id: 'leaderboard', name: 'المتصدرين', shape: 'box', w: 150, h: 132, x: 0.9, y: 0.2, label: 'المتصدرين' },
+  { id: 'leaderboard', name: 'المتصدرين', shape: 'box', w: 150, h: 150, x: 0.9, y: 0.22, label: 'المتصدرين' },
   { id: 'mass', name: 'الكتلة', shape: 'pill', w: 150, h: 34, x: 0.62, y: 0.06, label: 'الكتلة: 0' },
   { id: 'net', name: 'FPS و Ping', shape: 'pill', w: 130, h: 26, x: 0.62, y: 0.17, label: '60fps · 40ms' },
   { id: 'minimap', name: 'الخريطة', shape: 'box', w: 92, h: 92, x: 0.07, y: 0.36, label: 'الخريطة' },

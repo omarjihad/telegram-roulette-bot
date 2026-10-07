@@ -4,7 +4,7 @@
 // Everything is drawn on one canvas in "stage" coordinates (the landscape screen).
 // No sound effects in here: sounds are for the menus only.
 
-import { skinSVG } from './skins.js';
+import { skinSVG, skinImageUrl } from './skins.js';
 import { CONTROLS, byId, fullLayout, controlHTML, placeIn } from './controls.js';
 import {
   createWorld, FoodGrid, WORLD, START_MASS, REVENGE_MASS, EAT_RATIO, THROW_SPEEDS, MAP_SECTIONS,
@@ -44,10 +44,14 @@ function skinSprite(id) {
     g.beginPath();
     g.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
     g.clip();
-    g.drawImage(img, 0, 0, size, size);
+    // Cover the circle (a non-square picture is cropped in the middle, not stretched).
+    const iw = img.naturalWidth || size, ih = img.naturalHeight || size;
+    const side = Math.min(iw, ih);
+    g.drawImage(img, (iw - side) / 2, (ih - side) / 2, side, side, 0, 0, size, size);
     s.ready = true;
   };
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(skinSVG(id, 256))}`;
+  // Your own picture for the skin if one was added, else the drawing.
+  img.src = skinImageUrl(id) || `data:image/svg+xml;charset=utf-8,${encodeURIComponent(skinSVG(id, 256))}`;
   return null;
 }
 
@@ -326,7 +330,7 @@ export function startGame(opts) {
       } else if (msg.t === 'ow') addOwners(msg.ow);
       else if (msg.t === 'lb') {
         ranking = msg.r.map(([id, m]) => ({ id, name: ownerOf(id).name, m, me: id === meId }));
-        if (msg.me && msg.me[0] > 8) ranking.push({ name: ownerOf(meId).name, m: msg.me[1], me: true, rank: msg.me[0] });
+        if (msg.me && msg.me[0] > 5) ranking.push({ name: ownerOf(meId).name, m: msg.me[1], me: true, rank: msg.me[0] });
         dots = [];
         for (let i = 0; i < msg.mm.length; i += 4) if (msg.mm[i] !== meId) dots.push({ x: msg.mm[i + 1], y: msg.mm[i + 2], m: msg.mm[i + 3] });
       } else if (msg.t === 'welcome') {
@@ -747,7 +751,7 @@ export function startGame(opts) {
     if (myRank && myRank < bestRank) bestRank = myRank;
     topId = ranked[0] ? ranked[0].id || 0 : 0;
     const row = (r, i) => `<li class="${r.me ? 'me' : ''} ${(r.rank || i + 1) === 1 ? 'gold' : ''}"><span>${r.rank || i + 1}. ${escName(r.name)}</span><b>${short(r.m)}</b></li>`;
-    lbEl.innerHTML = ranked.slice(0, 8).map(row).join('') + (myIdx >= 8 ? row(ranked[myIdx], myIdx) : '');
+    lbEl.innerHTML = ranked.slice(0, 5).map(row).join('') + (myIdx >= 5 ? row(ranked[myIdx], myIdx) : '');
 
     // Mini map: 3×3 numbered sections; you see who is in your section only.
     const mc = mapCanvas.getContext('2d');
@@ -1035,7 +1039,7 @@ export function startGame(opts) {
     const ss = String(secs % 60).padStart(2, '0');
 
     const card = () => {
-      const c = showOverlay(`<div class="g-dead-skin">${skinSVG(profile.skin || 'classic', 88)}</div>
+      const c = showOverlay(`<div class="g-dead-skin">${skinSVG(profile.skin || 'fly', 88)}</div>
         <h2>انأكلت! 💀</h2>
         <p>${info.killer ? `أكلك <b>${escName(info.killer)}</b>` : 'انتهت الجولة'}</p>
         <div class="g-stats">

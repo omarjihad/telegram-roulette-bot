@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WebSocket } from 'ws';
 
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
@@ -9,15 +8,16 @@ function fakeSocket() {
   const sent: Record<string, unknown>[] = [];
   return {
     sent,
-    readyState: WebSocket.OPEN,
-    send: (data: string) => sent.push(JSON.parse(data)),
+    isOpen: () => true,
+    buffered: () => 0,
+    send: (data: string) => { sent.push(JSON.parse(data)); },
     close: vi.fn(),
-  } as unknown as WebSocket & { sent: Record<string, unknown>[] };
+  };
 }
 
 const rooms: BattleRoom[] = [];
 function room() {
-  const r = new BattleRoom(4);
+  const r = new BattleRoom({ bots: 4 });
   rooms.push(r);
   return r;
 }

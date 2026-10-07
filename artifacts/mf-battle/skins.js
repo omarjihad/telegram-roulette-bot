@@ -3,6 +3,7 @@
 // fan-style drawings, not copies of any official artwork.
 const defs = (id, inner) => `<defs>${inner}</defs>`.replace(/ID/g, id);
 const shine = '<ellipse cx="38" cy="30" rx="22" ry="12" fill="#fff" opacity=".2" transform="rotate(-30 38 30)"/>';
+const OL = 'stroke="#1c1917" stroke-width="2.5" stroke-linejoin="round"';
 const ring = (c, w = 6) => `<circle cx="64" cy="64" r="61" fill="none" stroke="${c}" stroke-width="${w}"/>`;
 const clip = (u) => `<clipPath id="c-${u}"><circle cx="64" cy="64" r="62"/></clipPath>`;
 const rays = (u, color, n = 16) => {
@@ -35,39 +36,43 @@ const ART = {
     + '<g fill="#fff"><circle cx="24" cy="40" r="1.6"/><circle cx="104" cy="44" r="2"/><circle cx="98" cy="98" r="1.4"/><circle cx="28" cy="94" r="1.8"/></g>'
     + `${ring('#fbbf24')}`,
 
-  // Joy Boy: sun god — white cloud hair, straw hat, huge laugh, sun rays.
-  joyboy: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".5" r=".7"><stop offset="0" stop-color="#fffbe6"/><stop offset=".55" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></radialGradient>${clip(u)}`)
-    + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>${rays(u, 'rgba(255,255,255,.45)', 18)}`
-    + '<g fill="#fff" stroke="#e5e7eb" stroke-width="1.5"><circle cx="34" cy="58" r="13"/><circle cx="94" cy="58" r="13"/><circle cx="40" cy="42" r="12"/><circle cx="88" cy="42" r="12"/><circle cx="30" cy="76" r="10"/><circle cx="98" cy="76" r="10"/></g>'
-    + '<ellipse cx="64" cy="70" rx="26" ry="28" fill="#fde7d4"/>'
-    + '<ellipse cx="64" cy="34" rx="36" ry="7" fill="#facc15" stroke="#a16207" stroke-width="2"/><path d="M44 34 c0 -16 40 -16 40 0z" fill="#fde047" stroke="#a16207" stroke-width="2"/><rect x="44" y="27" width="40" height="5" fill="#dc2626"/>'
-    + '<g fill="#fff" stroke="#dc2626" stroke-width="2.5"><circle cx="53" cy="62" r="6"/><circle cx="75" cy="62" r="6"/></g><circle cx="53" cy="62" r="2.2" fill="#dc2626"/><circle cx="75" cy="62" r="2.2" fill="#dc2626"/>'
-    + '<path d="M44 74 q20 30 40 0z" fill="#7f1d1d"/><path d="M46 75 q18 9 36 0 v4 q-18 7 -36 0z" fill="#fff"/><path d="M48 56 l-4 6 M48 66 l-3 4" stroke="#7c2d12" stroke-width="1.6"/>'
+  // Joy Boy (sun god form): flaming white hair, straw hat, red-ringed eyes, a huge laugh.
+  joyboy: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".55" r=".75"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#fef3c7"/><stop offset="1" stop-color="#f59e0b"/></radialGradient><radialGradient id="f-ID" cx=".45" cy=".35" r=".8"><stop offset="0" stop-color="#fff7ed"/><stop offset="1" stop-color="#f5c9a8"/></radialGradient><linearGradient id="h-ID" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fef08a"/><stop offset="1" stop-color="#eab308"/></linearGradient>${clip(u)}`)
+    + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>${rays(u, 'rgba(255,255,255,.55)', 20)}`
+    + `<g clip-path="url(#c-${u})" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"><path d="M22 70 c-12 -6 -10 -22 2 -24 c-8 -12 4 -26 16 -18 c0 -14 18 -18 24 -6 c6 -12 24 -8 24 6 c12 -8 24 6 16 18 c12 2 14 18 2 24 c10 8 4 22 -8 20 c-2 12 -16 14 -22 6 h-24 c-6 8 -20 6 -22 -6 c-12 2 -18 -12 -8 -20z"/></g>`
+    + `<ellipse cx="64" cy="74" rx="27" ry="28" fill="url(#f-${u})" ${OL}/>`
+    + '<path d="M42 54 q8 -6 16 -2 M70 52 q8 -4 16 2" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    + '<g stroke="#1c1917" stroke-width="2"><circle cx="53" cy="65" r="7.5" fill="#fff"/><circle cx="75" cy="65" r="7.5" fill="#fff"/></g><g fill="none" stroke="#dc2626" stroke-width="2.6"><circle cx="53" cy="65" r="4.6"/><circle cx="75" cy="65" r="4.6"/></g><circle cx="53" cy="65" r="1.8" fill="#1c1917"/><circle cx="75" cy="65" r="1.8" fill="#1c1917"/>'
+    + '<path d="M46 72 l2 5 M43 74 l6 1" stroke="#7c2d12" stroke-width="1.6" stroke-linecap="round"/>'
+    + '<path d="M40 80 q24 34 48 0 q-24 6 -48 0z" fill="#7f1d1d" stroke="#1c1917" stroke-width="2.2" stroke-linejoin="round"/><path d="M42 81 q22 5 44 0 l-2 5 q-20 4 -40 0z" fill="#fff"/><path d="M54 99 q10 -8 20 0 q-10 6 -20 0z" fill="#f43f5e"/>'
+    + `<path d="M28 40 q36 -14 72 0 q-2 6 -8 7 q-28 -8 -56 0 q-6 -1 -8 -7z" fill="url(#h-${u})" ${OL}/><path d="M44 34 c2 -18 38 -18 40 0z" fill="url(#h-${u})" ${OL}/><path d="M44 33 q20 -4 40 0 l0 5 q-20 -4 -40 0z" fill="#dc2626"/>`
     + `${ring('#f59e0b')}`,
 
-  // Roger: captain's hat with a skull, big moustache, red sea of pirates.
-  roger: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".4" r=".8"><stop offset="0" stop-color="#ef4444"/><stop offset="1" stop-color="#450a0a"/></radialGradient>${clip(u)}`)
-    + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>`
-    + '<path d="M30 76 c-6 22 10 40 34 40 c24 0 40 -18 34 -40z" fill="#7f1d1d"/>'
-    + '<ellipse cx="64" cy="72" rx="24" ry="26" fill="#f2c9a5"/>'
-    + '<path d="M22 46 c10 -26 74 -26 84 0 c-8 6 -18 8 -42 8 c-24 0 -34 -2 -42 -8z" fill="#111827" stroke="#facc15" stroke-width="2.5"/>'
-    + '<g fill="#fff"><circle cx="64" cy="36" r="6"/><path d="M54 44 l20 -6 M54 38 l20 6" stroke="#fff" stroke-width="2.5"/></g><circle cx="62" cy="35" r="1.4" fill="#111827"/><circle cx="66" cy="35" r="1.4" fill="#111827"/>'
-    + '<g fill="#111827"><path d="M52 66 l8 -2 v3z"/><path d="M76 66 l-8 -2 v3z"/></g>'
-    + '<path d="M40 84 c8 -12 18 -6 24 -2 c6 -4 16 -10 24 2 c-6 -2 -10 2 -12 6 c-4 -6 -8 -6 -12 -2 c-4 -4 -8 -4 -12 2 c-2 -4 -6 -8 -12 -6z" fill="#1f2937"/>'
-    + '<path d="M54 96 q10 6 20 0" stroke="#7f1d1d" stroke-width="3" fill="none" stroke-linecap="round"/>'
-    + `${ring('#fbbf24')}`,
+  // Gol D. Roger: the Pirate King — wild black hair, the famous moustache, captain's coat.
+  roger: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".4" r=".85"><stop offset="0" stop-color="#b91c1c"/><stop offset="1" stop-color="#2a0505"/></radialGradient><radialGradient id="f-ID" cx=".45" cy=".35" r=".85"><stop offset="0" stop-color="#fde3cc"/><stop offset="1" stop-color="#e0a77f"/></radialGradient><linearGradient id="k-ID" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dc2626"/><stop offset="1" stop-color="#7f1d1d"/></linearGradient>${clip(u)}`)
+    + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>${rays(u, 'rgba(250,204,21,.12)', 14)}`
+    + `<g clip-path="url(#c-${u})"><path d="M14 128 c4 -26 24 -34 50 -34 c26 0 46 8 50 34z" fill="url(#k-${u})" ${OL}/><path d="M50 96 l14 22 14 -22" fill="#fef3c7" ${OL}/><path d="M30 104 l10 -2 M88 102 l10 2" stroke="#facc15" stroke-width="3" stroke-linecap="round"/></g>`
+    + '<path d="M30 60 c-8 -26 10 -44 34 -44 c24 0 42 18 34 44 c-2 -10 -8 -16 -12 -18 c2 8 -2 12 -6 14 c0 -8 -6 -14 -12 -16 c-2 8 -8 12 -16 12 c2 -6 0 -10 -4 -12 c-4 4 -10 8 -18 20z" fill="#111827" stroke="#000" stroke-width="2"/>'
+    + `<ellipse cx="64" cy="70" rx="24" ry="25" fill="url(#f-${u})" ${OL}/>`
+    + '<path d="M30 60 c2 14 6 20 12 24 c-2 -8 -2 -14 0 -20z M98 60 c-2 14 -6 20 -12 24 c2 -8 2 -14 0 -20z" fill="#111827"/>'
+    + '<g stroke="#111827" stroke-width="3.2" stroke-linecap="round"><path d="M46 58 l12 3"/><path d="M82 58 l-12 3"/></g><g fill="#111827"><ellipse cx="53" cy="66" rx="3" ry="3.6"/><ellipse cx="75" cy="66" rx="3" ry="3.6"/></g><circle cx="54" cy="65" r="1" fill="#fff"/><circle cx="76" cy="65" r="1" fill="#fff"/>'
+    + '<path d="M38 70 c6 -2 14 2 26 6 c12 -4 20 -8 26 -6 c4 0 8 -4 8 -8 c2 8 -4 14 -12 14 c-10 0 -16 2 -22 6 c-6 -4 -12 -6 -22 -6 c-8 0 -14 -6 -12 -14 c0 4 4 8 8 8z" fill="#111827"/>'
+    + '<path d="M50 86 q14 12 28 0 q-14 4 -28 0z" fill="#7f1d1d" stroke="#1c1917" stroke-width="2"/><path d="M52 86.5 q12 3 24 0 l-1 3 q-11 2 -22 0z" fill="#fff"/>'
+    + `${ring('#facc15')}`,
 
-  // Kaido: storm-blue dragon king — two horns, long hair, furious eyes.
-  kaido: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".35" r=".85"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#0f172a"/></radialGradient>${clip(u)}`)
+  // Kaido: the beast king — great curved horns, long black hair, fangs and a fierce glare.
+  kaido: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".45" r=".8"><stop offset="0" stop-color="#3b82f6"/><stop offset=".6" stop-color="#1e3a8a"/><stop offset="1" stop-color="#020617"/></radialGradient><radialGradient id="f-ID" cx=".45" cy=".35" r=".85"><stop offset="0" stop-color="#e7c9a9"/><stop offset="1" stop-color="#b08463"/></radialGradient><linearGradient id="hn-ID" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#d6d3d1"/><stop offset="1" stop-color="#fafaf9"/></linearGradient>${clip(u)}`)
     + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>`
-    + '<path d="M18 22 l10 8 -6 2z M106 18 l-8 10 6 2z" fill="#fde047" opacity=".7"/>'
-    + '<path d="M28 50 c-6 30 -2 56 8 68 h56 c10 -12 14 -38 8 -68z" fill="#111827"/>'
-    + '<ellipse cx="64" cy="70" rx="26" ry="28" fill="#c7b9a6"/>'
-    + '<g fill="#e7e5e4" stroke="#57534e" stroke-width="2"><path d="M50 48 c-16 -6 -26 -18 -24 -38 c6 12 16 20 30 28z"/><path d="M78 48 c16 -6 26 -18 24 -38 c-6 12 -16 20 -30 28z"/></g>'
-    + '<path d="M38 50 c8 -12 44 -12 52 0 c-10 -4 -42 -4 -52 0z" fill="#111827"/>'
-    + '<g stroke="#111827" stroke-width="4" stroke-linecap="round"><path d="M46 60 l12 4"/><path d="M82 60 l-12 4"/></g><g fill="#fef08a"><circle cx="53" cy="67" r="3"/><circle cx="75" cy="67" r="3"/></g>'
-    + '<path d="M48 84 q16 -8 32 0 c-2 14 -8 24 -16 26 c-8 -2 -14 -12 -16 -26z" fill="#111827"/><path d="M54 86 h20" stroke="#f8fafc" stroke-width="2"/>'
-    + `${ring('#818cf8')}`,
+    + `<g clip-path="url(#c-${u})" fill="none" stroke="#60a5fa" stroke-width="3" opacity=".35"><path d="M-6 96 c20 -16 40 8 60 -6 s40 -20 80 4"/><path d="M-6 112 c20 -16 40 8 60 -6 s40 -20 80 4"/></g>`
+    + '<path d="M26 54 c-8 30 -4 56 8 74 h60 c12 -18 16 -44 8 -74 c-8 -20 -56 -20 -76 0z" fill="#0f172a" stroke="#000" stroke-width="2"/>'
+    + `<path d="M46 44 c-18 -6 -28 -20 -24 -40 c6 14 16 22 30 30z" fill="url(#hn-${u})" ${OL}/><path d="M82 44 c18 -6 28 -20 24 -40 c-6 14 -16 22 -30 30z" fill="url(#hn-${u})" ${OL}/>`
+    + `<ellipse cx="64" cy="72" rx="25" ry="27" fill="url(#f-${u})" ${OL}/>`
+    + '<path d="M38 56 c8 -12 44 -12 52 0 c-6 -2 -14 -2 -18 2 c-4 -4 -12 -4 -16 0 c-4 -4 -12 -4 -18 -2z" fill="#0f172a"/>'
+    + '<g stroke="#0f172a" stroke-width="4.5" stroke-linecap="round"><path d="M44 61 l14 5"/><path d="M84 61 l-14 5"/></g>'
+    + '<g fill="#fde047" stroke="#1c1917" stroke-width="1.5"><path d="M48 68 q5 -4 10 0 q-5 3 -10 0z"/><path d="M70 68 q5 -4 10 0 q-5 3 -10 0z"/></g><circle cx="53" cy="68" r="1.6" fill="#1c1917"/><circle cx="75" cy="68" r="1.6" fill="#1c1917"/>'
+    + '<path d="M50 84 q14 -4 28 0 q-2 8 -14 8 q-12 0 -14 -8z" fill="#450a0a" stroke="#1c1917" stroke-width="2"/><path d="M53 85 l3 5 3 -5z M75 85 l-3 5 -3 -5z" fill="#fff"/>'
+    + '<path d="M54 94 c4 10 4 20 10 26 c6 -6 6 -16 10 -26 c-6 4 -14 4 -20 0z" fill="#0f172a"/>'
+    + `${ring('#60a5fa')}`,
 
   // Zoro: green hair, black bandana, scar over a closed eye, three swords.
   zoro: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".4" r=".85"><stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#052e16"/></radialGradient>${clip(u)}`)
@@ -112,24 +117,46 @@ const ART = {
     + '<path d="M56 92 q8 4 16 0" stroke="#7c2d12" stroke-width="3" fill="none" stroke-linecap="round"/>'
     + `${ring('#f8fafc')}`,
 
-  // Usopp: the long nose, curly hair, goggles on the forehead.
-  usopp: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".4" r=".85"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#b45309"/></radialGradient>${clip(u)}`)
+  // Usopp: the great captain of the sea — long nose, big curly hair, goggles, a sling.
+  usopp: (u) => defs(u, `<radialGradient id="g-ID" cx=".5" cy=".45" r=".85"><stop offset="0" stop-color="#fef08a"/><stop offset=".6" stop-color="#f59e0b"/><stop offset="1" stop-color="#7c2d12"/></radialGradient><radialGradient id="f-ID" cx=".45" cy=".35" r=".85"><stop offset="0" stop-color="#d6a07a"/><stop offset="1" stop-color="#9a6a45"/></radialGradient><radialGradient id="l-ID" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fed7aa"/><stop offset=".5" stop-color="#fb923c"/><stop offset="1" stop-color="#c2410c"/></radialGradient>${clip(u)}`)
     + `<circle cx="64" cy="64" r="62" fill="url(#g-${u})"/>`
-    + '<g fill="#111827"><circle cx="34" cy="50" r="13"/><circle cx="46" cy="36" r="13"/><circle cx="64" cy="30" r="14"/><circle cx="82" cy="36" r="13"/><circle cx="94" cy="50" r="13"/><circle cx="30" cy="68" r="10"/><circle cx="98" cy="68" r="10"/></g>'
-    + '<ellipse cx="64" cy="72" rx="24" ry="27" fill="#c68a5c"/>'
-    + '<g><rect x="40" y="44" width="48" height="6" rx="3" fill="#78350f"/><circle cx="54" cy="46" r="8" fill="#f97316" stroke="#78350f" stroke-width="2.5"/><circle cx="74" cy="46" r="8" fill="#f97316" stroke="#78350f" stroke-width="2.5"/><circle cx="52" cy="44" r="2.5" fill="#fff" opacity=".7"/><circle cx="72" cy="44" r="2.5" fill="#fff" opacity=".7"/></g>'
-    + '<g fill="#111827"><ellipse cx="54" cy="66" rx="3" ry="4"/><ellipse cx="74" cy="66" rx="3" ry="4"/></g>'
-    + '<path d="M62 72 h42 c6 0 6 7 0 7 h-42z" fill="#b97a4c" stroke="#7c2d12" stroke-width="2"/>'
-    + '<path d="M52 90 q12 8 24 0" stroke="#7c2d12" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+    + '<g fill="#18181b" stroke="#000" stroke-width="1.5"><circle cx="30" cy="62" r="14"/><circle cx="36" cy="42" r="14"/><circle cx="52" cy="28" r="14"/><circle cx="74" cy="27" r="14"/><circle cx="92" cy="40" r="14"/><circle cx="98" cy="60" r="14"/><circle cx="28" cy="80" r="10"/><circle cx="100" cy="78" r="10"/></g>'
+    + '<g fill="#52525b" opacity=".7"><circle cx="34" cy="38" r="4"/><circle cx="50" cy="24" r="4"/><circle cx="72" cy="22" r="4"/><circle cx="90" cy="35" r="4"/></g>'
+    + `<ellipse cx="64" cy="72" rx="25" ry="27" fill="url(#f-${u})" ${OL}/>`
+    + `<g ${OL}><rect x="36" y="46" width="56" height="7" rx="3.5" fill="#78350f"/><circle cx="52" cy="49" r="9.5" fill="url(#l-${u})"/><circle cx="76" cy="49" r="9.5" fill="url(#l-${u})"/></g><circle cx="49" cy="46" r="3" fill="#fff" opacity=".85"/><circle cx="73" cy="46" r="3" fill="#fff" opacity=".85"/>`
+    + '<g fill="#1c1917"><ellipse cx="53" cy="67" rx="3.4" ry="4.4"/><ellipse cx="75" cy="67" rx="3.4" ry="4.4"/></g><circle cx="54" cy="65.5" r="1.2" fill="#fff"/><circle cx="76" cy="65.5" r="1.2" fill="#fff"/>'
+    + `<path d="M62 72 h44 c5 0 7 7 0 8 h-44z" fill="url(#f-${u})" ${OL}/>`
+    + '<path d="M48 88 q16 12 32 0" stroke="#7c2d12" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 88 q14 9 28 0" stroke="#fde68a" stroke-width="2" fill="none" stroke-linecap="round"/>'
     + `${ring('#78350f')}`,
 };
 
 let uid = 0;
+/**
+ * Your own pictures for skins (optional): assets/skins/images.json maps a skin id to an
+ * image file in assets/skins. A skin with a picture shows it (cut round) instead of the drawing.
+ */
+export const SKIN_IMAGES = {};
+export async function loadSkinImages() {
+  try {
+    const res = await fetch('assets/skins/images.json', { cache: 'no-cache' });
+    if (!res.ok) return;
+    const map = await res.json();
+    for (const [id, file] of Object.entries(map || {})) {
+      if (typeof file === 'string' && /^[\w.-]+\.(png|webp|jpe?g)$/i.test(file)) SKIN_IMAGES[id] = `assets/skins/${file}`;
+    }
+  } catch (e) { /* no pictures: the drawings are used */ }
+}
+/** The picture of a skin, if one was added (used by the game canvas). */
+export const skinImageUrl = (id) => SKIN_IMAGES[id] || null;
+
 /** SVG markup for a skin (falls back to the fly for unknown ids). */
 export function skinSVG(id, size = 128) {
-  const art = ART[id] || ART.fly;
   const u = `s${++uid}`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="${size}" height="${size}" aria-hidden="true">${art(u)}</svg>`;
+  const pic = SKIN_IMAGES[id];
+  const body = pic
+    ? `<defs>${clip(u)}</defs><image href="${pic}" x="1" y="1" width="126" height="126" preserveAspectRatio="xMidYMid slice" clip-path="url(#c-${u})"/>${ring('rgba(255,255,255,.85)', 4)}`
+    : (ART[id] || ART.fly)(u);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="${size}" height="${size}" aria-hidden="true">${body}</svg>`;
 }
 
 /** Rarities, weakest to strongest: common, rare, legendary, mythic (ملحمي — the top). */

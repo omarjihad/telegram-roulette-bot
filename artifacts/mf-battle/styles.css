@@ -619,3 +619,22 @@ input { font: inherit; }
 .g-ctl[data-id='mass'], .g-ctl[data-id='net'], .g-ctl[data-id='leaderboard'], .g-ctl[data-id='chat'], .g-ctl[data-id='minimap'], .g-ctl[data-id='zoom'] { border: 1.5px solid rgba(255, 255, 255, 0.35); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
 .g-ctl[data-id='zoom'] .g-zbtn + .g-zbtn { border-top: 1.5px solid rgba(255, 255, 255, 0.25); }
 .g-tbtn { border-width: 1.5px; border-color: rgba(255, 255, 255, 0.35); }
+
+/* In-game panels: solid colours with a clear edge, the same in dark and light mode, so
+   the map, the top list, chat, mass and the +/- buttons always stand out. */
+.game .g-ctl[data-id='minimap'] { background: linear-gradient(160deg, #0b2a4a, #071a30) !important; border: 2px solid #22e3ff !important; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), 0 0 14px rgba(34, 227, 255, 0.35) !important; }
+.game .g-ctl[data-id='leaderboard'] { background: linear-gradient(160deg, rgba(46, 16, 101, 0.92), rgba(20, 8, 46, 0.92)) !important; border: 2px solid #ffc83d !important; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), 0 0 14px rgba(255, 200, 61, 0.3) !important; }
+.game .g-lb b { color: #ffc83d; font-size: 13px; }
+.game .g-lb li { color: #fff; font-weight: 800; }
+.game .g-lb li.me span, .game .g-lb li.me b { color: #22e3ff; }
+.game .g-ctl[data-id='chat'] { background: rgba(8, 47, 73, 0.82) !important; border: 2px solid #38bdf8 !important; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4) !important; }
+.game .g-chat { color: #fff; text-shadow: 0 1px 2px #000; }
+.game .g-chat-hint { color: #bae6fd; }
+.game .g-ctl[data-id='mass'] { background: linear-gradient(180deg, #ffd34d, #f59e0b) !important; color: #3a1d00 !important; border: 2px solid #fff3b0 !important; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45) !important; font-weight: 900; }
+.game .g-ctl[data-id='net'] { background: rgba(5, 46, 22, 0.9) !important; border: 2px solid #a3ff3a !important; color: #a3ff3a !important; }
+.game .g-ctl[data-id='net'].bad { border-color: #ff8a3d !important; color: #ff8a3d !important; background: rgba(67, 20, 7, 0.9) !important; }
+.game .g-ctl[data-id='zoom'] { background: linear-gradient(180deg, #0891b2, #0e7490) !important; border: 2px solid #cffafe !important; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), 0 4px 0 #164e63 !important; }
+.game .g-zbtn { color: #fff !important; font-size: 26px; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.game .g-ctl[data-id='zoom'] .g-zbtn + .g-zbtn { border-top: 2px solid rgba(255, 255, 255, 0.55) !important; }
+.game .g-tbtn { background: rgba(15, 23, 42, 0.9); border: 2px solid rgba(255, 255, 255, 0.55); }
+.game .g-tbtn.g-exit { background: #dc2626; border-color: #fecaca; }

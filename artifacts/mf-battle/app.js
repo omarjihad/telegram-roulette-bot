@@ -1,4 +1,4 @@
-import { skinSVG, RARITY } from './skins.js';
+import { skinSVG, RARITY, loadSkinImages } from './skins.js';
 import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture, placeIn } from './controls.js';
 import { sfx, setSoundEnabled, unlockSound } from './sound.js';
 import { startGame } from './game.js';
@@ -941,7 +941,7 @@ async function boot() {
   }
   screenEl.innerHTML = '<div class="center-msg"><img src="assets/mf-coin.svg" alt="" /><div class="spin"></div></div>';
   try {
-    await loadHome();
+    await Promise.all([loadHome(), loadSkinImages()]);
     setSoundEnabled(state.profile.settings.sound !== false);
     renderLobby();
     // Keep the lobby fresh (coins, level, best, ranking) without leaving and coming back.

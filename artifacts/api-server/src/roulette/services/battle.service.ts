@@ -479,7 +479,7 @@ export async function recordBattleMatch(user: Pick<IUser, 'telegramId' | 'firstN
  * Who is joining the online room: checks the signed Telegram initData (like every API
  * call), that the account may use MF Battle (developers for now), and loads the skin.
  */
-export async function battleIdentity(initData: string) {
+export async function battleIdentityData(initData: string) {
   let parsed;
   try {
     parsed = verifyTelegramInitData(initData);
@@ -494,13 +494,31 @@ export async function battleIdentity(initData: string) {
   return {
     telegramId: user.telegramId,
     name: displayName(user).slice(0, 24),
-    skin: profile.skin,
+    skin: SKIN_IDS.has(profile.skin) ? profile.skin : DEFAULT_SKIN,
     level: battleLevel(profile.xp ?? 0).level,
     startMass: startMassOf(profile),
+    throws: { throwOwned: profile.throwOwned ?? 1, x20Until: profile.x20Until ?? null, x50Until: profile.x50Until ?? null },
+  };
+}
+
+/** A finished online life, by Telegram id (used by the Cloudflare game server too). */
+export async function recordBattleMatchById(telegramId: number, match: { mass: number; seconds: number }) {
+  const user = await User.findOne({ telegramId }).select('telegramId firstName username');
+  if (user) await recordBattleMatch(user, match);
+}
+
+/**
+ * Who is joining the online room: checks the signed Telegram initData (like every API
+ * call), that the account may use MF Battle (developers for now), and loads the skin.
+ */
+export async function battleIdentity(initData: string) {
+  const d = await battleIdentityData(initData);
+  return {
+    ...d,
     // Checked on every throw, so a 15-minute ad unlock ends on time mid-game.
-    canThrow: (lv: number) => allowedThrows(profile).includes(lv),
-    record: (match: { mass: number; seconds: number }) => recordBattleMatch(user, match),
-    onKill: (victimMass: number) => rewardBattleKill(user.telegramId, victimMass),
+    canThrow: (lv: number) => allowedThrows(d.throws).includes(lv),
+    record: (match: { mass: number; seconds: number }) => recordBattleMatchById(d.telegramId, match),
+    onKill: (victimMass: number) => rewardBattleKill(d.telegramId, victimMass),
   };
 }
 

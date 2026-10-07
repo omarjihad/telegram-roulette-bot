@@ -42,6 +42,8 @@ const envSchema = z.object({
     .optional()
     .default('')
     .refine((v) => v === '' || /^wss:\/\//.test(v), { message: 'MF_BATTLE_WS_URL must be empty or start with wss://' }),
+  // Shared secret between this server and the MF Battle game server on Cloudflare.
+  BATTLE_INTERNAL_KEY: z.string().optional().default(''),
   // When MF Battle opened to everyone (ISO date). Limited packs (One Piece) sell for 7 days after it.
   MF_BATTLE_LAUNCH_DATE: z.string().optional().default(''),
   SUPPORT_USERNAME: z.string().optional().default('support'),
