@@ -5,6 +5,7 @@ export const START_MASS: number;
 export const REVENGE_MASS: number;
 export const THROW_SPEEDS: number[];
 export const BOT_NAMES: string[];
+export const MERGE_SECONDS: number;
 export function rad(m: number): number;
 
 export interface SimOwner {
@@ -13,6 +14,7 @@ export interface SimOwner {
   bot: boolean;
   name: string;
   skin: string;
+  level: number;
   hue: number;
   cells: SimCell[];
   dead: boolean;
@@ -24,10 +26,10 @@ export interface SimOwner {
 }
 export interface SimCell { id: number; x: number; y: number; m: number; r: number; owner: SimOwner }
 export interface SimFood { id: number; x: number; y: number; c: number; r: number }
-export interface SimPellet { id: number; x: number; y: number; m: number; r: number; hue: number; owner: SimOwner }
+export interface SimPellet { id: number; x0: number; y0: number; x: number; y: number; vx: number; vy: number; born: number; m: number; r: number; hue: number; owner: SimOwner }
 export interface SimThing { id: number; x: number; y: number; m: number; r: number }
 export type SimEvent =
-  | { type: 'kill'; victim: SimOwner; killer: SimOwner | null }
+  | { type: 'kill'; victim: SimOwner; killer: SimOwner | null; mass: number }
   | { type: 'orb'; owner: SimOwner }
   | { type: 'pop'; owner: SimOwner };
 
@@ -51,7 +53,9 @@ export interface SimWorld {
   events: SimEvent[];
   foodAdded: SimFood[];
   foodRemoved: number[];
-  addOwner(o: { name: string; skin?: string; bot?: boolean; mass?: number; near?: { x: number; y: number } | null; hue?: number }): SimOwner;
+  pelletAdded: SimPellet[];
+  pelletRemoved: number[];
+  addOwner(o: { name: string; skin?: string; bot?: boolean; mass?: number; near?: { x: number; y: number } | null; hue?: number; level?: number }): SimOwner;
   removeOwner(o: SimOwner): void;
   respawn(o: SimOwner, mass?: number, near?: { x: number; y: number } | null): void;
   centerOf(o: SimOwner): { x: number; y: number; m: number };
@@ -61,4 +65,4 @@ export interface SimWorld {
   step(dt: number): void;
 }
 
-export function createWorld(opts?: { bots?: number; food?: number; viruses?: number; orbs?: number; trackFood?: boolean }): SimWorld;
+export function createWorld(opts?: { bots?: number; food?: number; viruses?: number; orbs?: number; trackNet?: boolean }): SimWorld;

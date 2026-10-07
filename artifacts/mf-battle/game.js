@@ -8,7 +8,7 @@ import { skinSVG } from './skins.js';
 import { CONTROLS, byId, fullLayout, controlHTML, placeIn } from './controls.js';
 import {
   createWorld, FoodGrid, WORLD, START_MASS, REVENGE_MASS, EAT_RATIO, THROW_SPEEDS, MAP_SECTIONS,
-  FOOD_COLORS, rad, sectionOf, foodRadius,
+  FOOD_COLORS, rad, sectionOf, foodRadius, speedOf, pelletAt, pelletRadius, virusRadius,
 } from './sim.js';
 
 const BOT_TAUNTS = ['هههه 😂', 'تعال تعال', 'GG', 'منو بعد؟ 😎', 'ركض ركض 🏃', 'اكلتك 🍽️', 'لا تزعل 😅', 'جيبوا غيره'];
@@ -127,6 +127,9 @@ export function startGame(opts) {
   chatBar.innerHTML = '<input maxlength="60" placeholder="اكتب رسالتك…" autocomplete="off" /><button type="submit">إرسال</button><button type="button" data-cancel>✕</button>';
   hud.appendChild(chatBar);
   const chatInput = chatBar.querySelector('input');
+  const popEl = document.createElement('div');
+  popEl.className = 'g-pop';
+  hud.appendChild(popEl);
   const zoomTip = document.createElement('div');
   zoomTip.className = 'g-zoomtip';
   zoomTip.hidden = true;
@@ -190,6 +193,16 @@ export function startGame(opts) {
   const cam = { x: WORLD / 2, y: WORLD / 2, s: 1, ready: false };
   let userZoom = clamp(Number(storage.get('mfb-zoom')) || 1, ZOOM_MIN, ZOOM_MAX);
 
+  /** A short note that floats up in the middle (what you ate, +100, coins…), not in the chat. */
+  function popText(text) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    popEl.appendChild(el);
+    while (popEl.children.length > 3) popEl.firstChild.remove();
+    setTimeout(() => el.remove(), 1600);
+  }
+
+  /** The chat shows players' messages only. */
   function say(text, color = '#e2e8f0') {
     if (!settings.chat) return;
     chat.push({ text, color });
@@ -199,9 +212,9 @@ export function startGame(opts) {
 
   // ───────────── Practice: the world runs here ─────────────
   function practiceDriver() {
-    const FOOD = settings.quality === 'low' ? 2200 : settings.quality === 'high' ? 3600 : 3000;
-    const world = createWorld({ bots: 26, food: FOOD });
-    const me = world.addOwner({ name: player.name || 'أنت', skin: profile.skin || 'classic', mass: START_MASS });
+    const FOOD = settings.quality === 'low' ? 4500 : settings.quality === 'high' ? 7000 : 6000;
+    const world = createWorld({ bots: 30, food: FOOD });
+    const me = world.addOwner({ name: player.name || 'أنت', skin: profile.skin || 'classic', mass: START_MASS, level: profile.level || 1 });
     const d = {
       online: false,
       ready: true,
@@ -234,13 +247,13 @@ export function startGame(opts) {
             if (ev.victim === me) {
               died({ killer: ev.killer ? ev.killer.name : null, maxMass: me.stats.maxMass, eaten: me.stats.eaten, secs: world.time - me.stats.born, counts: false });
             } else if (ev.killer === me) {
-              say(`🍽️ أكلت <b>${escName(ev.victim.name)}</b>!`, '#a3ff3a');
+              popText(`🍽️ ${ev.victim.name}`);
               if (haptic) haptic('medium');
-            } else if (ev.killer && Math.random() < 0.4) {
-              say(`${escName(ev.killer.name)}: ${pick(BOT_TAUNTS)}`, '#cbd5e1');
+            } else if (ev.killer && ev.killer.bot && Math.random() < 0.2) {
+              say(`<b>${escName(ev.killer.name)}:</b> ${pick(BOT_TAUNTS)}`, '#cbd5e1');
             }
           } else if (ev.type === 'orb' && ev.owner === me) {
-            say('✨ +100 كتلة!', '#ffc83d');
+            popText('+100');
           } else if (ev.type === 'pop' && ev.owner === me && haptic) {
             haptic('heavy');
           }
@@ -252,7 +265,7 @@ export function startGame(opts) {
         if (Math.random() < 0.6) {
           setTimeout(() => {
             const alive = world.owners.filter((o) => o.bot && !o.dead);
-            if (alive.length && !over) say(`${escName(pick(alive).name)}: ${pick(BOT_REPLIES)}`, '#cbd5e1');
+            if (alive.length && !over) say(`<b>${escName(pick(alive).name)}:</b> ${pick(BOT_REPLIES)}`, '#cbd5e1');
           }, rand(900, 2200));
         }
       },
@@ -307,6 +320,8 @@ export function startGame(opts) {
         for (const id of msg.fr) foods.remove(id);
         const fa = msg.fa;
         for (let i = 0; i < fa.length; i += 4) foods.add({ id: fa[i], x: fa[i + 1], y: fa[i + 2], c: fa[i + 3], r: foodRadius(fa[i]) });
+        addPellets(msg.pa);
+        for (const id of msg.pr) pellets.delete(id);
       } else if (msg.t === 'ow') addOwners(msg.ow);
       else if (msg.t === 'lb') {
         ranking = msg.r.map(([id, m]) => ({ name: ownerOf(id).name, m, me: id === meId }));
@@ -319,18 +334,21 @@ export function startGame(opts) {
         foods.clear();
         const f = msg.food;
         for (let i = 0; i < f.length; i += 4) foods.add({ id: f[i], x: f[i + 1], y: f[i + 2], c: f[i + 3], r: foodRadius(f[i]) });
+        pellets.clear();
+        addPellets(msg.pellets || []);
         d.ready = true;
         alive = true;
         hideOverlay();
-        say(`🌐 دخلت الأونلاين · ${msg.players} لاعب بالغرفة`, '#22e3ff');
       } else if (msg.t === 'chat') {
         say(`<b style="color:${hueColor(msg.h)}">${escName(msg.n)}:</b> ${escName(msg.x)}`, '#e2e8f0');
-      } else if (msg.t === 'sys') {
-        say(escName(msg.x), '#ffc83d');
       } else if (msg.t === 'ev') {
-        if (msg.e === 'orb') say('✨ +100 كتلة!', '#ffc83d');
-        else if (msg.e === 'ate') { say(`🍽️ أكلت <b>${escName(msg.n)}</b>!`, '#a3ff3a'); if (haptic) haptic('medium'); }
-        else if (msg.e === 'pop' && haptic) haptic('heavy');
+        if (msg.e === 'orb') popText('+100');
+        else if (msg.e === 'ate') {
+          popText(`🍽️ ${msg.n}${msg.coins ? ` · +${msg.coins} MF` : ''}`);
+          if (msg.coins) opts.onCoins?.(msg.coins, msg.lv);
+          if (msg.up) setTimeout(() => popText(`⭐ لفل ${msg.lv}!`), 900);
+          if (haptic) haptic('medium');
+        } else if (msg.e === 'pop' && haptic) haptic('heavy');
       } else if (msg.t === 'dead') {
         alive = false;
         died({ killer: msg.k, maxMass: msg.mx, eaten: msg.ea, secs: msg.sec, counts: true });
@@ -346,10 +364,21 @@ export function startGame(opts) {
     const pinger = setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
     function addOwners(list) {
-      for (const [id, name, skin, hue] of list) {
+      for (const [id, name, skin, hue, level] of list) {
         const o = owners.get(id);
-        if (o) Object.assign(o, { name, skin, hue, color: hueColor(hue) }); // same object, so cells update too
-        else owners.set(id, { id, name, skin, hue, color: hueColor(hue) });
+        if (o) Object.assign(o, { name, skin, hue, level, color: hueColor(hue) }); // same object, so cells update too
+        else owners.set(id, { id, name, skin, hue, level, color: hueColor(hue) });
+      }
+    }
+    // Thrown mass comes once, with its throw; it flies on the same curve as on the server.
+    function addPellets(list) {
+      const now = performance.now();
+      for (let i = 0; i < list.length; i += 7) {
+        const p = { id: list[i], x0: list[i + 1], y0: list[i + 2], vx: list[i + 3], vy: list[i + 4], hue: list[i + 5], born: now - list[i + 6], r: pelletRadius };
+        const at = pelletAt(p, (now - p.born) / 1000);
+        p.x = at.x;
+        p.y = at.y;
+        pellets.set(p.id, p);
       }
     }
     function onSnapshot(msg) {
@@ -372,19 +401,15 @@ export function startGame(opts) {
         cell.owner = ownerOf(c[i + 1]);
       }
       for (const id of cells.keys()) if (!seen.has(id)) cells.delete(id);
-      const p = msg.p;
-      const seenP = new Set();
-      for (let i = 0; i < p.length; i += 4) {
-        const id = p[i];
-        seenP.add(id);
-        let pel = pellets.get(id);
-        if (!pel) { pel = { id, x: p[i + 1], y: p[i + 2], r: rad(13) * 0.55, hue: p[i + 3] }; pellets.set(id, pel); }
-        pel.tx = p[i + 1];
-        pel.ty = p[i + 2];
-      }
-      for (const id of pellets.keys()) if (!seenP.has(id)) pellets.delete(id);
+      const old = new Map(viruses.map((v) => [v.id, v]));
       viruses = [];
-      for (let i = 0; i < msg.v.length; i += 2) viruses.push({ x: msg.v[i], y: msg.v[i + 1], r: rad(100) * 0.9 });
+      for (let i = 0; i < msg.v.length; i += 4) {
+        const v = old.get(msg.v[i]) || { id: msg.v[i], x: msg.v[i + 1], y: msg.v[i + 2], r: msg.v[i + 3] };
+        v.tx = msg.v[i + 1];
+        v.ty = msg.v[i + 2];
+        v.r = msg.v[i + 3];
+        viruses.push(v);
+      }
       orbs = [];
       for (let i = 0; i < msg.o.length; i += 3) orbs.push({ id: msg.o[i], x: msg.o[i + 1], y: msg.o[i + 2], r: 26, ph: msg.o[i] });
       alive = !!msg.al;
@@ -413,14 +438,29 @@ export function startGame(opts) {
       update(dt) {
         t += dt;
         // Glide towards the latest server positions (the server sends 20 updates a second).
+        // Your own pieces are drawn a little ahead, the way you are steering, so turning
+        // answers at once instead of after the round trip to the server.
         const k = 1 - Math.exp(-dt * 16);
+        const lead = clamp((rtt || 80) / 2000 + 0.06, 0.06, 0.35);
+        const dl = Math.hypot(input.dx, input.dy) || 1;
+        const steer = paused || over ? 0 : input.m;
         for (const c of cells.values()) {
-          c.x += (c.tx - c.x) * k;
-          c.y += (c.ty - c.y) * k;
+          let tx = c.tx, ty = c.ty;
+          if (c.owner.id === meId && steer > 0) {
+            const ahead = speedOf(c.m) * steer * lead;
+            tx += (input.dx / dl) * ahead;
+            ty += (input.dy / dl) * ahead;
+          }
+          c.x += (tx - c.x) * k;
+          c.y += (ty - c.y) * k;
           c.r += (c.tr - c.r) * k;
         }
-        for (const p of pellets.values()) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+        for (const v of viruses) { v.x += (v.tx - v.x) * k; v.y += (v.ty - v.y) * k; }
         const now = performance.now();
+        for (const p of pellets.values()) {
+          const age = (now - p.born) / 1000;
+          if (age < 3.2) { const at = pelletAt(p, age); p.x = at.x; p.y = at.y; }
+        }
         if (d.ready && now - lastIn > 50) {
           lastIn = now;
           const m = paused || over ? 0 : input.m;
@@ -463,7 +503,6 @@ export function startGame(opts) {
     chat.length = 0;
     chatEl.innerHTML = '';
     D = online && online.url ? onlineDriver(online) : practiceDriver();
-    if (!D.online) say('⚔️ تدريب ضد البوتات · ارمي كتلة كطُعم، وإذا قرّب البوت انقسم عليه', '#ffc83d');
   }
 
   // ───────────── Camera & drawing ─────────────
@@ -545,12 +584,16 @@ export function startGame(opts) {
       ctx.fill();
     }
 
-    const cells = [];
-    for (const c of D.cells()) if (vis(c.x, c.y, c.r)) cells.push(c);
-    cells.sort((a, b) => a.r - b.r);
+    // Cells and viruses together, smallest first: whoever is bigger is drawn on top, so a
+    // small piece can hide under a virus and a big one covers it.
+    const things = [];
+    for (const c of D.cells()) if (vis(c.x, c.y, c.r)) things.push(c);
+    for (const v of D.viruses()) if (vis(v.x, v.y, v.r + 10)) things.push({ virus: true, x: v.x, y: v.y, r: v.r });
+    things.sort((a, b) => a.r - b.r);
     const glow = settings.quality === 'high';
     const meId = D.meId;
-    for (const c of cells) {
+    for (const c of things) {
+      if (c.virus) { drawVirus(c, time); continue; }
       const own = c.owner;
       const isMe = own.id === meId;
       const sprite = skinSprite(own.skin);
@@ -585,26 +628,13 @@ export function startGame(opts) {
           ctx.strokeText(short(c.m), c.x, c.y + fs * 0.9);
           ctx.fillText(short(c.m), c.x, c.y + fs * 0.9);
         }
+        // Level badge: a green star with the number, next to the name.
+        if (own.level && c.r * s > 22) {
+          ctx.font = `900 ${fs}px Cairo, Tahoma, sans-serif`;
+          const w = Math.min(c.r * 1.5, ctx.measureText(own.name).width);
+          drawLevel(c.x + w / 2 + fs * 0.45, c.y - fs * 0.1, fs * 0.5, own.level);
+        }
       }
-    }
-
-    for (const v of D.viruses()) {
-      if (!vis(v.x, v.y, v.r + 10)) continue;
-      ctx.fillStyle = 'rgba(57, 255, 120, 0.85)';
-      ctx.strokeStyle = '#16a34a';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      const spikes = 22;
-      for (let i = 0; i <= spikes * 2; i++) {
-        const a = (i / (spikes * 2)) * Math.PI * 2 + time * 0.2;
-        const rr = i % 2 ? v.r : v.r + 9;
-        const px = v.x + Math.cos(a) * rr;
-        const py = v.y + Math.sin(a) * rr;
-        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
     }
 
     // The arrow: which way you are heading, just outside your biggest piece.
@@ -628,6 +658,47 @@ export function startGame(opts) {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  function drawVirus(v, time) {
+    ctx.fillStyle = '#33e06a';
+    ctx.strokeStyle = '#15803d';
+    ctx.lineWidth = Math.max(4, v.r * 0.06);
+    ctx.beginPath();
+    const spikes = 22;
+    for (let i = 0; i <= spikes * 2; i++) {
+      const a = (i / (spikes * 2)) * Math.PI * 2 + time * 0.2;
+      const rr = i % 2 ? v.r : v.r + v.r * 0.1;
+      const px = v.x + Math.cos(a) * rr;
+      const py = v.y + Math.sin(a) * rr;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawLevel(x, y, size, level) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#16a34a';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = size * 0.1;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rr = i % 2 ? size * 0.45 : size;
+      if (i) ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = `900 ${size * 0.72}px Cairo, Tahoma, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(level), 0, size * 0.08);
+    ctx.restore();
   }
 
   // ───────────── HUD ─────────────
@@ -902,7 +973,8 @@ export function startGame(opts) {
       layout = fullLayout(saved || {});
       placeControls();
       paused = false;
-      hideOverlay();
+      // If you were eaten while editing, the death card is up: leave it there.
+      if (!over) hideOverlay();
     });
   }
   topBar.querySelectorAll('[data-top]').forEach((b) => {
@@ -918,6 +990,7 @@ export function startGame(opts) {
   // ───────────── Death, revenge and ads ─────────────
   function died(info) {
     over = true;
+    paused = false;
     deathsSinceAd++;
     input.throwing = false;
     releaseJoy();
@@ -952,7 +1025,7 @@ export function startGame(opts) {
             hideOverlay();
             over = false;
             const near = D.respawn(true, info.killer);
-            say(`🔥 الانتقام! رجعت بـ ${REVENGE_MASS}${near ? ` قريب من ${escName(near)}` : ''}`, '#ff8a3d');
+            popText(`🔥 الانتقام! ${REVENGE_MASS}${near ? ` · ${near}` : ''}`);
           } catch (err) {
             rev.disabled = false;
             c.querySelector('[data-msg]').textContent = err && err.message ? err.message : 'ما اكو إعلان هسه، جرّب بعد شوية';

@@ -503,6 +503,9 @@ input { font: inherit; }
 .game.light .g-ctl[data-id='joystick'] .ctl-joy-knob { background: rgba(0, 0, 0, 0.3); }
 .g-ctl[data-id='net'] { background: rgba(10, 12, 30, 0.55); font-size: 12px; pointer-events: none; color: #a3ff3a; direction: ltr; }
 .g-ctl[data-id='net'].bad { color: #ff8a3d; }
+.g-pop { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; z-index: 3; }
+.g-pop div { padding: 4px 14px; border-radius: 999px; background: rgba(10, 12, 30, 0.7); color: #fde68a; font-weight: 900; font-size: 15px; white-space: nowrap; animation: pop-up 1.6s ease-out forwards; }
+@keyframes pop-up { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 12% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-18px); } }
 .g-zoomtip { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); padding: 6px 14px; border-radius: 999px; background: rgba(10, 12, 30, 0.75); color: #fff; font-weight: 900; font-size: 14px; pointer-events: none; }
 .g-zoomtip[hidden] { display: none; }
 .g-zbtn.hit { animation: press 0.16s ease-out; }
@@ -553,3 +556,15 @@ input { font: inherit; }
 
 /* The ad frame (when the game runs on Cloudflare the ad plays from the bot's domain). */
 .ad-frame { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; z-index: 1000; background: transparent; }
+
+/* Telegram photo of a ranked player (the ranking shows people, not skins). */
+.person { position: relative; display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, #9b5cff, #22e3ff); color: #fff; font-weight: 900; line-height: 1; }
+.person img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+
+/* Level badge next to the name in the lobby. */
+.lvl { display: inline-flex; align-items: center; gap: 5px; margin-inline-start: 6px; vertical-align: middle; }
+.lvl b { padding: 1px 8px; border-radius: 999px; background: #16a34a; color: #fff; font-size: calc(var(--u) * 2.8); font-weight: 900; }
+.lvl i { width: calc(var(--u) * 10); height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.lvl em { display: block; height: 100%; background: #a3ff3a; }
+.pod-skin .person { width: 100% !important; height: 100% !important; box-shadow: none !important; }

@@ -5,34 +5,41 @@
 // viruses and golden +100 orbs. step(dt) moves everything forward; whatever happened
 // (someone eaten, an orb taken…) is pushed to world.events for the caller to read.
 
-export const WORLD = 9000;
+export const WORLD = 16000;
 export const START_MASS = 20;
 export const REVENGE_MASS = 500;
 export const MIN_SPLIT = 36;
 export const MAX_CELLS = 16;
 export const MAX_CELL_MASS = 23000; // one piece never grows past this; the rest is lost
+export const BOT_MAX_MASS = 1500; // a bot bigger than this drops its mass on the ground
+export const MERGE_SECONDS = 20; // split pieces join back together on their own after this
 export const EAT_RATIO = 1.25;
 export const THROW_SPEEDS = [1, 2, 5, 10, 20, 50];
-export const MAP_SECTIONS = 3;
+export const MAP_SECTIONS = 4;
 export const FOOD_COLORS = ['#ff3b6b', '#ff8a3d', '#ffc83d', '#a3ff3a', '#22e3ff', '#9b5cff', '#ff2bd6', '#4ade80', '#60a5fa'];
 export const BOT_NAMES = ['SASUKE', 'KONAN', 'زيد', 'دندون', 'BROKEN', 'Cherry', 'Shadow', 'علي', 'مصطفى', 'Sniper', 'Ghost', 'Ninja', 'حيدر', 'MF_Fan', 'Lulu', 'Rambo', 'King', 'سجاد', 'Pro_IQ', 'Viper', 'أبو حسين', 'Zero', 'Joker', 'كرار', 'Storm', 'Toxic', 'Hunter', 'منتظر', 'Blaze', 'Ace'];
 export const BOT_SKINS = ['classic', 'mf', 'ocean', 'lava', 'neon', 'toxic', 'tiger', 'snake', 'galaxy', 'ziggurat', 'skull', 'crown', 'dragon'];
+export const VIRUS_MASS = 100;
+export const PELLET_MASS = 13;
 
 const EJECT_COST = 16;
-const EJECT_MASS = 13;
 const EJECT_MIN = 35;
-const VIRUS_MASS = 100;
+const PELLET_SPEED = 1700; // fades at 4/s, so a pellet flies about 425
+const PELLET_LIFE = 45; // seconds a pellet stays on the ground
+const MAX_PELLETS = 900;
+const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
 const ORB_MASS = 100;
-const MAX_PELLETS = 1600;
 const GRID = 300;
 
 export const rad = (m) => Math.sqrt(m) * 10;
+export const virusRadius = (fed = 0) => rad(VIRUS_MASS) * 0.9 * (1 + fed * 0.05);
+export const pelletRadius = rad(PELLET_MASS) * 0.55;
 /** Bigger is slower, but never stuck. */
-export const speedOf = (m) => Math.max(70, 1000 * Math.pow(m, -0.42));
+export const speedOf = (m) => Math.max(85, 1000 * Math.pow(m, -0.4));
 /** Throws per second for each throw-speed level: ×10 ≈ 14 a second, ×50 = 50 a second. */
 export const throwRate = (level) => 5 + THROW_SPEEDS[level] * 0.9;
-/** Seconds before split pieces start pulling together and merge on their own. */
-export const mergeDelay = (m) => Math.min(12, 3 + m * 0.0004);
+/** How far a split half flies: enough to catch someone in front, never across the map. */
+export const splitFlight = (r) => Math.min(1300, 260 + r * 1.6);
 export const sectionOf = (x, y) => {
   const n = WORLD / MAP_SECTIONS;
   const col = clamp(Math.floor(x / n), 0, MAP_SECTIONS - 1);
@@ -40,6 +47,11 @@ export const sectionOf = (x, y) => {
   return row * MAP_SECTIONS + col + 1;
 };
 export const foodRadius = (id) => 6 + (id % 4);
+/** Where a thrown pellet is `age` seconds after it left (the same on server and phone). */
+export function pelletAt(p, age) {
+  const k = (1 - Math.exp(-4 * Math.min(age, 3))) / 4;
+  return { x: clamp(p.x0 + p.vx * k, 10, WORLD - 10), y: clamp(p.y0 + p.vy * k, 10, WORLD - 10) };
+}
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
@@ -82,11 +94,11 @@ export class FoodGrid {
 }
 
 /**
- * opts: bots (how many), food, viruses, orbs, trackFood (keep lists of food added/removed
- * for the network), botMass (mass mix for bots).
+ * opts: bots (how many), food, viruses, orbs, trackNet (keep lists of food and pellets
+ * added/removed, for the online room to send).
  */
 export function createWorld(opts = {}) {
-  const cfg = { bots: 26, food: 3000, viruses: 40, orbs: 45, trackFood: false, ...opts };
+  const cfg = { bots: 30, food: 6000, viruses: 80, orbs: 90, trackNet: false, ...opts };
   let nextId = 1;
   const w = {
     time: 0,
@@ -99,6 +111,8 @@ export function createWorld(opts = {}) {
     events: [],
     foodAdded: [],
     foodRemoved: [],
+    pelletAdded: [],
+    pelletRemoved: [],
     timers: [],
   };
 
@@ -107,11 +121,11 @@ export function createWorld(opts = {}) {
     const f = { id: nextId++, x, y, c: (Math.random() * FOOD_COLORS.length) | 0 };
     f.r = foodRadius(f.id);
     w.foods.add(f);
-    if (cfg.trackFood) w.foodAdded.push(f);
+    if (cfg.trackNet) w.foodAdded.push(f);
   }
   function eatFood(f) {
     w.foods.remove(f.id);
-    if (cfg.trackFood) w.foodRemoved.push(f.id);
+    if (cfg.trackNet) w.foodRemoved.push(f.id);
   }
 
   function safeSpot(mass, near = null) {
@@ -134,32 +148,45 @@ export function createWorld(opts = {}) {
     return c;
   }
 
-  function addVirus() {
-    const s = safeSpot(200);
-    w.viruses.push({ id: nextId++, x: s.x, y: s.y, m: VIRUS_MASS, r: rad(VIRUS_MASS) * 0.9 });
+  function addVirus(x, y, vx = 0, vy = 0) {
+    const s = x === undefined ? safeSpot(200) : { x, y };
+    w.viruses.push({ id: nextId++, x: s.x, y: s.y, m: VIRUS_MASS, r: virusRadius(0), fed: 0, vx, vy });
   }
   function addOrb() {
     w.orbs.push({ id: nextId++, x: rand(150, WORLD - 150), y: rand(150, WORLD - 150), r: 26, m: ORB_MASS, ph: rand(0, 6.28) });
   }
   function later(seconds, fn) { w.timers.push({ at: w.time + seconds, fn }); }
 
+  function addPellet(o, x, y, ux, uy) {
+    const p = { id: nextId++, x0: x, y0: y, x, y, vx: ux * PELLET_SPEED, vy: uy * PELLET_SPEED, m: PELLET_MASS, r: pelletRadius, hue: o.hue, born: w.time, owner: o };
+    w.pellets.push(p);
+    if (cfg.trackNet) w.pelletAdded.push(p);
+  }
+  function dropPellet(p) {
+    if (p.m <= 0) return;
+    p.m = 0;
+    if (cfg.trackNet) w.pelletRemoved.push(p.id);
+  }
+
   /** A player or bot. */
-  w.addOwner = ({ name, skin = 'classic', bot = false, mass = START_MASS, near = null, hue } = {}) => {
+  w.addOwner = ({ name, skin = 'classic', bot = false, mass = START_MASS, near = null, hue, level } = {}) => {
     const o = {
       id: nextId++,
       ver: 1,
       bot,
       name: String(name || '').slice(0, 24) || 'لاعب',
       skin,
+      level: Number.isFinite(level) ? level : bot ? 1 + ((Math.random() * 60) | 0) : 1,
       hue: Number.isFinite(hue) ? hue : (Math.random() * 360) | 0,
       cells: [],
       dead: true,
       respawnAt: 0,
       dir: { x: 0, y: 0, m: 0 },
+      aim: null, // where throws go when it isn't the way you are heading (bots dropping mass)
       throwing: false,
       throwLevel: 0,
       throwT: 0,
-      ai: { next: 0, aggr: rand(0.35, 1), greed: rand(0.45, 0.95), wander: { x: rand(0, WORLD), y: rand(0, WORLD) } },
+      ai: { next: 0, aggr: rand(0.35, 1), greed: rand(0.5, 0.95), feeder: Math.random() < 0.4, wander: { x: rand(0, WORLD), y: rand(0, WORLD) } },
       stats: { maxMass: mass, eaten: 0, born: 0 },
       killer: null,
     };
@@ -186,6 +213,7 @@ export function createWorld(opts = {}) {
     o.dead = false;
     o.killer = null;
     o.throwing = false;
+    o.aim = null;
     o.dir = { x: 0, y: 0, m: 0 };
     o.stats = { maxMass: mass, eaten: 0, born: w.time };
   };
@@ -204,7 +232,7 @@ export function createWorld(opts = {}) {
   }
 
   // ───────────── Actions ─────────────
-  /** Every piece big enough splits in two; the new half shoots forward far enough to catch someone. */
+  /** Every piece big enough splits in two; the new half shoots forward to catch someone. */
   w.split = (o, dx, dy) => {
     if (o.dead) return false;
     const len = Math.hypot(dx, dy);
@@ -217,14 +245,13 @@ export function createWorld(opts = {}) {
       const half = c.m / 2;
       c.m = half;
       c.r = rad(half);
-      const delay = mergeDelay(half * 2);
-      c.mergeAt = w.time + delay;
+      c.mergeAt = w.time + MERGE_SECONDS;
       const piece = newCell(o, c.x + ux * c.r * 0.5, c.y + uy * c.r * 0.5, half);
-      // Launch speed for a flight of about 300 + 2.4 radii (the boost fades at rate 4/s).
-      const v = 4 * (300 + piece.r * 2.4);
+      // The boost fades at 4/s, so this speed gives a flight of splitFlight().
+      const v = 4 * splitFlight(piece.r);
       piece.bx = ux * v;
       piece.by = uy * v;
-      piece.mergeAt = w.time + delay;
+      piece.mergeAt = w.time + MERGE_SECONDS;
       o.cells.push(piece);
       did = true;
     }
@@ -240,10 +267,10 @@ export function createWorld(opts = {}) {
       if (c.m < EJECT_MIN) continue;
       c.m -= EJECT_COST;
       c.r = rad(c.m);
-      const r = rad(EJECT_MASS) * 0.55;
-      w.pellets.push({ id: nextId++, x: c.x + ux * (c.r + r), y: c.y + uy * (c.r + r), vx: ux * 1700, vy: uy * 1700, m: EJECT_MASS, r, hue: o.hue, born: w.time, owner: o });
+      addPellet(o, c.x + ux * (c.r + pelletRadius), c.y + uy * (c.r + pelletRadius), ux, uy);
     }
-    if (w.pellets.length > MAX_PELLETS) w.pellets.splice(0, w.pellets.length - MAX_PELLETS);
+    let extra = w.pellets.length - MAX_PELLETS;
+    for (let i = 0; extra > 0 && i < w.pellets.length; i++) if (w.pellets[i].m > 0) { dropPellet(w.pellets[i]); extra--; }
   };
 
   function popOnVirus(c) {
@@ -255,12 +282,12 @@ export function createWorld(opts = {}) {
     const each = c.m / (pieces + 1);
     c.m = each;
     c.r = rad(each);
-    c.mergeAt = w.time + mergeDelay(each * (pieces + 1));
+    c.mergeAt = w.time + MERGE_SECONDS;
     for (let i = 0; i < pieces; i++) {
       const a = (i / pieces) * Math.PI * 2 + rand(-0.2, 0.2);
       const p = newCell(o, c.x, c.y, each);
-      p.bx = Math.cos(a) * 2200;
-      p.by = Math.sin(a) * 2200;
+      p.bx = Math.cos(a) * 1400;
+      p.by = Math.sin(a) * 1400;
       p.mergeAt = c.mergeAt;
       o.cells.push(p);
     }
@@ -276,6 +303,18 @@ export function createWorld(opts = {}) {
     for (const c of cells) { if (c.m > big.m) big = c; if (c.m < small.m) small = c; }
     const { x: cx, y: cy, m: total } = w.centerOf(o);
     const view = 560 + Math.sqrt(total) * 22;
+    o.throwing = false;
+    o.aim = null;
+
+    // Thrown mass is tempting. Whoever is throwing it looks friendly, so the bot walks
+    // right up to them — that is the bait: throw, let it come close, then split on it.
+    let bait = null, baitD = Infinity;
+    for (const p of w.pellets) {
+      if (p.owner === o || p.m <= 0) continue;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d < 620 + big.r && d < baitD) { baitD = d; bait = p; }
+    }
+    const feeder = bait ? bait.owner : null;
 
     // Threats: anyone who can eat my smallest piece and is close. Prey: someone I can eat.
     let fx = 0, fy = 0, danger = 0;
@@ -285,15 +324,16 @@ export function createWorld(opts = {}) {
       const d = Math.hypot(c.x - cx, c.y - cy);
       if (d > view + c.r) continue;
       if (c.m > small.m * EAT_RATIO) {
+        if (c.owner === feeder && d > c.r + small.r * 0.6) continue;
         // A split from a big cell reaches far, so keep extra distance from them.
-        const reach = c.r + 220 + (c.m > small.m * EAT_RATIO * 2 ? c.r * 0.9 + 200 : 0);
+        const reach = c.r + 220 + (c.m > small.m * EAT_RATIO * 2 ? splitFlight(rad(c.m / 2)) * 0.6 : 0);
         if (d < reach) {
           const k = (reach - d) / reach;
           fx -= ((c.x - cx) / (d || 1)) * k;
           fy -= ((c.y - cy) / (d || 1)) * k;
           danger = Math.max(danger, k);
         }
-      } else if (big.m > c.m * EAT_RATIO * 1.05) {
+      } else if (big.m > c.m * EAT_RATIO * 1.05 && !(o.ai.feeder && !c.owner.bot)) {
         const score = (c.m / (d + 60)) * (c.owner.bot ? 1 : 1.3);
         if (score > preyScore) { preyScore = score; prey = c; }
       }
@@ -310,23 +350,38 @@ export function createWorld(opts = {}) {
     if (cx > WORLD - wall) fx -= (cx - (WORLD - wall)) / wall;
     if (cy > WORLD - wall) fy -= (cy - (WORLD - wall)) / wall;
 
-    // Thrown mass is tempting: a greedy bot walks into it even with someone big nearby.
-    // That is the bait: throw, wait for it to come close, then split on it.
-    let bait = null, baitD = Infinity;
-    for (const p of w.pellets) {
-      if (p.owner === o) continue;
-      const d = Math.hypot(p.x - cx, p.y - cy);
-      if (d < 520 + big.r && d < baitD) { baitD = d; bait = p; }
-    }
     if (bait && danger < o.ai.greed) {
       o.dir = { x: bait.x - cx, y: bait.y - cy, m: 1 };
       return;
     }
-
     if (danger > 0.08 && (!prey || danger > o.ai.aggr * 0.55)) {
       o.dir = { x: fx, y: fy, m: 1 };
       if (danger > 0.85 && cells.length === 1 && big.m > 60 && Math.random() < 0.08 * o.ai.aggr) w.split(o, fx, fy);
       return;
+    }
+    // Too big: drop mass on the ground bit by bit, all around.
+    if (total > BOT_MAX_MASS) {
+      const a = w.time * 2.3 + o.id;
+      o.aim = { x: Math.cos(a), y: Math.sin(a) };
+      o.throwing = true;
+      o.throwLevel = 1;
+    }
+    // Friendly bots feed a smaller player until the player is about their size.
+    if (o.ai.feeder && total > 120) {
+      let friend = null, fd = Infinity;
+      for (const h of w.owners) {
+        if (h.bot || h.dead) continue;
+        const hc = w.centerOf(h);
+        const d = Math.hypot(hc.x - cx, hc.y - cy);
+        if (d < 1100 + big.r && d < fd && hc.m < total * 0.9) { fd = d; friend = hc; }
+      }
+      if (friend) {
+        const dx = friend.x - cx, dy = friend.y - cy;
+        const close = fd < big.r + 650;
+        o.dir = { x: dx, y: dy, m: close ? 0.15 : 1 };
+        if (close) { o.aim = { x: dx, y: dy }; o.throwing = true; o.throwLevel = 1; }
+        return;
+      }
     }
     if (prey) {
       const dx = prey.x - big.x;
@@ -334,7 +389,7 @@ export function createWorld(opts = {}) {
       const d = Math.hypot(dx, dy);
       o.dir = { x: dx, y: dy, m: 1 };
       // Split on it when the flying half would land on it.
-      const flight = 300 + rad(big.m / 2) * 2.4;
+      const flight = splitFlight(rad(big.m / 2));
       if (d < flight + big.r * 0.4 && big.m / 2 > prey.m * EAT_RATIO && big.m >= MIN_SPLIT && cells.length < 4 && Math.random() < 0.4 * o.ai.aggr) w.split(o, dx, dy);
       return;
     }
@@ -356,35 +411,23 @@ export function createWorld(opts = {}) {
   // ───────────── Movement and merging ─────────────
   function moveOwner(o, dt) {
     const { x: cx, y: cy } = w.centerOf(o);
-    let spread = 0;
-    for (const c of o.cells) spread = Math.max(spread, Math.hypot(c.x - cx, c.y - cy) + c.r);
     const dl = Math.hypot(o.dir.x, o.dir.y);
     const ux = dl > 0.001 ? o.dir.x / dl : 0;
     const uy = dl > 0.001 ? o.dir.y / dl : 0;
     const mag = clamp(o.dir.m, 0, 1);
-    // Every piece heads for one point well ahead of the whole group, so even 16 pieces
-    // all move the way you point instead of pulling against each other.
-    const reach = spread + 900;
-    const tx = cx + ux * reach;
-    const ty = cy + uy * reach;
     const many = o.cells.length > 1;
     const fade = Math.exp(-4 * dt);
     for (const c of o.cells) {
-      const sp = speedOf(c.m);
-      let vx = 0, vy = 0;
-      if (mag > 0) {
-        const dx = tx - c.x, dy = ty - c.y;
-        const d = Math.hypot(dx, dy) || 1;
-        vx = (dx / d) * sp * mag;
-        vy = (dy / d) * sp * mag;
-      }
+      // Every piece moves the same way you point, side by side, so pieces never block each other.
+      const sp = speedOf(c.m) * mag;
+      let vx = ux * sp;
+      let vy = uy * sp;
       if (many) {
-        // Pieces pull towards the group on their own (no steering needed), harder once they may merge.
+        // A gentle pull keeps the group together; once they may merge it gets strong.
         const dx = cx - c.x, dy = cy - c.y;
         const d = Math.hypot(dx, dy);
         if (d > 1) {
-          // A spring: far pieces come back fast, close ones settle against each other.
-          const pull = w.time >= c.mergeAt ? Math.min(1200, d * 1.5 + 80) : Math.min(600, Math.max(0, d - c.r) * 0.6);
+          const pull = w.time >= c.mergeAt ? Math.min(900, d * 1.2 + 60) : Math.min(160, Math.max(0, d - c.r) * 0.25);
           vx += (dx / d) * pull;
           vy += (dy / d) * pull;
         }
@@ -397,7 +440,7 @@ export function createWorld(opts = {}) {
       c.y = clamp(c.y, c.r * 0.3, WORLD - c.r * 0.3);
       if (c.m > 300) { c.m -= c.m * 0.0016 * dt; c.r = rad(c.m); }
     }
-    // Own pieces slide apart until they may merge, then merge by themselves.
+    // Own pieces slide apart softly until they may merge, then merge by themselves.
     for (let i = 0; i < o.cells.length; i++) {
       const a = o.cells[i];
       if (a.m <= 0) continue;
@@ -419,7 +462,7 @@ export function createWorld(opts = {}) {
         } else {
           const overlap = a.r + b.r - d;
           if (overlap > 0) {
-            const push = Math.min(overlap * 0.5, 700 * dt);
+            const push = Math.min(overlap * 0.25, 260 * dt);
             const nx = dx / d;
             const ny = dy / d;
             a.x -= nx * push; a.y -= ny * push;
@@ -442,6 +485,7 @@ export function createWorld(opts = {}) {
         if (o.bot && w.time >= o.respawnAt) {
           o.name = pick(BOT_NAMES);
           o.skin = pick(BOT_SKINS);
+          o.level = 1 + ((Math.random() * 60) | 0);
           o.ver++;
           w.respawn(o, rand(20, 140));
         }
@@ -458,7 +502,8 @@ export function createWorld(opts = {}) {
         o.throwT -= dt;
         let n = 0;
         while (o.throwT <= 0 && n < 4) {
-          w.eject(o, o.dir.x || o.aimX || 1, o.dir.y || o.aimY || 0);
+          const a = o.aim || o.dir;
+          w.eject(o, a.x || o.lastX || 1, a.y || o.lastY || 0);
           o.throwT += 1 / throwRate(o.throwLevel);
           n++;
         }
@@ -466,16 +511,26 @@ export function createWorld(opts = {}) {
       } else if (o.throwT < 0) {
         o.throwT = 0;
       }
+      if (o.dir.x || o.dir.y) { o.lastX = o.dir.x; o.lastY = o.dir.y; }
     }
 
-    const fade = Math.exp(-4 * dt);
+    // Pellets fly on a fixed curve (the phones draw the same curve), then lie still.
     for (const p of w.pellets) {
-      if (p.vx === 0 && p.vy === 0) continue;
-      p.x = clamp(p.x + p.vx * dt, 10, WORLD - 10);
-      p.y = clamp(p.y + p.vy * dt, 10, WORLD - 10);
-      p.vx *= fade;
-      p.vy *= fade;
-      if (Math.abs(p.vx) + Math.abs(p.vy) < 4) { p.vx = 0; p.vy = 0; }
+      if (p.m <= 0) continue;
+      const age = w.time - p.born;
+      if (age > PELLET_LIFE) { dropPellet(p); continue; }
+      if (age < 3) { const at = pelletAt(p, age); p.x = at.x; p.y = at.y; }
+    }
+    // Viruses: a shot virus slides to a stop; one fed 5 pellets shoots out a new virus.
+    const vfade = Math.exp(-3 * dt);
+    for (const v of w.viruses) {
+      if (v.vx || v.vy) {
+        v.x = clamp(v.x + v.vx * dt, 60, WORLD - 60);
+        v.y = clamp(v.y + v.vy * dt, 60, WORLD - 60);
+        v.vx *= vfade;
+        v.vy *= vfade;
+        if (Math.abs(v.vx) + Math.abs(v.vy) < 5) { v.vx = 0; v.vy = 0; }
+      }
     }
 
     // Eating. Cells are swept left to right, so only neighbours are compared.
@@ -483,30 +538,52 @@ export function createWorld(opts = {}) {
     for (const o of w.owners) if (!o.dead) for (const c of o.cells) all.push(c);
     const pelletGrid = new Map();
     for (const p of w.pellets) {
+      if (p.m <= 0) continue;
       const k = Math.floor(p.x / GRID) * 4096 + Math.floor(p.y / GRID);
       let list = pelletGrid.get(k);
       if (!list) { list = []; pelletGrid.set(k, list); }
       list.push(p);
     }
-    let pelletsEaten = false;
+    const nearPellets = (x, y, r, fn) => {
+      const gx0 = Math.floor((x - r) / GRID), gx1 = Math.floor((x + r) / GRID);
+      const gy0 = Math.floor((y - r) / GRID), gy1 = Math.floor((y + r) / GRID);
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gy = gy0; gy <= gy1; gy++) {
+          const list = pelletGrid.get(gx * 4096 + gy);
+          if (list) for (const p of list) if (p.m > 0) fn(p);
+        }
+      }
+    };
+    // Pellets into viruses.
+    const newViruses = [];
+    for (const v of w.viruses) {
+      nearPellets(v.x, v.y, v.r, (p) => {
+        if (Math.hypot(p.x - v.x, p.y - v.y) > v.r) return;
+        dropPellet(p);
+        v.fed++;
+        v.r = virusRadius(v.fed);
+        if (v.fed >= VIRUS_FEED) {
+          v.fed = 0;
+          v.r = virusRadius(0);
+          if (w.viruses.length + newViruses.length < cfg.viruses * 1.6) {
+            const len = Math.hypot(p.vx, p.vy) || 1;
+            newViruses.push([v.x, v.y, (p.vx / len) * 2400, (p.vy / len) * 2400]);
+          }
+        }
+      });
+    }
+    for (const nv of newViruses) addVirus(...nv);
+
     for (const c of all) {
       if (c.m <= 0) continue;
       let gain = 0;
       w.foods.each(c.x - c.r, c.y - c.r, c.x + c.r, c.y + c.r, (f) => {
         if (Math.hypot(f.x - c.x, f.y - c.y) < c.r) { eatFood(f); gain += 1; }
       });
-      const gx0 = Math.floor((c.x - c.r) / GRID), gx1 = Math.floor((c.x + c.r) / GRID);
-      const gy0 = Math.floor((c.y - c.r) / GRID), gy1 = Math.floor((c.y + c.r) / GRID);
-      for (let gx = gx0; gx <= gx1; gx++) {
-        for (let gy = gy0; gy <= gy1; gy++) {
-          const list = pelletGrid.get(gx * 4096 + gy);
-          if (!list) continue;
-          for (const p of list) {
-            if (p.m <= 0 || (p.owner === c.owner && w.time - p.born < 0.4)) continue;
-            if (c.m > p.m && Math.hypot(p.x - c.x, p.y - c.y) < c.r - p.r * 0.3) { gain += p.m; p.m = 0; pelletsEaten = true; }
-          }
-        }
-      }
+      nearPellets(c.x, c.y, c.r, (p) => {
+        if (p.owner === c.owner && w.time - p.born < 0.4) return;
+        if (c.m > p.m && Math.hypot(p.x - c.x, p.y - c.y) < c.r - p.r * 0.3) { gain += p.m; dropPellet(p); }
+      });
       for (const b of w.orbs) {
         if (b.m <= 0) continue;
         if (Math.hypot(b.x - c.x, b.y - c.y) < c.r + b.r * 0.4) {
@@ -535,9 +612,9 @@ export function createWorld(opts = {}) {
         if (b.m <= 0 || a.owner === b.owner) continue;
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (a.m >= b.m * EAT_RATIO && d < a.r - b.r * 0.35) {
-          grow(a, b.m); b.m = 0; b.eatenBy = a.owner;
+          grow(a, b.m); b.lost = b.m; b.m = 0; b.eatenBy = a.owner;
         } else if (b.m >= a.m * EAT_RATIO && d < b.r - a.r * 0.35) {
-          grow(b, a.m); a.m = 0; a.eatenBy = b.owner;
+          grow(b, a.m); a.lost = a.m; a.m = 0; a.eatenBy = b.owner;
         }
       }
     }
@@ -547,20 +624,25 @@ export function createWorld(opts = {}) {
       if (before.some((c) => c.m <= 0)) o.cells = before.filter((c) => c.m > 0);
       if (!o.cells.length) {
         const killer = before.find((c) => c.eatenBy)?.eatenBy || null;
+        const mass = before.reduce((s, c) => s + (c.lost || 0), 0);
         o.dead = true;
         o.killer = killer;
         o.throwing = false;
         if (o.bot) o.respawnAt = w.time + rand(2.5, 5);
         if (killer) killer.stats.eaten++;
-        w.events.push({ type: 'kill', victim: o, killer });
+        w.events.push({ type: 'kill', victim: o, killer, mass });
       } else {
         const m = w.massOf(o);
         if (m > o.stats.maxMass) o.stats.maxMass = m;
       }
     }
     w.cells = all.filter((c) => c.m > 0);
-    if (pelletsEaten) w.pellets = w.pellets.filter((p) => p.m > 0);
-    for (let i = w.viruses.length - 1; i >= 0; i--) if (w.viruses[i].m <= 0) { w.viruses.splice(i, 1); later(6, addVirus); }
+    if (w.pellets.some((p) => p.m <= 0)) w.pellets = w.pellets.filter((p) => p.m > 0);
+    for (let i = w.viruses.length - 1; i >= 0; i--) {
+      if (w.viruses[i].m > 0) continue;
+      w.viruses.splice(i, 1);
+      if (w.viruses.length < cfg.viruses) later(6, () => addVirus());
+    }
     for (let i = w.orbs.length - 1; i >= 0; i--) if (w.orbs[i].m <= 0) { w.orbs.splice(i, 1); later(4, addOrb); }
     const missing = cfg.food - w.foods.size;
     for (let i = 0; i < missing; i++) if (Math.random() < 0.35) addFood();
@@ -573,9 +655,9 @@ export function createWorld(opts = {}) {
   const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
   for (let i = 0; i < cfg.bots; i++) {
     // A mix of sizes, so there is always someone to chase and someone to run from.
-    const mass = i < 4 ? rand(900, 2600) : i < 12 ? rand(150, 520) : rand(20, 90);
+    const mass = i < 5 ? rand(800, BOT_MAX_MASS) : i < 14 ? rand(150, 520) : rand(20, 90);
     w.addOwner({ name: names[i % names.length], skin: pick(BOT_SKINS), bot: true, mass });
   }
-  if (cfg.trackFood) { w.foodAdded.length = 0; }
+  w.foodAdded.length = 0;
   return w;
 }

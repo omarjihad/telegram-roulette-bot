@@ -79,9 +79,23 @@ async function profileFor(user: HydratedDocument<IUser>) {
   }
 }
 
+/** Level from experience: level L needs 50·(L−1)² xp (2 → 50, 5 → 800, 10 → 4050). */
+export function battleLevel(xp: number) {
+  const level = Math.floor(Math.sqrt(Math.max(0, xp) / 50)) + 1;
+  return { level, xp: Math.floor(Math.max(0, xp)), levelXp: 50 * (level - 1) ** 2, nextXp: 50 * level ** 2 };
+}
+
+/** What eating someone online is worth: bigger victims give more coins and experience. */
+export function killReward(victimMass: number) {
+  const m = Math.max(0, Number(victimMass) || 0);
+  return { coins: Math.min(50, 1 + Math.floor(m / 200)), xp: Math.min(500, 10 + Math.floor(m / 20)) };
+}
+
 function profileView(p: IBattleProfile) {
   return {
     coins: p.coins,
+    ...battleLevel(p.xp ?? 0),
+    kills: p.kills ?? 0,
     skin: p.skin,
     ownedSkins: Array.from(new Set([...FREE_SKINS, ...(p.ownedSkins ?? [])])),
     settings: p.settings,
@@ -267,6 +281,9 @@ export async function getLeaderboard(user: HydratedDocument<IUser>, adminRole: s
     .sort({ [field]: -1, updatedAt: 1 })
     .limit(50)
     .lean();
+  // The Telegram name and photo (not the in-game look), fresh from the bot's users.
+  const people = await User.find({ telegramId: { $in: rows.map((r) => r.telegramId) } }).select('telegramId firstName username photoUrl').lean();
+  const byId = new Map(people.map((u) => [u.telegramId, u]));
   const mine = await BattleWeeklyStat.findOne({ week, telegramId: user.telegramId }).lean();
   const myValue = mine ? Number(mine[field]) || 0 : 0;
   const myRank = myValue > 0 ? (await BattleWeeklyStat.countDocuments({ week, [field]: { $gt: myValue } })) + 1 : null;
@@ -274,9 +291,34 @@ export async function getLeaderboard(user: HydratedDocument<IUser>, adminRole: s
     type: kind,
     week,
     resetsAt: nextWeekStart(),
-    rows: rows.map((r, i) => ({ rank: i + 1, telegramId: r.telegramId, name: r.name, skin: r.skin, value: Number(r[field]) || 0, me: r.telegramId === user.telegramId })),
+    rows: rows.map((r, i) => {
+      const u = byId.get(r.telegramId);
+      return {
+        rank: i + 1,
+        telegramId: r.telegramId,
+        name: u ? displayName(u as never) : r.name,
+        photoUrl: u?.photoUrl ?? null,
+        skin: r.skin,
+        value: Number(r[field]) || 0,
+        me: r.telegramId === user.telegramId,
+      };
+    }),
     me: { rank: myRank, value: myValue },
   };
+}
+
+/** Pays the coins and experience for one online kill; tells the game the new level. */
+export async function rewardBattleKill(telegramId: number, victimMass: number) {
+  const got = killReward(victimMass);
+  const before = await BattleProfile.findOneAndUpdate(
+    { telegramId },
+    { $inc: { coins: got.coins, xp: got.xp, kills: 1 } },
+    { new: false }
+  ).select('xp');
+  if (!before) return null;
+  const was = battleLevel(before.xp ?? 0).level;
+  const now = battleLevel((before.xp ?? 0) + got.xp).level;
+  return { coins: got.coins, level: now, levelUp: now > was };
 }
 
 /**
@@ -296,7 +338,9 @@ export async function recordBattleMatch(user: Pick<IUser, 'telegramId' | 'firstN
     },
     { upsert: true }
   );
-  await BattleProfile.updateOne({ telegramId: user.telegramId }, { $max: { bestMass: mass }, $inc: { totalMatches: 1, totalSeconds: seconds } });
+  // Experience for playing too: a little for time alive and for how big you got.
+  const xp = Math.min(300, Math.floor(seconds / 6) + Math.floor(mass / 100));
+  await BattleProfile.updateOne({ telegramId: user.telegramId }, { $max: { bestMass: mass }, $inc: { totalMatches: 1, totalSeconds: seconds, xp } });
 }
 
 /**
@@ -319,7 +363,9 @@ export async function battleIdentity(initData: string) {
     telegramId: user.telegramId,
     name: displayName(user).slice(0, 24),
     skin: profile.skin,
+    level: battleLevel(profile.xp ?? 0).level,
     record: (match: { mass: number; seconds: number }) => recordBattleMatch(user, match),
+    onKill: (victimMass: number) => rewardBattleKill(user.telegramId, victimMass),
   };
 }
 

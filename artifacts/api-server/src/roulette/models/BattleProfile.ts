@@ -30,6 +30,9 @@ export interface IBattleProfile extends Document {
   // Control id -> position/size/opacity; missing ids use the game's defaults.
   layout: Record<string, BattleControl>;
   bestMass: number;
+  // Experience from online games; the level comes from it (battleLevel()).
+  xp: number;
+  kills: number;
   totalMatches: number;
   totalSeconds: number;
   createdAt: Date;
@@ -52,6 +55,8 @@ const battleProfileSchema = new Schema<IBattleProfile>(
     },
     layout: { type: Schema.Types.Mixed, default: {} },
     bestMass: { type: Number, default: 0 },
+    xp: { type: Number, default: 0, min: 0 },
+    kills: { type: Number, default: 0, min: 0 },
     totalMatches: { type: Number, default: 0 },
     totalSeconds: { type: Number, default: 0 },
   },

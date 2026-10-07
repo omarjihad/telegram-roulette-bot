@@ -33,9 +33,36 @@ describe('MF Battle online room', () => {
     const welcome = ws.sent.find((m) => m.t === 'welcome')!;
     expect(welcome.you).toBe(c.owner.id);
     expect((welcome.food as number[]).length).toBeGreaterThan(1000);
+    expect(Array.isArray(welcome.pellets)).toBe(true);
     const snap = ws.sent.find((m) => m.t === 's')!;
     expect((snap.c as number[]).includes(c.owner.id)).toBe(true);
     expect(snap.al).toBe(1);
+    expect(snap.p).toBeUndefined(); // thrown mass travels as changes, not in every update
+  });
+
+  it('sends thrown mass once, with its throw, and gives coins for kills', async () => {
+    vi.useFakeTimers();
+    const r = room();
+    const ws = fakeSocket();
+    const onKill = vi.fn(async () => ({ coins: 3, level: 2, levelUp: true }));
+    const c = r.join(ws, { telegramId: 1, name: 'A', skin: 'mf', onKill })!;
+    c.owner.cells[0].m = 400;
+    r.handle(c, { t: 'in', x: 1, y: 0, m: 0 });
+    r.handle(c, { t: 'throw', on: true, lv: 0 });
+    await vi.advanceTimersByTimeAsync(300);
+    const deltas = ws.sent.filter((m) => m.t === 'f');
+    const thrown = deltas.flatMap((m) => m.pa as number[]);
+    expect(thrown.length % 7).toBe(0);
+    expect(thrown.length / 7).toBeGreaterThan(0);
+    // Eat a bot: the killer is paid and told.
+    const bot = r.world.owners.find((o) => o.bot && !o.dead)!;
+    r.handle(c, { t: 'throw', on: false });
+    c.owner.cells[0].m = 5000;
+    c.owner.cells[0].r = Math.sqrt(5000) * 10;
+    for (const b of bot.cells) { b.m = 30; b.r = Math.sqrt(30) * 10; b.x = c.owner.cells[0].x; b.y = c.owner.cells[0].y; }
+    await vi.advanceTimersByTimeAsync(100);
+    expect(onKill).toHaveBeenCalled();
+    expect(ws.sent.find((m) => m.t === 'ev' && m.e === 'ate')).toMatchObject({ coins: 3, lv: 2, up: 1 });
   });
 
   it('replaces an older connection of the same account', () => {

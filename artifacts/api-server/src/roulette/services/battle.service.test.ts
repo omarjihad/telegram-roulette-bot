@@ -30,7 +30,7 @@ vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockI
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { battleUrl, buySkin, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
+import { battleLevel, battleUrl, buySkin, killReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 7, firstName: 'Omar', username: 'omar' } as never;
 
@@ -57,6 +57,16 @@ beforeEach(() => {
 describe('MF Battle', () => {
   it('is for developers only for now', async () => {
     await expect(getBattleHome(user, null)).rejects.toMatchObject({ code: 'BATTLE_COMING_SOON' });
+  });
+
+  it('gives more coins and experience for bigger kills, and levels from experience', () => {
+    expect(killReward(20)).toEqual({ coins: 1, xp: 11 });
+    expect(killReward(2000)).toEqual({ coins: 11, xp: 110 });
+    expect(killReward(1e6)).toEqual({ coins: 50, xp: 500 });
+    expect(battleLevel(0).level).toBe(1);
+    expect(battleLevel(49).level).toBe(1);
+    expect(battleLevel(50).level).toBe(2);
+    expect(battleLevel(4050)).toMatchObject({ level: 10, levelXp: 4050, nextXp: 5000 });
   });
 
   it('defaults to the copy this server serves under /mf-battle', () => {

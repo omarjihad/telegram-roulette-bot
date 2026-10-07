@@ -184,6 +184,18 @@ function avatarHTML() {
   return `<div class="avatar">${p.photoUrl ? `<img src="${esc(p.photoUrl)}" alt="" onerror="this.remove()" />` : ''}${p.photoUrl ? '' : initial}</div>`;
 }
 
+/** A ranked player's Telegram photo (or their first letter) — not their in-game skin. */
+function personPic(r, size) {
+  const initial = esc((r.name || '?').trim().charAt(0).toUpperCase());
+  const img = r.photoUrl ? `<img src="${esc(r.photoUrl)}" alt="" onerror="this.remove()" />` : '';
+  return `<span class="person" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px">${initial}${img}</span>`;
+}
+
+function levelHTML(p) {
+  const pct = Math.round(((p.xp - p.levelXp) / Math.max(1, p.nextXp - p.levelXp)) * 100);
+  return `<span class="lvl" title="${fmt(p.xp)} / ${fmt(p.nextXp)} xp"><b>⭐ ${p.level || 1}</b><i><em style="width:${Math.max(0, Math.min(100, pct || 0))}%"></em></i></span>`;
+}
+
 function timeLeft(date) {
   const ms = Math.max(0, new Date(date).getTime() - Date.now());
   const d = Math.floor(ms / 86400000);
@@ -207,7 +219,7 @@ function renderLobby() {
       <div class="me">
         ${avatarHTML()}
         <div class="me-text">
-          <div class="me-name">${esc(state.player.name)}</div>
+          <div class="me-name">${esc(state.player.name)} ${levelHTML(p)}</div>
           <div class="me-sub">${state.player.username ? `@${esc(state.player.username)} · ` : ''}أفضل كتلة <b>${fmt(p.bestMass)}</b></div>
         </div>
       </div>
@@ -228,7 +240,7 @@ function renderLobby() {
       <section class="center">
         <div class="modes">
           <button class="mode-btn ${state.mode === 'online' ? 'on' : ''}" data-mode="online"><b>🌐 أونلاين</b><small>ويّا المطورين · ينحسب بالترتيب</small></button>
-          <button class="mode-btn ${state.mode === 'online' ? '' : 'on'}" data-mode="practice"><b>🤖 تدريب</b><small>ضد 26 بوت · بدون نت</small></button>
+          <button class="mode-btn ${state.mode === 'online' ? '' : 'on'}" data-mode="practice"><b>🤖 تدريب</b><small>ضد 30 بوت · بدون نت</small></button>
         </div>
         <button class="play" data-act="play"><b>ابدأ اللعب</b><small>${state.mode === 'online' ? 'أونلاين ويّا المطورين والبوتات' : 'تدريب ضد البوتات'}</small></button>
         <div class="tiles">
@@ -289,6 +301,11 @@ function playGame() {
     online: state.mode === 'online' ? onlineInfo() : null,
     haptic,
     openControls: (done) => openEditor(done),
+    // Coins from online kills (the server already saved them): keep the lobby in step.
+    onCoins: (coins, level) => {
+      state.profile.coins += coins;
+      if (level) state.profile.level = level;
+    },
     showAd: (blockId) => showAd(blockId, { demo: DEMO, base: API, hash: tgHash() }),
     ads: {
       reward: CFG.rewardBlockId || (state.ads && state.ads.rewardBlockId) || null,
@@ -314,13 +331,13 @@ async function renderWeekly() {
       if (!r) return `<div class="pod ${cls} empty"><div class="pod-skin">?</div><div class="pod-name">—</div><div class="pod-base"><b>${place}</b></div></div>`;
       return `<div class="pod ${cls} ${r.me ? 'me' : ''}">
         ${place === 1 ? '<span class="pod-crown">👑</span>' : ''}
-        <div class="pod-skin">${skinSVG(r.skin, 64)}</div>
+        <div class="pod-skin">${personPic(r, 52)}</div>
         <div class="pod-name">${esc(r.name)}</div>
         <div class="pod-val">${fmt(r.value)}</div>
         <div class="pod-base"><b>${place}</b></div>
       </div>`;
     };
-    const rest = rows.slice(3, 5).map((r) => `<div class="w-row ${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>${skinSVG(r.skin, 22)}<span class="nm">${esc(r.name)}</span><span class="vl">${fmt(r.value)}</span></div>`).join('');
+    const rest = rows.slice(3, 5).map((r) => `<div class="w-row ${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>${personPic(r, 22)}<span class="nm">${esc(r.name)}</span><span class="vl">${fmt(r.value)}</span></div>`).join('');
     box.innerHTML = `
       <div class="w-head"><b>🏆 أبطال الأسبوع</b><span>أكبر حجم</span></div>
       <div class="podium">${spot(rows[1], 2)}${spot(rows[0], 1)}${spot(rows[2], 3)}</div>
@@ -454,7 +471,7 @@ async function renderRank(type) {
     const body = panelEl.querySelector('.p-body');
     if (!body) return;
     body.innerHTML = res.rows.length
-      ? `<div class="lb-list">${res.rows.map((r) => `<div class="lb-row ${r.me ? 'me' : ''} ${r.rank <= 3 ? `r${r.rank}` : ''}"><span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>${skinSVG(r.skin, 32)}<span class="nm">${esc(r.name)}</span><span class="vl">${t.unit(r.value)}</span></div>`).join('')}</div>`
+      ? `<div class="lb-list">${res.rows.map((r) => `<div class="lb-row ${r.me ? 'me' : ''} ${r.rank <= 3 ? `r${r.rank}` : ''}"><span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>${personPic(r, 32)}<span class="nm">${esc(r.name)}</span><span class="vl">${t.unit(r.value)}</span></div>`).join('')}</div>`
       : `<div class="center-msg" style="margin-top:20px"><h2>${t.icon}</h2><p>ما اكو نتائج بعد هالأسبوع بـ «${t.label}».<br/>العب وكن أول واحد بالقائمة!</p></div>`;
     panelEl.insertAdjacentHTML('beforeend', `<div class="lb-foot"><span>⏳ يتصفّر بعد <b>${timeLeft(res.resetsAt)}</b></span><span>ترتيبك: <b>${res.me.rank ? `#${res.me.rank} · ${t.unit(res.me.value)}` : '—'}</b></span></div>`);
   } catch (e) {
@@ -772,7 +789,7 @@ async function boot() {
 // ───────────── Demo data (open the page with ?demo=1 to preview without the bot) ─────────────
 const demo = {
   player: { telegramId: 1, name: 'عمر', username: 'omar', photoUrl: null },
-  profile: { coins: 1250, skin: 'skull', ownedSkins: ['classic', 'mf', 'ocean', 'neon', 'skull'], settings: { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, totalMatches: 1923, totalSeconds: 98000 },
+  profile: { coins: 1250, skin: 'skull', ownedSkins: ['classic', 'mf', 'ocean', 'neon', 'skull'], settings: { darkMode: true, chat: true, sound: true, quality: 'medium', joystick: 'fixed' }, layout: {}, bestMass: 67976, level: 7, xp: 1920, levelXp: 1800, nextXp: 2450, kills: 312, totalMatches: 1923, totalSeconds: 98000 },
   skins: null,
 };
 const DEMO_SKINS = [
