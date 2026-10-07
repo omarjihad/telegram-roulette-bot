@@ -41,6 +41,17 @@ import {
   postBattleBuyThrow,
   postBattleThrowAd,
 } from '../controllers/battle.controller';
+import {
+  getBattleAdmin,
+  getBattlePlayer,
+  postBattleBroadcast,
+  postBattleGrant,
+  postBattlePublic,
+  postBattleTournament,
+  postBattleTournamentCancel,
+  postBattleTournamentEnd,
+} from '../controllers/battleAdmin.controller';
+import { requireAdmin } from '../middleware/requireAdmin';
 
 const router = Router();
 
@@ -81,7 +92,7 @@ router.post('/games/snake/start', postSnakeStart);
 router.post('/games/snake/finish', postSnakeFinish);
 router.post('/games/ziggurat/start', postZigguratStart);
 router.post('/games/ziggurat/finish', postZigguratFinish);
-// MF Battle (the online game's lobby, hosted on Cloudflare): developers only for now.
+// MF Battle (the online game's lobby, hosted on Cloudflare): developers, or everyone once opened.
 router.get('/battle', getBattle);
 router.post('/battle/skins/:id/buy', purchaseLimiter, postBattleBuySkin);
 router.post('/battle/skins/:id/equip', postBattleEquipSkin);
@@ -93,6 +104,15 @@ router.put('/battle/layout', putBattleLayout);
 router.post('/battle/layout/share', purchaseLimiter, postBattleLayoutShare);
 router.get('/battle/layout/:code', getBattleLayoutCode);
 router.get('/battle/leaderboard', getBattleLeaderboard);
+// MF Battle developer panel.
+router.get('/battle/admin', requireAdmin, getBattleAdmin);
+router.post('/battle/admin/tournament', requireAdmin, postBattleTournament);
+router.post('/battle/admin/tournament/end', requireAdmin, postBattleTournamentEnd);
+router.post('/battle/admin/tournament/cancel', requireAdmin, postBattleTournamentCancel);
+router.get('/battle/admin/player', requireAdmin, getBattlePlayer);
+router.post('/battle/admin/grant', requireAdmin, postBattleGrant);
+router.post('/battle/admin/broadcast', requireAdmin, postBattleBroadcast);
+router.post('/battle/admin/public', requireAdmin, postBattlePublic);
 
 router.get('/exchange', getExchange);
 router.get('/exchange/listings', getExchangeListings);

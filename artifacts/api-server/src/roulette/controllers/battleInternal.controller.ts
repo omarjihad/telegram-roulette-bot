@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
 import { battleIdentityData, recordBattleMatchById, rewardBattleKill } from '../services/battle.service';
+import { reportLeaders } from '../services/battleAdmin.service';
 
 /**
  * Calls from the MF Battle game server on Cloudflare (not from players): it signs players
@@ -38,4 +39,10 @@ export const postInternalRecord = asyncHandler(async (req: Request, res: Respons
   checkKey(req);
   await recordBattleMatchById(id(req.body?.telegramId), { mass: Number(req.body?.mass) || 0, seconds: Number(req.body?.seconds) || 0 });
   res.json({ ok: true, data: null });
+});
+
+/** Every few seconds: who led the room (for tournaments) and how many are playing. */
+export const postInternalLeaders = asyncHandler(async (req: Request, res: Response) => {
+  checkKey(req);
+  res.json({ ok: true, data: await reportLeaders(req.body ?? {}) });
 });

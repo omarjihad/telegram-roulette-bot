@@ -4,6 +4,8 @@
 // the bot's Node server (Railway) and on a Cloudflare Durable Object (close to the players).
 //
 // A "socket" here is anything with: send(text), close(code, reason), isOpen(), buffered().
+// report (optional): ({lead, current, players}) → Promise<{tour}> every few seconds — who led
+// the room among real players (for tournaments); tour = the running tournament, or null.
 // A "who" (from authenticate) is: { telegramId, name, skin, level?, startMass?, canThrow?(lv),
 //   record?({mass, seconds}) → Promise, onKill?(victimMass) → Promise<{coins, level, levelUp}|null> }.
 
@@ -15,6 +17,7 @@ const ROOM_BOTS = 30;
 const SLOW_CLIENT_BYTES = 96 * 1024; // a phone this far behind skips position updates until it catches up
 const MAX_PLAYERS = 30;
 const HELLO_TIMEOUT_MS = 10000;
+const REPORT_MS = 3000;
 const BOT_REPLIES = ['😂😂', 'شكو؟', 'تعال اذا رجّال 😤', 'GG', 'هسه اجيك 👀', 'هههه', 'ماكو مثلي 😎', 'منو انت؟', 'لا تهرب 🏃', '👍'];
 
 const num = (v, min, max, fallback = 0) => {
@@ -29,10 +32,16 @@ const ownerRow = (o) => [o.id, o.name, o.skin, o.hue, o.level];
 const pelletRow = (p, now) => [p.id, r1(p.x0), r1(p.y0), r1(p.vx), r1(p.vy), p.hue, r1((now - p.born) * 1000), r1(p.m)];
 
 export class BattleRoom {
-  constructor({ bots = ROOM_BOTS, log = () => {} } = {}) {
+  constructor({ bots = ROOM_BOTS, log = () => {}, report = null } = {}) {
     this.world = createWorld({ bots, trackNet: true });
     this.clients = new Set();
     this.log = log;
+    this.report = report;
+    this.leadAcc = new Map(); // telegramId -> { name, s: seconds first, m: best mass } since the last report
+    this.current = null; // the real player who is first right now
+    this.tour = null; // the running tournament, as the last report said
+    this.lastReport = 0;
+    this.reporting = false;
     this.timer = null;
     this.tickN = 0;
     this.lastTick = 0;
@@ -168,8 +177,10 @@ export class BattleRoom {
     this.tickN++;
     if (this.tickN % SEND_EVERY === 0) this.sendSnapshots();
     if (now - this.lastBoard >= 1000) {
+      const seconds = this.lastBoard ? Math.min(2, (now - this.lastBoard) / 1000) : 1;
       this.lastBoard = now;
-      this.sendBoard();
+      const ranked = this.sendBoard();
+      this.trackLeader(ranked, byOwner, seconds);
     }
   }
 
@@ -268,6 +279,41 @@ export class BattleRoom {
       if (ow.length) this.send(c, { t: 'ow', ow });
       this.send(c, { t: 'lb', r: top, me: i >= 0 ? [i + 1, r1(ranked[i].m)] : null, mm });
     }
+    return ranked;
+  }
+
+  /** Tournaments: who of the real players is first, and for how long (sent to the server). */
+  trackLeader(ranked, byOwner, seconds) {
+    if (!this.report) return;
+    let top = null;
+    for (const r of ranked) {
+      const c = byOwner.get(r.o);
+      if (c && !r.o.dead) { top = { c, m: r.m }; break; }
+    }
+    this.current = top ? { telegramId: top.c.who.telegramId, name: top.c.who.name, mass: r1(top.m) } : null;
+    if (top && this.tour) {
+      const id = top.c.who.telegramId;
+      const e = this.leadAcc.get(id) || { name: top.c.who.name, s: 0, m: 0 };
+      e.s += seconds;
+      e.m = Math.max(e.m, top.m);
+      this.leadAcc.set(id, e);
+    }
+    const now = Date.now();
+    if (this.reporting || now - this.lastReport < REPORT_MS) return;
+    this.lastReport = now;
+    this.reporting = true;
+    const lead = [];
+    for (const [id, e] of this.leadAcc) lead.push([id, e.name, Math.round(e.s * 10) / 10, r1(e.m)]);
+    this.leadAcc = new Map();
+    Promise.resolve()
+      .then(() => this.report({ lead, current: this.current, players: this.clients.size }))
+      .then((res) => {
+        this.tour = (res && res.tour) || null;
+        const t = this.tour;
+        this.broadcast(t ? { t: 'tour', m: t.mode, end: t.endsAt, ld: t.leader || null } : { t: 'tour' });
+      })
+      .catch((err) => this.log('battle leader report failed', err))
+      .finally(() => { this.reporting = false; });
   }
 
   record(c) {

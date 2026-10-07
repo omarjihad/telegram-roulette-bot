@@ -13,10 +13,14 @@ function allowedThrow(t, lv) {
 export class BattleRoomDO {
   constructor(state, env) {
     this.env = env;
-    this.room = new BattleRoom({ log: (msg, err) => console.log(msg, err && err.message) });
+    this.room = new BattleRoom({
+      log: (msg, err) => console.log(msg, err && err.message),
+      // Who leads the room (tournaments) and how many play, every few seconds.
+      report: (data) => this.api('leaders', { ...data, room: 'cloudflare' }),
+    });
   }
 
-  /** A call to the bot's server (sign in / kill reward / finished life). */
+  /** A call to the bot's server (sign in / kill reward / finished life / leaders). */
   async api(what, body) {
     const res = await fetch(`${this.env.API_BASE}/api/battle-internal/${what}`, {
       method: 'POST',

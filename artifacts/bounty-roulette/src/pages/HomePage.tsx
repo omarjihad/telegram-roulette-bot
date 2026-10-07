@@ -102,13 +102,30 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         </div>
       </section>
 
-      {/* MF Battle, the online game on Cloudflare: developers only for now. */}
-      {me.isAdmin && (
+      {/* The roulette stays pinned first, above every other section. */}
+      <button className="home-spin-card" onClick={() => onNavigate('wheel')}>
+        <div className="home-spin-art" aria-hidden="true">🎡</div>
+        <div className="home-spin-content">
+          <span className="home-section-label">{tr('الفرصة اليومية', 'Daily chance')}</span>
+          <h2>{tr('الفرة المجانية 🎰', 'Free spin 🎰')}</h2>
+          <p>{tr('دور كل يوم واربح جوائز', 'Spin every day and win prizes')}</p>
+          <div className="home-spin-status">
+            {isReady ? (
+              <span className="home-ready">{tr('✅ الفرة جاهزة الآن', '✅ Your spin is ready')}</span>
+            ) : (
+              <span className="home-countdown">⏳ {tr('متبقي:', 'Next in:')} {label}</span>
+            )}
+          </div>
+        </div>
+      </button>
+
+      {/* MF Battle, the online game on Cloudflare: developers, or everyone once it is opened. */}
+      {(me.isAdmin || me.battleUrl) && (
         <button className="home-battle-card" onClick={openBattle}>
           <span className="art-bg" style={{ backgroundImage: 'url(/art/battle.svg)' }} />
           <span className="home-battle-shade" />
           <span className="home-battle-copy">
-            <span className="home-section-label">{tr('⚔️ لعبة أونلاين · للمطورين', '⚔️ Online game · developers')}</span>
+            <span className="home-section-label">{me.isAdmin ? tr('⚔️ لعبة أونلاين · للمطورين', '⚔️ Online game · developers') : tr('⚔️ لعبة أونلاين', '⚔️ Online game')}</span>
             <strong>MF Battle</strong>
             <span>{tr('كُل الأصغر منك وصير الأكبر بالساحة', 'Eat the smaller ones and rule the arena')}</span>
           </span>
@@ -124,22 +141,6 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
           <span>{tr('بأمان وبسهولة مع وسطاء MF', 'Safely and easily with MF middlemen')}</span>
         </span>
         {exchangeOpen ? <span className="exchange-soon-pill">{tr('ادخل ←', 'Enter →')}</span> : <span className="exchange-soon-pill">{tr('قريباً', 'Soon')}</span>}
-      </button>
-
-      <button className="home-spin-card" onClick={() => onNavigate('wheel')}>
-        <div className="home-spin-art" aria-hidden="true">🎡</div>
-        <div className="home-spin-content">
-          <span className="home-section-label">{tr('الفرصة اليومية', 'Daily chance')}</span>
-          <h2>{tr('الفرة المجانية 🎰', 'Free spin 🎰')}</h2>
-          <p>{tr('دور كل يوم واربح جوائز', 'Spin every day and win prizes')}</p>
-          <div className="home-spin-status">
-            {isReady ? (
-              <span className="home-ready">{tr('✅ الفرة جاهزة الآن', '✅ Your spin is ready')}</span>
-            ) : (
-              <span className="home-countdown">⏳ {tr('متبقي:', 'Next in:')} {label}</span>
-            )}
-          </div>
-        </div>
       </button>
 
       {/* Quick sections, each with its own artwork. */}

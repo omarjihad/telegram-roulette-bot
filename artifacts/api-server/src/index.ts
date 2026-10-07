@@ -5,8 +5,9 @@ import { connectDatabase, disconnectDatabase } from "./roulette/config/database"
 import { createBot } from "./roulette/bot";
 import { startExpirationWorker } from "./roulette/workers/expiration.worker";
 import { initializeDeliveryAccount, shutdownDeliveryAccount } from "./roulette/services/deliveryAccount.service";
-import { attachBattleOnline } from "./roulette/battle/online";
+import { attachBattleOnline, BattleRoom } from "./roulette/battle/online";
 import { battleIdentity } from "./roulette/services/battle.service";
+import { reportLeaders, startTournamentWorker } from "./roulette/services/battleAdmin.service";
 
 const rawPort = process.env["PORT"];
 
@@ -27,7 +28,15 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 
 // MF Battle online room (WebSocket on the same server, /api/battle/ws).
-const battleOnline = attachBattleOnline(server, battleIdentity);
+// It also reports who leads (for tournaments) the same way the Cloudflare game server does.
+const battleOnline = attachBattleOnline(
+  server,
+  battleIdentity,
+  new BattleRoom({
+    log: (msg, err) => logger.warn({ err }, msg),
+    report: (data) => reportLeaders({ ...data, room: "railway" }),
+  }),
+);
 
 const active = env.GAMEPLAY_ENABLED && env.OWNER_ID > 0;
 const bot = createBot(active && env.BOT_POLLING_ENABLED);
@@ -39,6 +48,8 @@ void bot.getMe().then((me) => {
 
 void connectDatabase().then(() => {
   if (active && env.BACKGROUND_JOBS_ENABLED) startExpirationWorker();
+  // MF Battle tournaments end on time (winner picked, developers and winner told).
+  if (active) startTournamentWorker();
   if (active) void initializeDeliveryAccount();
   logger.info({ previewOnly: !active }, 'Roulette service ready; existing data preserved');
 }).catch(() => {

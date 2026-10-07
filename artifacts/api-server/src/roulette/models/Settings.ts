@@ -39,6 +39,8 @@ export interface ISettings extends Document {
   gamesPublic: boolean;
   // Exchange section: while false only developers can use it; members see "coming soon".
   exchangePublic: boolean;
+  // MF Battle: false = developers only, true = open to everyone.
+  battlePublic: boolean;
   // Telegram group of MF middlemen, without @.
   exchangeMiddlemanGroup: string;
   // Mediation group: the join-request link shown to users, and the group's chat id
@@ -92,6 +94,7 @@ const settingsSchema = new Schema<ISettings>(
     contestMinTotalInvites: { type: Number, default: 120, min: 0 },
     gamesPublic: { type: Boolean, default: false },
     exchangePublic: { type: Boolean, default: false },
+    battlePublic: { type: Boolean, default: false },
     exchangeMiddlemanGroup: { type: String, default: 'MF_MMMM' },
     mediationGroupLink: { type: String, default: '' },
     proofsChannel: { type: String, default: 'MFROLET' },

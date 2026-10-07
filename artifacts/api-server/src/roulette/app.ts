@@ -16,7 +16,7 @@ import { getShareImage } from './controllers/adminSystem.controller';
 import { getShowcase } from './controllers/showcase.controller';
 import { env } from './config/env';
 import { getAdsgramReward } from './controllers/games.controller';
-import { postInternalIdentity, postInternalKill, postInternalRecord } from './controllers/battleInternal.controller';
+import { postInternalIdentity, postInternalKill, postInternalLeaders, postInternalRecord } from './controllers/battleInternal.controller';
 import { getExchangeImageFile } from './controllers/exchange.controller';
 import { getProofMediaFile, getProofs } from './controllers/proofs.controller';
 import { parseLang, runWithLang, t } from './i18n';
@@ -69,6 +69,7 @@ export function createApp() {
   app.post('/api/battle-internal/identity', postInternalIdentity);
   app.post('/api/battle-internal/kill', postInternalKill);
   app.post('/api/battle-internal/record', postInternalRecord);
+  app.post('/api/battle-internal/leaders', postInternalLeaders);
 
   app.use('/api', (_req, res, next) => {
     if (!env.GAMEPLAY_ENABLED || env.OWNER_ID <= 0) {

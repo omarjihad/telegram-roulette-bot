@@ -28,8 +28,18 @@ export interface RoomClient {
   lastCenter: { x: number; y: number };
   canRevenge: boolean;
 }
+/** Every few seconds: [telegramId, name, seconds first, best mass] since the last report. */
+export interface LeaderReport {
+  lead: Array<[number, string, number, number]>;
+  current: { telegramId: number; name: string; mass: number } | null;
+  players: number;
+}
 export class BattleRoom {
-  constructor(opts?: { bots?: number; log?: (msg: string, err?: unknown) => void });
+  constructor(opts?: {
+    bots?: number;
+    log?: (msg: string, err?: unknown) => void;
+    report?: ((data: LeaderReport) => Promise<{ tour: { mode: string; endsAt: number; leader: [string, number] | null } | null }>) | null;
+  });
   world: SimWorld;
   clients: Set<RoomClient>;
   readonly players: number;

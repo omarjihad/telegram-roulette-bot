@@ -55,7 +55,7 @@ function skinSprite(id) {
   return null;
 }
 
-/** The golden +100 orb, drawn once. */
+/** The golden +50 orb, drawn once. */
 let orbSprite = null;
 function getOrbSprite() {
   if (orbSprite) return orbSprite;
@@ -78,7 +78,7 @@ function getOrbSprite() {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = '#5a2a00';
-  g.fillText('+100', c, c + 1);
+  g.fillText('+50', c, c + 1);
   orbSprite = { canvas: cv, size };
   return orbSprite;
 }
@@ -135,6 +135,11 @@ export function startGame(opts) {
   const popEl = document.createElement('div');
   popEl.className = 'g-pop';
   hud.appendChild(popEl);
+  // A running tournament (online): time left and who leads.
+  const tourEl = document.createElement('div');
+  tourEl.className = 'tour-hud';
+  tourEl.hidden = true;
+  hud.appendChild(tourEl);
   const zoomTip = document.createElement('div');
   zoomTip.className = 'g-zoomtip';
   zoomTip.hidden = true;
@@ -217,7 +222,7 @@ export function startGame(opts) {
 
   // ───────────── Practice: the world runs here ─────────────
   function practiceDriver() {
-    const FOOD = settings.quality === 'low' ? 4500 : settings.quality === 'high' ? 7000 : 6000;
+    const FOOD = settings.quality === 'low' ? 3200 : settings.quality === 'high' ? 4800 : 4000;
     const world = createWorld({ bots: 30, food: FOOD });
     const me = world.addOwner({ name: player.name || 'أنت', skin: profile.skin || 'fly', mass: profile.startMass || START_MASS, level: profile.level || 1 });
     const d = {
@@ -258,7 +263,7 @@ export function startGame(opts) {
               say(`<b>${escName(ev.killer.name)}:</b> ${pick(BOT_TAUNTS)}`, '#cbd5e1');
             }
           } else if (ev.type === 'orb' && ev.owner === me) {
-            popText('+100');
+            popText('+50');
           } else if (ev.type === 'pop' && ev.owner === me && haptic) {
             haptic('heavy');
           }
@@ -302,6 +307,18 @@ export function startGame(opts) {
     let sentThrow = false;
     let sentLevel = 0;
     let closedByUs = false;
+    let tour = null;
+    const drawTour = () => {
+      const sec = tour ? Math.floor((tour.end - Date.now()) / 1000) : -1;
+      if (sec < 0) { tourEl.hidden = true; return; }
+      const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const ss = String(sec % 60).padStart(2, '0');
+      const time = sec >= 3600 ? `${Math.floor(sec / 3600)}:${mm}:${ss}` : `${mm}:${ss}`;
+      const lead = tour.ld ? ` · 👑 ${escName(tour.ld[0])} ${tour.m === 'longest' ? `(${Math.floor(tour.ld[1] / 60)}:${String(tour.ld[1] % 60).padStart(2, '0')})` : `(${tour.ld[1]})`}` : '';
+      tourEl.innerHTML = `<b>🏆 بطولة</b> ${time}${lead}`;
+      tourEl.hidden = false;
+    };
+    const tourTimer = setInterval(drawTour, 1000);
     const ownerOf = (id) => {
       let o = owners.get(id);
       if (!o) { o = { id, name: '…', skin: 'classic', hue: 200, color: hueColor(200) }; owners.set(id, o); }
@@ -314,6 +331,7 @@ export function startGame(opts) {
     ws.onclose = (e) => {
       d.ready = false;
       clearInterval(pinger);
+      clearInterval(tourTimer);
       if (closedByUs) return;
       disconnected(e.reason || '');
     };
@@ -344,10 +362,13 @@ export function startGame(opts) {
         d.ready = true;
         alive = true;
         hideOverlay();
+      } else if (msg.t === 'tour') {
+        tour = msg.m ? { m: msg.m, end: Number(msg.end) || 0, ld: Array.isArray(msg.ld) ? msg.ld : null } : null;
+        drawTour();
       } else if (msg.t === 'chat') {
         say(`<b style="color:${hueColor(msg.h)}">${escName(msg.n)}:</b> ${escName(msg.x)}`, '#e2e8f0');
       } else if (msg.t === 'ev') {
-        if (msg.e === 'orb') popText('+100');
+        if (msg.e === 'orb') popText('+50');
         else if (msg.e === 'ate') {
           popText(`🍽️ ${msg.n}${msg.coins ? ` · +${msg.coins} MF` : ''}`);
           if (msg.coins) opts.onCoins?.(msg.coins, msg.lv);
@@ -495,7 +516,7 @@ export function startGame(opts) {
       split(x, y) { send({ t: 'split', x, y }); if (haptic) haptic('light'); },
       sendChat(text) { send({ t: 'chat', x: text }); },
       respawn(revenge) { send({ t: 'spawn', rv: !!revenge }); return null; },
-      close() { closedByUs = true; clearInterval(pinger); try { ws.close(); } catch (e) { /* already closed */ } },
+      close() { closedByUs = true; clearInterval(pinger); clearInterval(tourTimer); try { ws.close(); } catch (e) { /* already closed */ } },
     };
     showOverlay('<h2>🌐 جاري الاتصال…</h2><p>ندخلك غرفة الأونلاين ويّا المطورين.</p><div class="spin" style="margin:6px auto"></div><div class="g-row"><button class="btn" data-quit>✕ إلغاء</button></div>')
       .querySelector('[data-quit]').onclick = exit;

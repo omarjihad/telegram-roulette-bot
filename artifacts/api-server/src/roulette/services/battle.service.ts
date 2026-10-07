@@ -4,6 +4,7 @@ import { IUser, User } from '../models/User';
 import { BattleControl, BattleProfile, BattleSettings, IBattleProfile } from '../models/BattleProfile';
 import { BattleLayoutCode } from '../models/BattleLayoutCode';
 import { BattleWeeklyStat } from '../models/BattleWeeklyStat';
+import { BattleTournament } from '../models/BattleTournament';
 import { getSettings } from '../models/Settings';
 import { verifyTelegramInitData } from '../utils/telegramAuth';
 import { getAdminRole } from './admin.service';
@@ -100,16 +101,28 @@ const QUALITIES = ['low', 'medium', 'high'] as const;
 const JOYSTICKS = ['fixed', 'floating'] as const;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
-/** The section is open to developers only for now. */
-export function assertBattleAllowed(adminRole: string | null) {
-  if (!adminRole) throw new AppError(t('قريباً', 'Coming soon'), 403, 'BATTLE_COMING_SOON');
+// Whether MF Battle is open to everyone (developers can switch it from their panel).
+let publicCache = { value: false, at: 0 };
+export async function battleIsPublic() {
+  if (Date.now() - publicCache.at < 10000) return publicCache.value;
+  const value = (await getSettings()).battlePublic === true;
+  publicCache = { value, at: Date.now() };
+  return value;
+}
+export function forgetBattlePublicCache() {
+  publicCache = { value: false, at: 0 };
+}
+
+/** Developers always; everyone else once the game is opened to all. */
+export async function assertBattleAllowed(adminRole: string | null) {
+  if (!adminRole && !(await battleIsPublic())) throw new AppError(t('قريباً', 'Coming soon'), 403, 'BATTLE_COMING_SOON');
 }
 
 export function displayName(user: Pick<IUser, 'firstName' | 'username' | 'telegramId'>) {
   return user.firstName || (user.username ? `@${user.username}` : String(user.telegramId));
 }
 
-async function profileFor(user: HydratedDocument<IUser>) {
+export async function profileFor(user: HydratedDocument<IUser>) {
   const existing = await BattleProfile.findOne({ telegramId: user.telegramId });
   if (existing) return existing;
   try {
@@ -160,15 +173,21 @@ function profileView(p: IBattleProfile) {
 }
 
 export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: string | null) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const profile = await profileFor(user);
   return {
+    isAdmin: !!adminRole,
     player: { telegramId: user.telegramId, name: displayName(user), username: user.username ?? null, photoUrl: user.photoUrl ?? null },
     profile: profileView(profile),
     skins: BATTLE_SKINS.map((s) => ({ ...s, onSale: onSale(s) })),
     packs: Object.fromEntries(Object.entries(SKIN_PACKS).map(([id, p]) => [id, { name: p.name, days: p.days, endsAt: packEndsAt(id as keyof typeof SKIN_PACKS) }])),
     shop: { throws: THROW_SHOP, sizes: START_SIZES, throwAdMinutes: THROW_AD_MINUTES },
     levels: Array.from({ length: LEVEL_TABLE_SIZE }, (_, i) => ({ level: i + 1, xp: battleLevel(0).levelXp + 50 * i ** 2, reward: i ? levelReward(i + 1) : 0 })),
+    // A running tournament, shown on the lobby: its kind and when it ends.
+    tournament: await BattleTournament.findOne({ status: 'running', endsAt: { $gt: new Date() } })
+      .select('mode endsAt minutes')
+      .lean()
+      .then((x) => (x ? { mode: x.mode, endsAt: x.endsAt, minutes: x.minutes } : null)),
     // A separate game server close to the players (lower ping); null = this server.
     wsUrl: env.MF_BATTLE_WS_URL || null,
     week: { key: weekKey(), resetsAt: nextWeekStart() },
@@ -178,7 +197,7 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
 }
 
 export async function buySkin(user: HydratedDocument<IUser>, adminRole: string | null, skinId: string) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const skin = BATTLE_SKINS.find((s) => s.id === skinId);
   if (!skin) throw new AppError(t('السكن غير موجود', 'Skin not found'), 404, 'NOT_FOUND');
   const profile = await profileFor(user);
@@ -199,7 +218,7 @@ export async function buySkin(user: HydratedDocument<IUser>, adminRole: string |
 }
 
 export async function equipSkin(user: HydratedDocument<IUser>, adminRole: string | null, skinId: string) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const profile = await profileFor(user);
   if (!BATTLE_SKINS.some((s) => s.id === skinId)) throw new AppError(t('السكن غير موجود', 'Skin not found'), 404, 'NOT_FOUND');
   if (!FREE_SKINS.includes(skinId) && !profile.ownedSkins.includes(skinId)) {
@@ -241,7 +260,7 @@ export function cleanLayout(input: unknown): Record<string, BattleControl> {
 }
 
 export async function saveSettings(user: HydratedDocument<IUser>, adminRole: string | null, input: unknown) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const profile = await profileFor(user);
   profile.settings = cleanSettings(input, profile.settings);
   await profile.save();
@@ -249,7 +268,7 @@ export async function saveSettings(user: HydratedDocument<IUser>, adminRole: str
 }
 
 export async function saveLayout(user: HydratedDocument<IUser>, adminRole: string | null, input: unknown) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const profile = await profileFor(user);
   profile.layout = cleanLayout(input);
   profile.markModified('layout');
@@ -264,7 +283,7 @@ const makeCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
  * player (with a picture of the layout when the game sent one), ready to share.
  */
 export async function shareLayout(user: HydratedDocument<IUser>, adminRole: string | null, input: { layout?: unknown; image?: unknown }) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const layout = cleanLayout(input.layout);
   if (Object.keys(layout).length === 0) throw new AppError(t('ما اكو إعدادات تحكم للنسخ', 'No control layout to copy'), 422, 'VALIDATION_ERROR');
   let code = '';
@@ -299,7 +318,7 @@ export async function shareLayout(user: HydratedDocument<IUser>, adminRole: stri
 }
 
 export async function getSharedLayout(adminRole: string | null, rawCode: string) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const code = String(rawCode ?? '').trim().toUpperCase();
   const normalized = code.startsWith('MF-') ? code : `MF-${code}`;
   const found = await BattleLayoutCode.findOne({ code: normalized });
@@ -332,7 +351,7 @@ export const LEADERBOARD_FIELDS = { mass: 'maxMass', time: 'playSeconds', matche
 export type LeaderboardType = keyof typeof LEADERBOARD_FIELDS;
 
 export async function getLeaderboard(user: HydratedDocument<IUser>, adminRole: string | null, type: string) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const kind: LeaderboardType = type in LEADERBOARD_FIELDS ? (type as LeaderboardType) : 'mass';
   const field = LEADERBOARD_FIELDS[kind];
   const week = weekKey();
@@ -370,7 +389,7 @@ const notEnough = () => new AppError(t('ما عندك عملات MF كافية',
 
 /** Buys the next throw speed (×5, then ×10). */
 export async function buyThrow(user: HydratedDocument<IUser>, adminRole: string | null, level: number) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const item = THROW_SHOP.find((x) => x.level === level);
   if (!item || !('price' in item) || item.price <= 0) throw new AppError(t('هذه السرعة ما تنشرى', 'This speed is not for sale'), 400, 'BAD_THROW');
   const profile = await profileFor(user);
@@ -387,15 +406,17 @@ export async function buyThrow(user: HydratedDocument<IUser>, adminRole: string 
 
 /** One watched ad toward ×20 (one ad) or ×50 (two ads): opens it for 15 minutes. */
 export async function throwAd(user: HydratedDocument<IUser>, adminRole: string | null, level: number) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   if (level !== 4 && level !== 5) throw new AppError(t('هذه السرعة ما تنفتح بإعلان', 'This speed does not open with ads'), 400, 'BAD_THROW');
   await consumeAdView(user.telegramId, 'battle_throw');
   const profile = await profileFor(user);
   const until = new Date(Date.now() + THROW_AD_MINUTES * 60000);
+  // Never shortens a longer unlock (a permanent one from the developers).
+  const later = (d?: Date | null) => (d && new Date(d).getTime() > until.getTime() ? d : until);
   if (level === 4) {
-    profile.x20Until = until;
+    profile.x20Until = later(profile.x20Until);
   } else if ((profile.x50Ads ?? 0) + 1 >= 2) {
-    profile.x50Until = until;
+    profile.x50Until = later(profile.x50Until);
     profile.x50Ads = 0;
   } else {
     profile.x50Ads = (profile.x50Ads ?? 0) + 1;
@@ -406,7 +427,7 @@ export async function throwAd(user: HydratedDocument<IUser>, adminRole: string |
 
 /** Buys the next start size. */
 export async function buySize(user: HydratedDocument<IUser>, adminRole: string | null, index: number) {
-  assertBattleAllowed(adminRole);
+  await assertBattleAllowed(adminRole);
   const item = START_SIZES[index];
   if (!item || index === 0) throw new AppError(t('الحجم غير موجود', 'Size not found'), 400, 'BAD_SIZE');
   const profile = await profileFor(user);
@@ -489,7 +510,7 @@ export async function battleIdentityData(initData: string) {
   const user = await User.findOne({ telegramId: parsed.user.id });
   if (!user) throw new AppError(t('افتح البوت أول مرة', 'Open the bot first'), 401, 'UNAUTHORIZED');
   if (user.isBanned) throw new AppError(t('حسابك محظور', 'Your account is banned'), 403, 'BANNED');
-  assertBattleAllowed(await getAdminRole(user.telegramId));
+  await assertBattleAllowed(await getAdminRole(user.telegramId));
   const profile = await profileFor(user);
   return {
     telegramId: user.telegramId,

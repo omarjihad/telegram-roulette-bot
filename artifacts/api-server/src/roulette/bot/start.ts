@@ -12,6 +12,7 @@ import { grantDemoAccess, parseDemoToken, hasDemoAccess } from '../services/demo
 import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
 import { isContestEnabled, parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 import { Lang, runWithLang, t, userLang } from '../i18n';
+import { battleIsPublic, battleUrl } from '../services/battle.service';
 
 export function buildMiniAppKeyboard(label?: string, tab?: string): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
@@ -22,6 +23,14 @@ export function buildMiniAppKeyboard(label?: string, tab?: string): TelegramBot.
       inline_keyboard: [[{ text: label, web_app: { url } }]],
     },
   };
+}
+
+/** MF Battle's full https address (MF_BATTLE_URL, or this server's /mf-battle next to the Mini App). */
+function absoluteBattleUrl() {
+  const u = battleUrl();
+  if (/^https:\/\//.test(u)) return u;
+  if (!env.MINI_APP_URL) return null;
+  return new URL(u, env.MINI_APP_URL).toString();
 }
 
 function welcomeName(u: TelegramBot.User, fallback: string) {
@@ -176,6 +185,17 @@ export function registerStartHandler(bot: TelegramBot) {
           buildMiniAppKeyboard(t('🔄 فتح المنشور', '🔄 Open the post'), `exchange&listing=${listingMatch[1]}`)
         );
         return;
+      }
+
+      // Tournament and MF Battle messages (?start=battle) open the game straight away.
+      if (startParam === 'battle') {
+        const url = absoluteBattleUrl();
+        if (url && (role || (await battleIsPublic()))) {
+          await bot.sendMessage(msg.chat.id, t('⚔️ MF Battle\n\n👇 اضغط الزر وادخل الساحة', '⚔️ MF Battle\n\n👇 Tap the button to enter the arena'), {
+            reply_markup: { inline_keyboard: [[{ text: t('⚔️ ادخل MF Battle', '⚔️ Enter MF Battle'), web_app: { url } }]] },
+          });
+          return;
+        }
       }
 
       // The race section link (?start=race) and race invite links open straight on the race tab.

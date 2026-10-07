@@ -227,7 +227,7 @@ input { font: inherit; }
 .play b { display: block; font-family: 'Baloo Bhaijaan 2', 'Cairo', sans-serif; font-size: calc(var(--u) * 9); line-height: 1.05; text-shadow: 0 3px 0 rgba(120, 10, 40, 0.5); }
 .play small { display: block; font-size: calc(var(--u) * 3); font-weight: 800; opacity: 0.9; }
 
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 2); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 2); }
 .tile {
   position: relative;
   display: flex;
@@ -245,6 +245,7 @@ input { font: inherit; }
 .tile:active { transform: scale(0.97); }
 .tile.t-store { border-color: rgba(255, 200, 61, 0.45); background: linear-gradient(160deg, rgba(255, 200, 61, 0.14), rgba(255, 255, 255, 0.03)); }
 .tile.t-skins { border-color: rgba(155, 92, 255, 0.5); background: linear-gradient(160deg, rgba(155, 92, 255, 0.18), rgba(255, 255, 255, 0.03)); }
+.tile.t-roulette { border-color: rgba(255, 59, 107, 0.5); background: linear-gradient(160deg, rgba(255, 59, 107, 0.18), rgba(255, 255, 255, 0.03)); }
 .tile.t-rank { border-color: rgba(34, 227, 255, 0.45); background: linear-gradient(160deg, rgba(34, 227, 255, 0.14), rgba(255, 255, 255, 0.03)); }
 
 .weekly {
@@ -638,3 +639,59 @@ input { font: inherit; }
 .game .g-ctl[data-id='zoom'] .g-zbtn + .g-zbtn { border-top: 2px solid rgba(255, 255, 255, 0.55) !important; }
 .game .g-tbtn { background: rgba(15, 23, 42, 0.9); border: 2px solid rgba(255, 255, 255, 0.55); }
 .game .g-tbtn.g-exit { background: #dc2626; border-color: #fecaca; }
+
+/* ───────────── Tournament banner (lobby) ───────────── */
+.tour-banner { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: calc(var(--u) * 1.4) 12px; border-radius: 14px; background: linear-gradient(135deg, rgba(255, 200, 61, 0.22), rgba(255, 59, 107, 0.18)); border: 1.5px solid rgba(255, 200, 61, 0.6); font-size: calc(var(--u) * 2.9); }
+.tour-banner b { color: var(--gold); }
+.tour-banner span { color: var(--dim); font-weight: 700; }
+.tour-banner .tour-left { color: #fff; font-weight: 900; direction: ltr; font-variant-numeric: tabular-nums; }
+.dev-btn { color: var(--gold); border-color: rgba(255, 200, 61, 0.5); }
+
+/* ───────────── Developer panel ───────────── */
+.adm { display: flex; flex-direction: column; gap: calc(var(--u) * 2); }
+.adm-card { display: flex; flex-direction: column; gap: 8px; padding: calc(var(--u) * 2.4) calc(var(--u) * 3); border-radius: 16px; background: var(--card); border: 1.5px solid var(--line); }
+.adm-card.live { border-color: rgba(163, 255, 58, 0.55); text-align: center; align-items: center; }
+.adm-card small { color: var(--dim); font-size: calc(var(--u) * 2.7); }
+.adm-title { font-weight: 900; font-size: calc(var(--u) * 3.5); }
+.adm-title small { margin-inline-start: 6px; }
+.adm-big { font-family: 'Baloo Bhaijaan 2', 'Cairo', sans-serif; font-size: calc(var(--u) * 9); font-weight: 800; line-height: 1; color: var(--gold); direction: ltr; font-variant-numeric: tabular-nums; }
+.adm-now { font-size: calc(var(--u) * 3.1); }
+.adm-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-top: 1px solid var(--line); font-size: calc(var(--u) * 3); }
+.adm-row:first-of-type { border-top: 0; }
+.adm-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+.adm-row b { color: var(--gold); }
+.adm-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.adm-btns .btn { flex: 1; min-width: 180px; }
+.adm-line { display: flex; align-items: center; gap: 8px; }
+.adm-line > span { width: 90px; flex: none; font-weight: 800; font-size: calc(var(--u) * 3); }
+.adm-line .btn { flex: none; }
+.adm-input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.4); border: 1.5px solid var(--line); color: #fff; font: inherit; font-weight: 700; -webkit-user-select: text; user-select: text; }
+.adm-input:focus { outline: none; border-color: var(--violet); }
+select.adm-input { appearance: none; }
+.adm-text { min-height: 90px; resize: vertical; line-height: 1.6; }
+.adm-check { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: calc(var(--u) * 3); }
+.adm-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.adm-mode { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 14px; border: 1.5px solid var(--line); background: rgba(0, 0, 0, 0.25); text-align: start; }
+.adm-mode b { font-size: calc(var(--u) * 3.3); }
+.adm-mode small { color: var(--dim); font-size: calc(var(--u) * 2.6); line-height: 1.5; }
+.adm-mode.on { border-color: var(--gold); background: rgba(255, 200, 61, 0.12); }
+.seg.wrap { flex-wrap: wrap; align-self: flex-start; }
+.adm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 26), 1fr)); gap: 8px; }
+.adm-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 14px; background: var(--card); border: 1.5px solid var(--line); }
+.adm-stat b { font-size: calc(var(--u) * 5); color: var(--gold); font-family: 'Baloo Bhaijaan 2', 'Cairo', sans-serif; }
+.adm-stat small { color: var(--dim); font-size: calc(var(--u) * 2.6); text-align: center; }
+.adm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.adm-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: calc(var(--u) * 3); }
+.adm-stats b { color: var(--gold); }
+.adm-skins { display: flex; flex-wrap: wrap; gap: 8px; }
+.adm-skins svg { width: 34px; height: 34px; }
+.adm-skin { display: flex; align-items: center; gap: 4px; font-size: calc(var(--u) * 3); }
+.adm-skin svg { width: 30px; height: 30px; }
+.adm-gifts { display: flex; flex-direction: column; gap: 8px; }
+
+/* ───────────── Tournament (in game) ───────────── */
+.tour-hud { position: absolute; top: calc(var(--u) * 1.5); left: 50%; transform: translateX(-50%); z-index: 6; padding: 4px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); border: 1.5px solid rgba(255, 200, 61, 0.6); color: #fff; font-weight: 800; font-size: 12px; white-space: nowrap; pointer-events: none; }
+.tour-hud b { color: var(--gold); }
+.tour-hud[hidden] { display: none; }
+.adm-line .btn, .adm .set-row .btn { min-width: 0; width: auto; flex: none; margin-top: 0; padding-inline: 18px; }
+.adm .set-row .lbl { min-width: 0; }

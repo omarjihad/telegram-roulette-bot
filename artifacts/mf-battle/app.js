@@ -3,6 +3,7 @@ import { CONTROLS, byId, fullLayout, defaultLayout, controlHTML, layoutPicture, 
 import { sfx, setSoundEnabled, unlockSound } from './sound.js';
 import { startGame } from './game.js';
 import { showAd } from './ads.js';
+import { openAdminPanel } from './admin.js';
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const CFG = window.MF_BATTLE_CONFIG || {};
@@ -212,6 +213,25 @@ const LB_TYPES = {
   matches: { label: 'أكثر مباريات', icon: '🎮', unit: (v) => fmt(v) },
 };
 
+const TOUR_MODES = { longest: 'أكثر واحد يبقى متصدر يفوز', final: 'المتصدر بآخر ثانية يفوز' };
+/** A running tournament on the lobby: how to win and the time left (ticks every second). */
+function tourBannerHTML() {
+  const t = state.tournament;
+  if (!t || new Date(t.endsAt).getTime() <= Date.now()) return '';
+  return `<div class="tour-banner"><b>🏆 بطولة شغالة</b><span>${TOUR_MODES[t.mode] || ''}</span><span class="tour-left" data-tour-left>${clock(t.endsAt)}</span></div>`;
+}
+function clock(end) {
+  const sec = Math.max(0, Math.floor((new Date(end).getTime() - Date.now()) / 1000));
+  const h = Math.floor(sec / 3600);
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const ss = String(sec % 60).padStart(2, '0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+setInterval(() => {
+  const el = document.querySelector('[data-tour-left]');
+  if (el && state.tournament) el.textContent = clock(state.tournament.endsAt);
+}, 1000);
+
 // ───────────── Lobby ─────────────
 function renderLobby() {
   const p = state.profile;
@@ -229,6 +249,7 @@ function renderLobby() {
       <div class="brand">MF BATTLE</div>
       <div class="wallet">
         <button class="round-btn back-btn" data-act="roulette">↩ الروليت</button>
+        ${state.isAdmin ? '<button class="round-btn back-btn dev-btn" data-act="admin">🛠 المطور</button>' : ''}
         <button class="round-btn" data-act="settings" aria-label="الإعدادات">⚙️</button>
         ${coinsHTML()}
       </div>
@@ -245,11 +266,13 @@ function renderLobby() {
           <button class="mode-btn ${state.mode === 'online' ? 'on' : ''}" data-mode="online"><b>🌐 أونلاين</b><small>ويّا المطورين · ينحسب بالترتيب</small></button>
           <button class="mode-btn ${state.mode === 'online' ? '' : 'on'}" data-mode="practice"><b>🤖 تدريب</b><small>ضد 30 بوت · بدون نت</small></button>
         </div>
+        ${tourBannerHTML()}
         <button class="play" data-act="play"><b>ابدأ اللعب</b><small>${state.mode === 'online' ? 'أونلاين ويّا المطورين والبوتات' : 'تدريب ضد البوتات'}</small></button>
         <div class="tiles">
           <button class="tile t-store" data-act="store"><span class="ic">🛒</span>المتجر</button>
           <button class="tile t-skins" data-act="skins"><span class="ic">🎭</span>السكنات</button>
           <button class="tile t-rank" data-act="rank"><span class="ic">🏆</span>الترتيب</button>
+          <button class="tile t-roulette" data-act="roulette"><span class="ic">🎰</span>الروليت</button>
         </div>
       </section>
       <section class="weekly" id="weekly">
@@ -371,13 +394,19 @@ function openPanel(name) {
   else if (name === 'rank') renderRank('mass');
   else if (name === 'settings') renderSettings();
   else if (name === 'levels') renderLevels();
+  else if (name === 'admin' && state.isAdmin) {
+    openAdminPanel({ panelEl, api, toast, esc, fmt, panelHead, bindPanelClose, showDialog, closeDialog, haptic, sfx, skinSVG });
+  }
 }
 
 function closePanel() {
   sfx('close');
+  const fromAdmin = !!panelEl.querySelector('.adm');
   panelEl.hidden = true;
   panelEl.innerHTML = '';
   renderLobby();
+  // A tournament may have started or ended from the developer panel.
+  if (fromAdmin) refreshLobby();
 }
 
 function bindPanelClose() {
@@ -463,10 +492,12 @@ function storeThrowsHTML() {
       else status = `<button class="btn ${state.profile.coins >= x.price ? 'btn-hot' : ''}" data-buy-throw="${x.level}"><img src="${COIN}" alt="" class="ic-coin" /> ${fmt(x.price)}</button>`;
     } else {
       const until = x.level === 4 ? t.x20Until : t.x50Until;
-      const on = left(until);
+      // A developer's gift opens it for good.
+      const forever = new Date(until || 0).getTime() - now > 365 * 86400000;
+      const on = forever ? 'دائمي' : left(until);
       const progress = x.level === 5 && t.x50Ads ? ` (${t.x50Ads}/2)` : '';
       status = on
-        ? `<button class="btn btn-cyan" disabled>✓ مفتوح · باقي ${on}</button>`
+        ? `<button class="btn btn-cyan" disabled>✓ مفتوح · ${forever ? on : `باقي ${on}`}</button>`
         : `<button class="btn btn-violet" data-ad-throw="${x.level}">📺 ${x.ads === 1 ? 'شاهد إعلان' : 'شاهد إعلانين'}${progress}</button>`;
     }
     const note = x.level <= 1 ? 'للكل' : 'price' in x ? 'للأبد' : `${x.minutes} دقيقة بعد ${x.ads === 1 ? 'إعلان واحد' : 'إعلانين'}`;
@@ -918,6 +949,8 @@ async function loadHome() {
   state.wsUrl = res.wsUrl || null;
   state.week = res.week;
   state.ads = res.ads || null;
+  state.isAdmin = !!res.isAdmin;
+  state.tournament = res.tournament || null;
 }
 
 let refreshing = false;
@@ -976,12 +1009,42 @@ function demoAllowed(t) {
   if (t.x50Until && new Date(t.x50Until) > new Date()) out.push(5);
   return out;
 }
+function demoAdmin() {
+  return {
+    public: !!demo.public,
+    stats: { online: 3, profiles: 128, newToday: 9, newWeek: 41, weekPlayers: 63, matches: 2210, hours: 187, kills: 9120, coins: 412300,
+      topKills: [{ telegramId: 1, name: 'عمر', value: 312 }, { telegramId: 2, name: 'SASUKE', value: 201 }],
+      topMass: [{ telegramId: 1, name: 'عمر', value: 67976 }, { telegramId: 3, name: 'زيد', value: 31020 }],
+      skins: { fly: 128, mf: 128, zoro: 14, roger: 3, joyboy: 1 } },
+    tournament: demo.tournament ? { ...demo.tournament, how: '', top: [{ telegramId: 1, name: 'عمر', leadSeconds: 312, bestMass: 9100 }, { telegramId: 2, name: 'SASUKE', leadSeconds: 95, bestMass: 4200 }], current: { telegramId: 1, name: 'عمر', mass: 8800 } } : null,
+    history: [{ status: 'ended', mode: 'final', minutes: 30, startedAt: new Date(Date.now() - 86400000).toISOString(), winner: { name: 'زيد', leadSeconds: 610, bestMass: 12000 } }],
+    skins: DEMO_SKINS.map((x) => ({ id: x.id, name: x.name.ar })),
+    throws: [{ level: 2, label: '×5' }, { level: 3, label: '×10' }, { level: 4, label: '×20' }, { level: 5, label: '×50' }],
+    sizes: [{ index: 1, mass: 50 }, { index: 2, mass: 100 }, { index: 3, mass: 200 }, { index: 4, mass: 400 }],
+  };
+}
+function demoAdminAct(path, opts) {
+  const b = (opts && opts.body) || {};
+  if (path === '/battle/admin/tournament') {
+    demo.tournament = { mode: b.mode, minutes: b.minutes, endsAt: new Date(Date.now() + b.minutes * 60000).toISOString(), startedAt: new Date().toISOString() };
+    return { ok: true, broadcast: b.broadcast ? { total: 5, to: 'developers' } : null };
+  }
+  if (path === '/battle/admin/tournament/end' || path === '/battle/admin/tournament/cancel') { demo.tournament = null; return { ok: true }; }
+  if (path.startsWith('/battle/admin/player') || path === '/battle/admin/grant') {
+    return { ok: true, note: 'هدية', player: { telegramId: 5, username: 'zaid', name: 'زيد', coins: 900, level: 4, xp: 500, kills: 30, bestMass: 3100, totalMatches: 40, skin: 'fly', ownedSkins: ['fly', 'mf', 'zoro'], throwOwned: 1, x20Forever: false, x50Forever: b.kind === 'throw', sizeOwned: 0 } };
+  }
+  if (path === '/battle/admin/broadcast') return { ok: true, total: 120, to: b.to };
+  if (path === '/battle/admin/public') { demo.public = b.open; return { ok: true, public: b.open }; }
+  return { ok: true };
+}
 const DEMO_NAMES = ['SASUKE', 'KONAN', 'عمر', 'BROKEN', 'CherryYT', 'دندون', 'زيد', 'mhmd'];
 async function demoApi(path, opts) {
   await new Promise((r) => setTimeout(r, 120));
   const p = demo.profile;
   const reset = new Date(Date.now() + 3.4 * 86400000).toISOString();
-  if (path === '/battle') return { ok: true, player: demo.player, profile: p, skins: DEMO_SKINS, packs: { onepiece: { name: { ar: 'حزمة ون بيس' }, days: 7, endsAt: null } }, shop: DEMO_SHOP, levels: DEMO_LEVELS, wsUrl: null, week: { key: 'demo', resetsAt: reset }, ads: { rewardBlockId: 'demo-reward', interstitialBlockId: 'int-52362' } };
+  if (path === '/battle/admin') return { ok: true, ...demoAdmin() };
+  if (path.startsWith('/battle/admin/')) return demoAdminAct(path, opts);
+  if (path === '/battle') return { ok: true, isAdmin: true, tournament: demo.tournament || null, player: demo.player, profile: p, skins: DEMO_SKINS, packs: { onepiece: { name: { ar: 'حزمة ون بيس' }, days: 7, endsAt: null } }, shop: DEMO_SHOP, levels: DEMO_LEVELS, wsUrl: null, week: { key: 'demo', resetsAt: reset }, ads: { rewardBlockId: 'demo-reward', interstitialBlockId: 'int-52362' } };
   const bt = path.match(/^\/battle\/throws\/(\d)\/(buy|ad)$/);
   if (bt) {
     const lv = Number(bt[1]);

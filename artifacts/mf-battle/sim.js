@@ -11,7 +11,7 @@ export const REVENGE_MASS = 500;
 export const MIN_SPLIT = 36;
 export const MAX_CELLS = 16;
 export const MAX_CELL_MASS = 23000; // one piece never grows past this; the rest is lost
-export const BOT_MAX_MASS = 1500; // a bot bigger than this drops its mass on the ground
+export const BOT_MAX_MASS = 1000; // a bot bigger than this drops its mass on the ground
 export const MERGE_SECONDS = 20; // split pieces join back together on their own after this
 export const EAT_RATIO = 1.25;
 export const THROW_SPEEDS = [1, 2, 5, 10, 20, 50];
@@ -27,7 +27,7 @@ const PELLET_SPEED = 1700; // fades at 4/s, so a pellet flies about 425
 const PELLET_LIFE = 45; // seconds a pellet stays on the ground
 const MAX_PELLETS = 3000;
 const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
-const ORB_MASS = 100;
+const ORB_MASS = 50;
 const GRID = 300;
 
 export const rad = (m) => Math.sqrt(m) * 10;
@@ -103,7 +103,7 @@ export class FoodGrid {
  * added/removed, for the online room to send).
  */
 export function createWorld(opts = {}) {
-  const cfg = { bots: 30, food: 6000, viruses: 80, orbs: 90, trackNet: false, ...opts };
+  const cfg = { bots: 30, food: 4000, viruses: 80, orbs: 50, trackNet: false, ...opts };
   let nextId = 1;
   const w = {
     time: 0,
@@ -148,7 +148,7 @@ export function createWorld(opts = {}) {
   }
 
   function newCell(o, x, y, m) {
-    const c = { id: nextId++, x, y, m, r: rad(m), bx: 0, by: 0, mergeAt: 0, owner: o };
+    const c = { id: nextId++, x, y, m, r: rad(m), bx: 0, by: 0, mergeAt: 0, owner: o, born: w.time };
     w.cells.push(c);
     return c;
   }
@@ -191,7 +191,7 @@ export function createWorld(opts = {}) {
       throwing: false,
       throwLevel: 0,
       throwT: 0,
-      ai: { next: 0, aggr: rand(0.35, 1), greed: rand(0.5, 0.95), feeder: Math.random() < 0.4, wander: { x: rand(0, WORLD), y: rand(0, WORLD) } },
+      ai: { next: 0, aggr: rand(0.35, 1), greed: rand(0.5, 0.95), feeder: Math.random() < 0.2, wander: { x: rand(0, WORLD), y: rand(0, WORLD) } },
       stats: { maxMass: mass, eaten: 0, born: 0 },
       killer: null,
     };
@@ -382,7 +382,7 @@ export function createWorld(opts = {}) {
         if (h.bot || h.dead) continue;
         const hc = w.centerOf(h);
         const d = Math.hypot(hc.x - cx, hc.y - cy);
-        if (d < 1100 + big.r && d < fd && hc.m < total * 0.9) { fd = d; friend = hc; }
+        if (d < 1100 + big.r && d < fd && hc.m < total * 0.5) { fd = d; friend = hc; }
       }
       if (friend) {
         const dx = friend.x - cx, dy = friend.y - cy;
@@ -595,7 +595,8 @@ export function createWorld(opts = {}) {
         if (Math.hypot(f.x - c.x, f.y - c.y) < c.r) { eatFood(f); gain += 1; }
       });
       nearPellets(c.x, c.y, c.r, (p) => {
-        if (p.owner === c.owner && w.time - p.born < 0.4) return;
+        // Only the piece that threw it waits; a piece split off after the throw eats it at once.
+        if (p.owner === c.owner && c.born <= p.born && w.time - p.born < 0.4) return;
         if (c.m > p.m && Math.hypot(p.x - c.x, p.y - c.y) < c.r - p.r * 0.3) { gain += p.m; dropPellet(p); }
       });
       for (const b of w.orbs) {
@@ -659,7 +660,7 @@ export function createWorld(opts = {}) {
     }
     for (let i = w.orbs.length - 1; i >= 0; i--) if (w.orbs[i].m <= 0) { w.orbs.splice(i, 1); later(4, addOrb); }
     const missing = cfg.food - w.foods.size;
-    for (let i = 0; i < missing; i++) if (Math.random() < 0.35) addFood();
+    for (let i = 0; i < missing; i++) if (Math.random() < 0.15) addFood();
   };
 
   // ───────────── Start ─────────────
@@ -669,7 +670,7 @@ export function createWorld(opts = {}) {
   const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
   for (let i = 0; i < cfg.bots; i++) {
     // A mix of sizes, so there is always someone to chase and someone to run from.
-    const mass = i < 5 ? rand(800, BOT_MAX_MASS) : i < 14 ? rand(150, 520) : rand(20, 90);
+    const mass = i < 5 ? rand(500, BOT_MAX_MASS) : i < 14 ? rand(100, 350) : rand(20, 70);
     w.addOwner({ name: names[i % names.length], skin: pick(BOT_SKINS), bot: true, mass });
   }
   w.foodAdded.length = 0;
