@@ -593,7 +593,13 @@ export function battleDirectLink() {
     : `https://t.me/${env.BOT_USERNAME}?start=battle`;
 }
 
-/** MF Battle's address: MF_BATTLE_URL when set (e.g. Cloudflare), otherwise this server's /mf-battle. */
+/**
+ * MF Battle's address: always this server's /mf-battle, the same domain as the Mini App, so
+ * its Adsgram ads play directly like the roulette's. From another domain (Cloudflare Pages)
+ * they had to play in a frame from this domain, and Adsgram never confirmed those views.
+ * The real-time game server can still be elsewhere (MF_BATTLE_WS_URL on Cloudflare), so the
+ * ping stays the same. MF_BATTLE_URL is no longer used.
+ */
 export function battleUrl() {
-  return env.MF_BATTLE_URL || MF_BATTLE_PATH;
+  return MF_BATTLE_PATH;
 }

@@ -29,7 +29,8 @@ const envSchema = z.object({
     .optional()
     .default('')
     .refine((v) => v === '' || /^https:\/\//.test(v), { message: 'MINI_APP_URL must be empty or start with https://' }),
-  // Where the MF Battle game is hosted (Cloudflare Pages), e.g. https://mf-battle.pages.dev
+  // No longer used: MF Battle always opens from this server's /mf-battle (its ads must play on
+  // the bot's own domain for Adsgram to count them). Kept so old settings still start.
   MF_BATTLE_URL: z
     .string()
     .optional()

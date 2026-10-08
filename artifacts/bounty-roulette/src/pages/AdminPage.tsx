@@ -2550,8 +2550,8 @@ interface DashboardStats {
   developers: number;
   activity?: {
     active: { today: number; week: number; month: number; blocked: number; english: number };
-    today: { spins: number; ads: number; rounds: number; referrals: number; withdrawals: number };
-    week: { spins: number; ads: number; rounds: number; referrals: number };
+    today: { spins: number; ads: number; adsConfirmed?: number; rounds: number; referrals: number; withdrawals: number };
+    week: { spins: number; ads: number; adsConfirmed?: number; rounds: number; referrals: number };
     exchange: { active: number; today: number; views: number; offers: number; offersAccepted: number; reportsOpen: number; ticketsToday: number; ticketsCompleted: number };
     series: Array<{ day: string; users: number; spins: number; ads: number }>;
   };
@@ -2644,10 +2644,14 @@ function StatsTab() {
             <div style={grid}>
               <StatBox label="فرّات" value={`${a.today.spins} / ${a.week.spins}`} />
               <StatBox label="إعلانات" value={`${a.today.ads} / ${a.week.ads}`} />
+              <StatBox label="أكدتها Adsgram" value={`${a.today.adsConfirmed ?? 0} / ${a.week.adsConfirmed ?? 0}`} />
               <StatBox label="جولات الحية" value={`${a.today.rounds} / ${a.week.rounds}`} />
               <StatBox label="إحالات مؤهلة" value={`${a.today.referrals} / ${a.week.referrals}`} />
               <StatBox label="طلبات سحب اليوم" value={a.today.withdrawals} />
             </div>
+            <p className="card-sub" style={{ marginTop: 10 }}>
+              «أكدتها Adsgram» = مشاهدات Adsgram بنفسه بلّغ عنها البوت. إذا هذا الرقم يزيد وموقع Adsgram بعده يكول 0، فالمشكلة بحسابك هناك (منصة تجريبية أو بلوك من منصة ثانية)، مو بالبوت.
+            </p>
           </div>
 
           <div className="card">

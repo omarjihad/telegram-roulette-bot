@@ -155,7 +155,7 @@ export async function getActivityStats() {
   const agg = <T>(m: unknown) => m as { aggregate: (p: object[]) => Promise<T> };
   const [
     activeToday, activeWeek, activeMonth, blocked, english,
-    spinsToday, spinsWeek, adsToday, adsWeek, roundsToday, roundsWeek,
+    spinsToday, spinsWeek, adsToday, adsWeek, adsConfirmedToday, adsConfirmedWeek, roundsToday, roundsWeek,
     referralsToday, referralsWeek, withdrawalsToday,
     listingsActive, listingsToday, viewsTotal, offersTotal, offersAccepted, reportsOpen,
     ticketsToday, ticketsCompleted,
@@ -170,6 +170,9 @@ export async function getActivityStats() {
     RouletteSpin.countDocuments({ createdAt: { $gte: week } }),
     AdView.countDocuments({ createdAt: { $gte: today } }),
     AdView.countDocuments({ createdAt: { $gte: week } }),
+    // Views Adsgram itself reported to this server (its Reward URL): the ones it counts.
+    AdView.countDocuments({ source: 'adsgram_callback', createdAt: { $gte: today } }),
+    AdView.countDocuments({ source: 'adsgram_callback', createdAt: { $gte: week } }),
     GameSession.countDocuments({ createdAt: { $gte: today } }),
     GameSession.countDocuments({ createdAt: { $gte: week } }),
     Referral.countDocuments({ status: 'qualified', qualifiedAt: { $gte: today } }),
@@ -189,8 +192,8 @@ export async function getActivityStats() {
   ]);
   return {
     active: { today: activeToday, week: activeWeek, month: activeMonth, blocked, english },
-    today: { spins: spinsToday, ads: adsToday, rounds: roundsToday, referrals: referralsToday, withdrawals: withdrawalsToday },
-    week: { spins: spinsWeek, ads: adsWeek, rounds: roundsWeek, referrals: referralsWeek },
+    today: { spins: spinsToday, ads: adsToday, adsConfirmed: adsConfirmedToday, rounds: roundsToday, referrals: referralsToday, withdrawals: withdrawalsToday },
+    week: { spins: spinsWeek, ads: adsWeek, adsConfirmed: adsConfirmedWeek, rounds: roundsWeek, referrals: referralsWeek },
     exchange: {
       active: listingsActive,
       today: listingsToday,

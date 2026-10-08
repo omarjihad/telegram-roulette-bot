@@ -100,7 +100,7 @@ export function createApp() {
       index: 'index.html',
       setHeaders: (res, filePath) => {
         res.setHeader('Cache-Control', 'no-cache');
-        // The ad page is shown inside the game when the game itself runs on Cloudflare.
+        // The ad page was shown inside the game when it ran on Cloudflare (old links).
         if (path.basename(filePath) === 'ad.html') res.removeHeader('X-Frame-Options');
       },
     }));
