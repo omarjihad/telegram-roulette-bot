@@ -338,7 +338,8 @@ function playGame() {
     showAd: (blockId) => showAd(blockId, { demo: DEMO, base: API, hash: tgHash() }),
     ads: {
       reward: CFG.rewardBlockId || (state.ads && state.ads.rewardBlockId) || null,
-      interstitial: CFG.interstitialBlockId || (state.ads && state.ads.interstitialBlockId) || 'int-52362',
+      // From the admin panel ('' there = no interstitial); the old block when the server is older.
+      interstitial: CFG.interstitialBlockId || (state.ads ? state.ads.interstitialBlockId || null : 'int-52362'),
     },
     onExit: () => {
       state.game = null;

@@ -67,7 +67,7 @@ import {
   adminSetContestEndsAt,
   adminStartContestRound,
 } from '../controllers/adminContest.controller';
-import { adminGetGames, adminUpdateGames } from '../controllers/games.controller';
+import { adminCheckAd, adminGetGames, adminUpdateGames } from '../controllers/games.controller';
 import { adminRefreshProofs, adminSetProofHidden, adminSetProofsChannel } from '../controllers/proofs.controller';
 import {
   adminBanExchangeOwner,
@@ -155,6 +155,7 @@ router.post('/points/deduct', adminDeductUserPoints);
 // Games & ads
 router.get('/games', adminGetGames);
 router.patch('/games', adminUpdateGames);
+router.get('/ads/check', adminCheckAd);
 
 // Proofs channel
 router.post('/proofs/refresh', adminRefreshProofs);

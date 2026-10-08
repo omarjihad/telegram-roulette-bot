@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   userUpdate: vi.fn(),
   adCreate: vi.fn(),
   adFindUpdate: vi.fn(),
+  adFindOne: vi.fn(),
   sessionFind: vi.fn(),
   sessionUpdate: vi.fn(),
   sessionUpdateMany: vi.fn(),
@@ -14,7 +15,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../models/User', () => ({ User: { updateOne: mocks.userUpdate } }));
-vi.mock('../models/AdView', () => ({ AdView: { create: mocks.adCreate, findOneAndUpdate: mocks.adFindUpdate } }));
+vi.mock('../models/AdView', () => ({
+  AdView: {
+    create: mocks.adCreate,
+    findOneAndUpdate: mocks.adFindUpdate,
+    findOne: (...a: unknown[]) => ({ select: () => ({ lean: () => mocks.adFindOne(...a) }) }),
+  },
+}));
 vi.mock('../models/GameSession', () => ({
   GameSession: { findOne: mocks.sessionFind, updateOne: mocks.sessionUpdate, updateMany: mocks.sessionUpdateMany, create: mocks.sessionCreate },
 }));
@@ -22,7 +29,7 @@ vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
 vi.mock('../config/env', () => ({ env: mocks.env }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { claimAdTask, finishSnakeRound, finishZigguratRound, gamesAllowed, recordAdsgramReward, startSnakeRound, startZigguratRound } from './games.service';
+import { adsgramConfirmedSince, claimAdTask, finishSnakeRound, finishZigguratRound, gamesAllowed, recordAdsgramReward, startSnakeRound, startZigguratRound } from './games.service';
 
 const settings = {
   gamesPublic: false,
@@ -150,5 +157,14 @@ describe('ziggurat game', () => {
     expect(round.pointsPerFloor).toBe(0.02);
     expect(mocks.userUpdate.mock.calls[0][1]).toEqual({ $set: { lastFreeZigguratAt: expect.any(Date) } });
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ game: 'ziggurat' }));
+  });
+
+  it('ad check: tells whether Adsgram reported the admin\'s own view since the ad started', async () => {
+    const since = new Date('2026-10-08T10:00:00Z');
+    mocks.adFindOne.mockResolvedValueOnce({ createdAt: new Date('2026-10-08T10:00:07Z') });
+    await expect(adsgramConfirmedSince(7, since)).resolves.toMatchObject({ confirmed: true });
+    expect(mocks.adFindOne).toHaveBeenCalledWith({ telegramId: 7, source: 'adsgram_callback', createdAt: { $gte: since } });
+    mocks.adFindOne.mockResolvedValueOnce(null);
+    await expect(adsgramConfirmedSince(7, since)).resolves.toMatchObject({ confirmed: false });
   });
 });

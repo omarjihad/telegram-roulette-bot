@@ -190,8 +190,12 @@ export async function getBattleHome(user: HydratedDocument<IUser>, adminRole: st
     // A separate game server close to the players (lower ping); null = this server.
     wsUrl: env.MF_BATTLE_WS_URL || null,
     week: { key: weekKey(), resetsAt: nextWeekStart() },
-    // Adsgram blocks: the reward one (revenge) and the interstitial shown every second death.
-    ads: { rewardBlockId: (await getSettings()).adsgramBlockId || null, interstitialBlockId: BATTLE_INTERSTITIAL_BLOCK },
+    // Adsgram blocks (set in the admin panel): the reward one (revenge, throw speeds) and the
+    // interstitial shown between rounds.
+    ads: await getSettings().then((s) => ({
+      rewardBlockId: s.adsgramBlockId || null,
+      interstitialBlockId: s.adsgramInterstitialBlockId ?? BATTLE_INTERSTITIAL_BLOCK,
+    })),
   };
 }
 

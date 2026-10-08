@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import {
+  adsgramConfirmedSince,
   claimAdTask,
   finishSnakeRound,
   getGamesAdminSettings,
@@ -52,6 +53,13 @@ export const getAdsgramReward = asyncHandler(async (req: Request, res: Response)
 
 export const adminGetGames = asyncHandler(async (_req: Request, res: Response) => {
   res.json({ ok: true, settings: await getGamesAdminSettings() });
+});
+
+/** The admin's ad check: did Adsgram report the admin's own view since `since`? */
+export const adminCheckAd = asyncHandler(async (req: Request, res: Response) => {
+  const since = new Date(String(req.query.since ?? ''));
+  if (Number.isNaN(since.getTime())) throw new AppError('since is required', 422, 'VALIDATION_ERROR');
+  res.json({ ok: true, ...(await adsgramConfirmedSince(req.telegramId!, since)) });
 });
 
 export const adminUpdateGames = asyncHandler(async (req: Request, res: Response) => {

@@ -266,6 +266,7 @@ export async function applyZigguratRateV2() {
 const EDITABLE = [
   'gamesPublic',
   'adsgramBlockId',
+  'adsgramInterstitialBlockId',
   'adTaskReward',
   'snakePointsPerFood',
   'snakeFreeMaxFood',
@@ -278,15 +279,26 @@ const EDITABLE = [
 
 export async function getGamesAdminSettings() {
   const settings = await getSettings();
-  const [ads, rounds] = await Promise.all([
-    AdView.countDocuments({ createdAt: { $gte: new Date(Date.now() - 24 * HOUR_MS) } }),
-    GameSession.countDocuments({ createdAt: { $gte: new Date(Date.now() - 24 * HOUR_MS) } }),
+  const dayAgo = new Date(Date.now() - 24 * HOUR_MS);
+  const [ads, adsConfirmed, lastConfirmed, rounds] = await Promise.all([
+    AdView.countDocuments({ createdAt: { $gte: dayAgo } }),
+    // Views Adsgram itself reported to this server (Reward URL).
+    AdView.countDocuments({ source: 'adsgram_callback', createdAt: { $gte: dayAgo } }),
+    AdView.findOne({ source: 'adsgram_callback' }).sort({ createdAt: -1 }).select('createdAt').lean(),
+    GameSession.countDocuments({ createdAt: { $gte: dayAgo } }),
   ]);
   return {
     ...Object.fromEntries(EDITABLE.map((k) => [k, settings[k]])),
     rewardUrlConfigured: Boolean(env.ADSGRAM_REWARD_KEY),
-    last24h: { ads, rounds },
+    last24h: { ads, adsConfirmed, rounds },
+    lastConfirmedAt: lastConfirmed?.createdAt ?? null,
   };
+}
+
+/** Did Adsgram report a view by this person (its Reward URL) since `since`? For the admin's ad check. */
+export async function adsgramConfirmedSince(telegramId: number, since: Date) {
+  const view = await AdView.findOne({ telegramId, source: 'adsgram_callback', createdAt: { $gte: since } }).select('createdAt').lean();
+  return { confirmed: Boolean(view), at: view?.createdAt ?? null, rewardUrlConfigured: Boolean(env.ADSGRAM_REWARD_KEY) };
 }
 
 export async function updateGamesAdminSettings(input: Record<string, unknown>) {
@@ -300,6 +312,10 @@ export async function updateGamesAdminSettings(input: Record<string, unknown>) {
       const id = String(value ?? '').trim();
       if (!/^[A-Za-z0-9-]+$/.test(id)) throw new AppError('رقم البلوك غير صالح', 422, 'VALIDATION_ERROR');
       settings.adsgramBlockId = id;
+    } else if (key === 'adsgramInterstitialBlockId') {
+      const id = String(value ?? '').trim();
+      if (id && !/^int-\d+$/.test(id)) throw new AppError('بلوك الإعلان البيني لازم يكون مثل int-12345', 422, 'VALIDATION_ERROR');
+      settings.adsgramInterstitialBlockId = id;
     } else {
       const n = Number(value);
       const integer = key === 'snakeFreeMaxFood' || key === 'snakeAdMaxFood' || key === 'snakeDurationSec' || key === 'zigguratMaxFloors';

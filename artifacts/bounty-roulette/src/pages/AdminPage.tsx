@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../services/api';
 import { LoadingScreen } from '../components/Common';
 import { MeResponse } from '../types';
+import { showRewardedAd } from '../services/adsgram';
+import { adErrorMessage } from '../components/AdTaskCard';
 
 interface AdminPrize {
   key: string;
@@ -513,6 +515,7 @@ function RaceAdminTab() {
 interface GamesAdminSettings {
   gamesPublic: boolean;
   adsgramBlockId: string;
+  adsgramInterstitialBlockId: string;
   adTaskReward: number;
   snakePointsPerFood: number;
   snakeFreeMaxFood: number;
@@ -522,7 +525,8 @@ interface GamesAdminSettings {
   zigguratPointsPerFloor: number;
   zigguratMaxFloors: number;
   rewardUrlConfigured: boolean;
-  last24h: { ads: number; rounds: number };
+  last24h: { ads: number; adsConfirmed?: number; rounds: number };
+  lastConfirmedAt?: string | null;
 }
 
 const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: string; step: string }> = [
@@ -793,12 +797,48 @@ function GamesAdminTab() {
 
   function apply(next: GamesAdminSettings) {
     setSettings(next);
-    setForm(Object.fromEntries([...GAME_FIELDS.map((f) => [f.key, String(next[f.key])]), ['adsgramBlockId', next.adsgramBlockId]]));
+    setForm(Object.fromEntries([
+      ...GAME_FIELDS.map((f) => [f.key, String(next[f.key])]),
+      ['adsgramBlockId', next.adsgramBlockId],
+      ['adsgramInterstitialBlockId', next.adsgramInterstitialBlockId ?? ''],
+    ]));
   }
 
   useEffect(() => {
     api.get<{ ok: true; settings: GamesAdminSettings }>('/admin/games').then((r) => apply(r.settings)).catch(() => undefined);
   }, []);
+
+  // Ad check: plays one ad here, then waits for Adsgram to report the view to the bot.
+  const [check, setCheck] = useState<string | null>(null);
+  async function checkAd() {
+    if (!settings) return;
+    if (!settings.rewardUrlConfigured) {
+      setCheck('⚠️ ما أكدر أفحص: التحقق من Adsgram غير مفعّل (ADSGRAM_REWARD_KEY فارغ بـ Railway).');
+      return;
+    }
+    const since = new Date(Date.now() - 2000).toISOString();
+    setCheck('📺 شاهد الإعلان للآخر…');
+    try {
+      await showRewardedAd(settings.adsgramBlockId);
+    } catch (err) {
+      setCheck(`❌ الإعلان ما اشتغل: ${adErrorMessage(err)}`);
+      return;
+    }
+    setCheck('⏳ ننتظر Adsgram يبلّغ البوت عن المشاهدة (لحد 30 ثانية)…');
+    for (let i = 0; i < 15; i++) {
+      try {
+        const r = await api.get<{ ok: true; confirmed: boolean }>(`/admin/ads/check?since=${encodeURIComponent(since)}`);
+        if (r.confirmed) {
+          setCheck('✅ Adsgram حسب هاي المشاهدة وبلّغ البوت عنها. إذا بعدها ما تطلع بموقع Adsgram، فالبلوك تابع لمنصة تجريبية (Test) أو لمنصة غير اللي تشوف إحصائياتها.');
+          return;
+        }
+      } catch {
+        // try again
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    setCheck('❌ Adsgram ما بلّغ البوت عن هاي المشاهدة خلال 30 ثانية. يعني غالباً ما حسبها: البلوك من منصة تجريبية (Test) أو منصة بعدها ما تفعّلت، أو الـ Reward URL مو مضبوط على هذا البلوك.');
+  }
 
   async function save(body: Record<string, unknown>, done?: string) {
     setBusy(true);
@@ -876,13 +916,37 @@ function GamesAdminTab() {
             style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', direction: 'ltr', fontFamily: 'inherit' }}
           />
         </label>
-        <button className="btn btn-secondary" disabled={busy} onClick={() => void save({ adsgramBlockId: form.adsgramBlockId }, '✅ تم الحفظ')}>
-          💾 حفظ رقم البلوك
+        <label style={{ display: 'block', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>بلوك الإعلان البيني لـ MF Battle (int-…)</div>
+          <input
+            value={form.adsgramInterstitialBlockId ?? ''}
+            onChange={(e) => setForm({ ...form, adsgramInterstitialBlockId: e.target.value })}
+            placeholder="int-12345 (فارغ = بدون إعلان بيني)"
+            style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #64748b', direction: 'ltr', fontFamily: 'inherit' }}
+          />
+        </label>
+        <button
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => void save({ adsgramBlockId: form.adsgramBlockId, adsgramInterstitialBlockId: form.adsgramInterstitialBlockId ?? '' }, '✅ تم الحفظ')}
+        >
+          💾 حفظ أرقام البلوكات
         </button>
-        <p className="card-sub" style={{ marginBottom: 0 }}>
+        <p className="card-sub">
           {settings.rewardUrlConfigured
             ? '🔒 التحقق من Adsgram مفعّل: النقاط تنعطى بس للإعلانات اللي Adsgram أكدتها.'
             : '⚠️ التحقق من Adsgram غير مفعّل (ADSGRAM_REWARD_KEY فارغ)، فالنقاط تنعطى حسب التطبيق. مناسب للاختبار بس.'}
+        </p>
+        <p className="card-sub">
+          📊 آخر 24 ساعة: {settings.last24h.ads} مشاهدة بالبوت، منها {settings.last24h.adsConfirmed ?? 0} أكدتها Adsgram.
+          {' '}آخر تأكيد من Adsgram: {settings.lastConfirmedAt ? new Date(settings.lastConfirmedAt).toLocaleString('ar-IQ') : 'ماكو أبداً'}.
+        </p>
+        <button className="btn btn-primary" disabled={busy} onClick={() => void checkAd()}>
+          🧪 فحص الإعلانات: شاهد إعلان وشوف إذا Adsgram يحسبه
+        </button>
+        {check && <p className="card-sub" style={{ marginBottom: 0, fontWeight: 800 }}>{check}</p>}
+        <p className="card-sub" style={{ marginBottom: 0 }}>
+          ℹ️ Adsgram ما يحسب مشاهدات المنصات التجريبية (Test). البلوكات لازم تكون من منصة عادية حالتها Active بعد المراجعة.
         </p>
       </div>
     </div>

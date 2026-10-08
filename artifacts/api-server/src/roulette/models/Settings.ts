@@ -50,6 +50,8 @@ export interface ISettings extends Document {
   proofsChannel: string;
   mediationChatId: number | null;
   adsgramBlockId: string;
+  // MF Battle's interstitial block (int-…), shown between rounds; '' = none.
+  adsgramInterstitialBlockId: string;
   adTaskReward: number;
   snakePointsPerFood: number;
   snakeFreeMaxFood: number;
@@ -100,6 +102,7 @@ const settingsSchema = new Schema<ISettings>(
     proofsChannel: { type: String, default: 'MFROLET' },
     mediationChatId: { type: Number, default: null },
     adsgramBlockId: { type: String, default: '50375' },
+    adsgramInterstitialBlockId: { type: String, default: 'int-52362' },
     adTaskReward: { type: Number, default: 0.2, min: 0 },
     snakePointsPerFood: { type: Number, default: 0.03, min: 0 },
     snakeFreeMaxFood: { type: Number, default: 7, min: 1 },
