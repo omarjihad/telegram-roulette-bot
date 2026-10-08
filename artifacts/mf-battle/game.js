@@ -20,7 +20,8 @@ const ZOOM_MAX = 2.4;
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const short = (n) => (n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+/** Numbers in the game are written in full (24500), never shortened (24.5k). */
+const full = (n) => String(Math.round(Number(n) || 0));
 const escName = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hueColors = new Map();
 const hueColor = (h) => { let c = hueColors.get(h); if (!c) { c = `hsl(${h}, 85%, 58%)`; hueColors.set(h, c); } return c; };
@@ -685,8 +686,8 @@ export function startGame(opts) {
         if (c.r * s > 26) {
           const ms = fs * 0.6;
           ctx.font = `800 ${ms}px Cairo, Tahoma, sans-serif`;
-          ctx.strokeText(short(c.m), c.x, c.y + fs * 0.9);
-          ctx.fillText(short(c.m), c.x, c.y + fs * 0.9);
+          ctx.strokeText(full(c.m), c.x, c.y + fs * 0.9);
+          ctx.fillText(full(c.m), c.x, c.y + fs * 0.9);
         }
         // Level badge: a green star with the number, next to the name.
         if (own.level && c.r * s > 22) {
@@ -782,13 +783,13 @@ export function startGame(opts) {
     hudT = 0.25;
     const mine = mineCache;
     const myMass = mine.reduce((s, c) => s + c.m, 0);
-    massEl.textContent = `الكتلة: ${Math.round(myMass).toLocaleString('en-US')}`;
+    massEl.textContent = `الكتلة: ${full(myMass)}`;
     const ranked = D.ranking();
     const myIdx = ranked.findIndex((r) => r.me);
     const myRank = myIdx < 0 ? 0 : ranked[myIdx].rank || myIdx + 1;
     if (myRank && myRank < bestRank) bestRank = myRank;
     topId = ranked[0] ? ranked[0].id || 0 : 0;
-    const row = (r, i) => `<li class="${r.me ? 'me' : ''} ${(r.rank || i + 1) === 1 ? 'gold' : ''}"><span>${r.rank || i + 1}. ${escName(r.name)}</span><b>${short(r.m)}</b></li>`;
+    const row = (r, i) => `<li class="${r.me ? 'me' : ''} ${(r.rank || i + 1) === 1 ? 'gold' : ''}"><span>${r.rank || i + 1}. ${escName(r.name)}</span><b>${full(r.m)}</b></li>`;
     lbEl.innerHTML = ranked.slice(0, 5).map(row).join('') + (myIdx >= 5 ? row(ranked[myIdx], myIdx) : '');
 
     // Mini map: 3×3 numbered sections; you see who is in your section only.
@@ -1023,7 +1024,7 @@ export function startGame(opts) {
     if (!paused) { hideOverlay(); return; }
     releaseJoy();
     input.throwing = false;
-    const mass = Math.round(mineCache.reduce((s, c) => s + c.m, 0)).toLocaleString('en-US');
+    const mass = full(mineCache.reduce((s, c) => s + c.m, 0));
     const card = showOverlay(`<h2>⏸ ${D.online ? 'استراحة' : 'متوقف'}</h2><p>الكتلة الحالية ${mass}${D.online ? '<br><small>بالأونلاين اللعبة ما توقف: كتلتك واقفة بمكانها.</small>' : ''}</p>
       <div class="g-row"><button class="btn btn-hot" data-resume>▶ كمّل</button><button class="btn" data-exit>✕ خروج</button></div>`);
     card.querySelector('[data-resume]').onclick = togglePause;
@@ -1081,7 +1082,7 @@ export function startGame(opts) {
         <h2>انأكلت! 💀</h2>
         <p>${info.killer ? `أكلك <b>${escName(info.killer)}</b>` : 'انتهت الجولة'}</p>
         <div class="g-stats">
-          <div><small>أعلى كتلة</small><b>${Math.round(info.maxMass || 0).toLocaleString('en-US')}</b></div>
+          <div><small>أعلى كتلة</small><b>${full(info.maxMass)}</b></div>
           <div><small>الوقت</small><b>${mm}:${ss}</b></div>
           <div><small>أكلت لاعبين</small><b>${info.eaten || 0}</b></div>
           <div><small>أفضل ترتيب</small><b>#${bestRank === 99 ? '-' : bestRank}</b></div>

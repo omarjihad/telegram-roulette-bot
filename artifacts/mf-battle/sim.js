@@ -10,7 +10,7 @@ export const START_MASS = 20;
 export const REVENGE_MASS = 500;
 export const MIN_SPLIT = 36;
 export const MAX_CELLS = 16;
-export const MAX_CELL_MASS = 23000; // one piece never grows past this; the rest is lost
+export const MAX_CELL_MASS = 23000; // one piece never grows past this; the rest is lost (eating or merging)
 export const BOT_MAX_MASS = 1000; // a bot bigger than this drops its mass on the ground
 export const MERGE_SECONDS = 20; // split pieces join back together on their own after this
 export const EAT_RATIO = 1.25;
@@ -432,16 +432,17 @@ export function createWorld(opts = {}) {
       let vx = ux * sp;
       let vy = uy * sp;
       if (many) {
-        // A gentle pull keeps the group together; once they may merge it gets strong.
+        // A pull keeps your pieces close together: a piece that drifts away comes back.
         const dx = cx - c.x, dy = cy - c.y;
         const d = Math.hypot(dx, dy);
-        if (d > 1) {
-          // Before merging the pull is always weaker than the piece's own speed, so a piece
-          // left far away never pins the rest of you in place.
-          const base = speedOf(c.m);
-          // After the merge time it is stronger, but still below the piece's speed, so the
-          // group keeps going where you steer while the pieces close in and join.
-          const pull = w.time >= c.mergeAt ? Math.min(base * 0.8, d * 1.2 + 40) : Math.min(base * 0.35, Math.max(0, d - c.r) * 0.25);
+        const base = speedOf(c.m);
+        // A piece still flying from a split isn't pulled back, so a split keeps its full reach.
+        const flying = Math.hypot(c.bx, c.by) > base;
+        if (d > 1 && !flying) {
+          // The pull is always below the piece's own speed, so a piece left far away never
+          // pins the rest of you in place. Before the merge time it brings the pieces in
+          // until they overlap; after it, it is stronger and they close in and join.
+          const pull = w.time >= c.mergeAt ? Math.min(base * 0.8, d * 1.2 + 40) : Math.min(base * 0.6, Math.max(0, d - c.r * 0.5) * 0.9);
           vx += (dx / d) * pull;
           vy += (dy / d) * pull;
         }
@@ -454,7 +455,7 @@ export function createWorld(opts = {}) {
       c.y = clamp(c.y, c.r * 0.3, WORLD - c.r * 0.3);
       if (c.m > 300) { c.m -= c.m * 0.0016 * dt; c.r = rad(c.m); }
     }
-    // Own pieces slide apart softly until they may merge, then merge by themselves.
+    // Own pieces may go into each other until they merge; at the merge time they join by themselves.
     for (let i = 0; i < o.cells.length; i++) {
       const a = o.cells[i];
       if (a.m <= 0) continue;
@@ -464,7 +465,9 @@ export function createWorld(opts = {}) {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.hypot(dx, dy) || 0.01;
-        const canMerge = w.time >= a.mergeAt && w.time >= b.mergeAt && a.m + b.m <= MAX_CELL_MASS;
+        // Pieces join even when together they pass the biggest size: one piece of
+        // MAX_CELL_MASS is left and the extra mass is lost (grow() caps it).
+        const canMerge = w.time >= a.mergeAt && w.time >= b.mergeAt;
         if (canMerge) {
           if (d < Math.max(a.r, b.r) * 0.85) {
             const keep = a.m >= b.m ? a : b;
@@ -474,13 +477,19 @@ export function createWorld(opts = {}) {
             if (gone === a) break;
           }
         } else {
-          const overlap = a.r + b.r - d;
-          if (overlap > 0) {
-            const push = Math.min(overlap * 0.2, 180 * dt);
+          // No pushing: pieces may go into each other, up to the smaller one's centre on the
+          // bigger one's edge. Past that it eases off a little (the lighter one moves more),
+          // so half of a small piece stays outside a big one (bigger is drawn on top) and
+          // every piece is still seen.
+          const deep = Math.max(a.r, b.r) - d;
+          if (deep > 0) {
+            const push = Math.min(deep * 0.15, 120 * dt) * 2;
             const nx = dx / d;
             const ny = dy / d;
-            a.x -= nx * push; a.y -= ny * push;
-            b.x += nx * push; b.y += ny * push;
+            const wa = b.m / (a.m + b.m);
+            const wb = a.m / (a.m + b.m);
+            a.x -= nx * push * wa; a.y -= ny * push * wa;
+            b.x += nx * push * wb; b.y += ny * push * wb;
           }
         }
       }
