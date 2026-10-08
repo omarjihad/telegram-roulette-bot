@@ -23,15 +23,17 @@ export const VIRUS_MASS = 100;
 export const PELLET_MASS = 13;
 
 const EJECT_MIN = 35;
-const PELLET_SPEED = 2400; // fades at 4/s, so a pellet flies about 600
+const PELLET_SPEED = 3200; // fades at 4/s, so a pellet flies about 800
 const PELLET_LIFE = 45; // seconds a pellet stays on the ground
 const MAX_PELLETS = 3000;
 const VIRUS_FEED = 5; // pellets a virus takes before it shoots out a new virus
+const VIRUS_SHOT_GAP = 2; // seconds between two shots of the same virus (a big burst shoots once)
 const ORB_MASS = 50;
 const GRID = 300;
 
 export const rad = (m) => Math.sqrt(m) * 10;
-export const virusRadius = (fed = 0) => rad(VIRUS_MASS) * 0.9 * (1 + fed * 0.05);
+/** A virus swells a little with each pellet fed, and with the loot it holds. */
+export const virusRadius = (fed = 0, loot = 0) => rad(VIRUS_MASS) * 0.9 * (1 + fed * 0.05) * (1 + Math.min(0.5, Math.sqrt(Math.max(0, loot)) / 300));
 export const pelletRadius = rad(PELLET_MASS) * 0.55;
 /** Bigger throws (fast levels on big cells) look bigger too. */
 export const pelletSize = (m) => Math.max(pelletRadius, rad(m) * 0.55);
@@ -44,7 +46,7 @@ const THROW_RATES = [6, 9, 14, 23, 50, 100];
 const THROW_SHARE = [0, 0, 0, 0.008, 0.02, 0.05];
 export const throwRate = (level) => THROW_RATES[level] || THROW_RATES[0];
 /** How far a split half flies: enough to catch someone in front, never across the map. */
-export const splitFlight = (r) => Math.min(1600, 340 + r * 2);
+export const splitFlight = (r) => Math.min(2100, 440 + r * 2.6);
 export const sectionOf = (x, y) => {
   const n = WORLD / MAP_SECTIONS;
   const col = clamp(Math.floor(x / n), 0, MAP_SECTIONS - 1);
@@ -155,7 +157,8 @@ export function createWorld(opts = {}) {
 
   function addVirus(x, y, vx = 0, vy = 0) {
     const s = x === undefined ? safeSpot(200) : { x, y };
-    w.viruses.push({ id: nextId++, x: s.x, y: s.y, m: VIRUS_MASS, r: virusRadius(0), fed: 0, vx, vy });
+    // loot: the mass thrown into it, given to whoever eats it.
+    w.viruses.push({ id: nextId++, x: s.x, y: s.y, m: VIRUS_MASS, r: virusRadius(0), fed: 0, loot: 0, shotAt: -1e9, vx, vy });
   }
   function addOrb() {
     w.orbs.push({ id: nextId++, x: rand(150, WORLD - 150), y: rand(150, WORLD - 150), r: 26, m: ORB_MASS, ph: rand(0, 6.28) });
@@ -281,22 +284,40 @@ export function createWorld(opts = {}) {
     for (let i = 0; extra > 0 && i < w.pellets.length; i++) if (w.pellets[i].m > 0) { dropPellet(w.pellets[i]); extra--; }
   };
 
-  function popOnVirus(c) {
+  /**
+   * Eating a virus: its mass (and the loot thrown into it) is added, then the piece bursts
+   * straight into the most pieces you can have (16 in all), whatever your size, all the
+   * same size. With no room left (16 already) the gain goes to that piece, and what passes
+   * the biggest size goes to your other pieces.
+   */
+  function popOnVirus(c, gain) {
     const o = c.owner;
     const room = MAX_CELLS - o.cells.length;
     w.events.push({ type: 'pop', owner: o });
-    if (room <= 0) return;
-    // Straight to the most pieces you can have (16 in all), all the same size.
-    const pieces = Math.min(room, Math.max(1, Math.floor(c.m / MIN_SPLIT) - 1));
-    const each = c.m / (pieces + 1);
+    if (room <= 0) {
+      let rest = c.m + gain - MAX_CELL_MASS;
+      grow(c, gain);
+      for (const p of [...o.cells].sort((a, b) => a.m - b.m)) {
+        if (rest <= 0) break;
+        if (p === c || p.m >= MAX_CELL_MASS) continue;
+        const add = Math.min(rest, MAX_CELL_MASS - p.m);
+        grow(p, add);
+        rest -= add;
+      }
+      return;
+    }
+    const pieces = room;
+    const each = Math.min(MAX_CELL_MASS, (c.m + gain) / (pieces + 1));
     c.m = each;
     c.r = rad(each);
     c.mergeAt = w.time + MERGE_SECONDS;
+    // Bigger pieces fly out further, so the burst spreads out instead of piling up.
+    const v = 4 * (300 + c.r * 1.2);
     for (let i = 0; i < pieces; i++) {
       const a = (i / pieces) * Math.PI * 2 + rand(-0.2, 0.2);
       const p = newCell(o, c.x, c.y, each);
-      p.bx = Math.cos(a) * 1200;
-      p.by = Math.sin(a) * 1200;
+      p.bx = Math.cos(a) * v;
+      p.by = Math.sin(a) * v;
       p.mergeAt = c.mergeAt;
       o.cells.push(p);
     }
@@ -424,27 +445,51 @@ export function createWorld(opts = {}) {
     const ux = dl > 0.001 ? o.dir.x / dl : 0;
     const uy = dl > 0.001 ? o.dir.y / dl : 0;
     const mag = clamp(o.dir.m, 0, 1);
-    const many = o.cells.length > 1;
+    const cells = o.cells;
+    const many = cells.length > 1;
     const fade = Math.exp(-4 * dt);
-    for (const c of o.cells) {
+    // Room for all your pieces side by side (with gaps): a piece further out than this
+    // drifts back toward the others. Inside it nothing pulls them into each other.
+    let area = 0;
+    for (const c of cells) area += c.r * c.r;
+    const reach = Math.sqrt(area) * 1.5;
+    for (const c of cells) {
       // Every piece moves the same way you point, side by side, so pieces never block each other.
-      const sp = speedOf(c.m) * mag;
+      const base = speedOf(c.m);
+      const sp = base * mag;
       let vx = ux * sp;
       let vy = uy * sp;
-      if (many) {
-        // A pull keeps your pieces close together: a piece that drifts away comes back.
-        const dx = cx - c.x, dy = cy - c.y;
-        const d = Math.hypot(dx, dy);
-        const base = speedOf(c.m);
-        // A piece still flying from a split isn't pulled back, so a split keeps its full reach.
-        const flying = Math.hypot(c.bx, c.by) > base;
-        if (d > 1 && !flying) {
-          // The pull is always below the piece's own speed, so a piece left far away never
-          // pins the rest of you in place. Before the merge time it brings the pieces in
-          // until they overlap; after it, it is stronger and they close in and join.
-          const pull = w.time >= c.mergeAt ? Math.min(base * 0.8, d * 1.2 + 40) : Math.min(base * 0.6, Math.max(0, d - c.r * 0.5) * 0.9);
-          vx += (dx / d) * pull;
-          vy += (dy / d) * pull;
+      // A piece still flying from a split isn't pulled, so a split keeps its full reach.
+      if (many && Math.hypot(c.bx, c.by) <= base) {
+        // Merge time: pieces that may join close in on the nearest one that may join too.
+        let partner = null;
+        if (w.time >= c.mergeAt) {
+          let best = Infinity;
+          for (const p of cells) {
+            if (p === c || w.time < p.mergeAt) continue;
+            const dd = Math.hypot(p.x - c.x, p.y - c.y);
+            if (dd < best) { best = dd; partner = p; }
+          }
+        }
+        // Pulls stay within the piece's own speed, so a piece far away never pins the rest
+        // of you in place and the group keeps going where you steer.
+        if (partner) {
+          const dx = partner.x - c.x, dy = partner.y - c.y;
+          const d = Math.hypot(dx, dy);
+          if (d > 1) {
+            const pull = Math.min(base, d * 1.2 + 40);
+            vx += (dx / d) * pull;
+            vy += (dy / d) * pull;
+          }
+        } else {
+          const dx = cx - c.x, dy = cy - c.y;
+          const d = Math.hypot(dx, dy);
+          const out = d + c.r - reach;
+          if (d > 1 && out > 0) {
+            const pull = Math.min(base * 0.5, out * 0.8);
+            vx += (dx / d) * pull;
+            vy += (dy / d) * pull;
+          }
         }
       }
       c.x += (vx + c.bx) * dt;
@@ -455,20 +500,21 @@ export function createWorld(opts = {}) {
       c.y = clamp(c.y, c.r * 0.3, WORLD - c.r * 0.3);
       if (c.m > 300) { c.m -= c.m * 0.0016 * dt; c.r = rad(c.m); }
     }
-    // Own pieces may go into each other until they merge; at the merge time they join by themselves.
-    for (let i = 0; i < o.cells.length; i++) {
-      const a = o.cells[i];
+    // Pieces that may merge join once they are well inside each other. Others keep a small
+    // gap: no shoving, but if they end up inside each other they slide apart by themselves,
+    // gently (the lighter one moves more).
+    for (let i = 0; i < cells.length; i++) {
+      const a = cells[i];
       if (a.m <= 0) continue;
-      for (let j = i + 1; j < o.cells.length; j++) {
-        const b = o.cells[j];
+      for (let j = i + 1; j < cells.length; j++) {
+        const b = cells[j];
         if (b.m <= 0) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.hypot(dx, dy) || 0.01;
         // Pieces join even when together they pass the biggest size: one piece of
         // MAX_CELL_MASS is left and the extra mass is lost (grow() caps it).
-        const canMerge = w.time >= a.mergeAt && w.time >= b.mergeAt;
-        if (canMerge) {
+        if (w.time >= a.mergeAt && w.time >= b.mergeAt) {
           if (d < Math.max(a.r, b.r) * 0.85) {
             const keep = a.m >= b.m ? a : b;
             const gone = keep === a ? b : a;
@@ -476,25 +522,22 @@ export function createWorld(opts = {}) {
             gone.m = 0;
             if (gone === a) break;
           }
-        } else {
-          // No pushing: pieces may go into each other, up to the smaller one's centre on the
-          // bigger one's edge. Past that it eases off a little (the lighter one moves more),
-          // so half of a small piece stays outside a big one (bigger is drawn on top) and
-          // every piece is still seen.
-          const deep = Math.max(a.r, b.r) - d;
-          if (deep > 0) {
-            const push = Math.min(deep * 0.15, 120 * dt) * 2;
-            const nx = dx / d;
-            const ny = dy / d;
-            const wa = b.m / (a.m + b.m);
-            const wb = a.m / (a.m + b.m);
-            a.x -= nx * push * wa; a.y -= ny * push * wa;
-            b.x += nx * push * wb; b.y += ny * push * wb;
-          }
+          continue;
+        }
+        const sum = a.r + b.r;
+        const deep = sum + Math.max(6, sum * 0.04) - d;
+        if (deep > 0) {
+          const step = Math.min(deep * 2.5, Math.max(160, sum * 0.5)) * dt;
+          const nx = d > 0.02 ? dx / d : Math.cos(a.id);
+          const ny = d > 0.02 ? dy / d : Math.sin(a.id);
+          const wa = b.m / (a.m + b.m);
+          const wb = a.m / (a.m + b.m);
+          a.x -= nx * step * wa * 2; a.y -= ny * step * wa * 2;
+          b.x += nx * step * wb * 2; b.y += ny * step * wb * 2;
         }
       }
     }
-    if (o.cells.some((c) => c.m <= 0)) o.cells = o.cells.filter((c) => c.m > 0);
+    if (cells.some((c) => c.m <= 0)) o.cells = cells.filter((c) => c.m > 0);
   }
 
   // ───────────── One step ─────────────
@@ -577,22 +620,25 @@ export function createWorld(opts = {}) {
         }
       }
     };
-    // Pellets into viruses.
+    // Pellets into viruses: the virus keeps their mass (its loot, for whoever eats it).
+    // Every 5 pellets it shoots out a new virus, but at most once every VIRUS_SHOT_GAP
+    // seconds, so a big burst of thrown mass shoots one virus, not many.
     const newViruses = [];
     for (const v of w.viruses) {
       nearPellets(v.x, v.y, v.r, (p) => {
         if (Math.hypot(p.x - v.x, p.y - v.y) > v.r) return;
+        v.loot += p.m;
         dropPellet(p);
-        v.fed++;
-        v.r = virusRadius(v.fed);
-        if (v.fed >= VIRUS_FEED) {
+        v.fed = Math.min(VIRUS_FEED, v.fed + 1);
+        if (v.fed >= VIRUS_FEED && w.time - v.shotAt >= VIRUS_SHOT_GAP) {
           v.fed = 0;
-          v.r = virusRadius(0);
+          v.shotAt = w.time;
           if (w.viruses.length + newViruses.length < cfg.viruses * 1.6) {
             const len = Math.hypot(p.vx, p.vy) || 1;
             newViruses.push([v.x, v.y, (p.vx / len) * 2400, (p.vy / len) * 2400]);
           }
         }
+        v.r = virusRadius(v.fed, v.loot);
       });
     }
     for (const nv of newViruses) addVirus(...nv);
@@ -620,9 +666,9 @@ export function createWorld(opts = {}) {
       for (const v of w.viruses) {
         if (v.m <= 0) continue;
         if (c.m > v.m * 1.33 && Math.hypot(v.x - c.x, v.y - c.y) < c.r - v.r * 0.4) {
-          grow(c, v.m);
+          const got = v.m + v.loot;
           v.m = 0;
-          popOnVirus(c);
+          popOnVirus(c, got);
         }
       }
     }

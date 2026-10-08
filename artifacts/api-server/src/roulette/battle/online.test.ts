@@ -84,7 +84,8 @@ describe('MF Battle online room', () => {
     r.handle(ca, { t: 'chat', x: 'هلو' });
     r.handle(ca, { t: 'chat', x: 'spam' });
     const got = b.sent.filter((m) => m.t === 'chat');
-    expect(got).toEqual([{ t: 'chat', n: 'A', x: 'هلو', h: ca.owner.hue }]);
+    // id: whose message it is, so the phones show it over that player's piece.
+    expect(got).toEqual([{ t: 'chat', n: 'A', x: 'هلو', h: ca.owner.hue, id: ca.owner.id }]);
   });
 
   it('only revives with 500 once per death, and never while alive', () => {

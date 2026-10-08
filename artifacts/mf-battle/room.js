@@ -112,13 +112,14 @@ export class BattleRoom {
         const now = Date.now();
         if (!text || now - c.lastChatAt < 900) break;
         c.lastChatAt = now;
-        this.broadcast({ t: 'chat', n: c.who.name, x: text, h: o.hue });
+        // id: whose message it is, so the phones show it above that player's piece too.
+        this.broadcast({ t: 'chat', n: c.who.name, x: text, h: o.hue, id: o.id });
         if (Math.random() < 0.3) {
           setTimeout(() => {
             const bots = this.world.owners.filter((b) => b.bot && !b.dead);
             if (bots.length && this.clients.size) {
               const b = bots[Math.floor(Math.random() * bots.length)];
-              this.broadcast({ t: 'chat', n: b.name, x: BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], h: b.hue });
+              this.broadcast({ t: 'chat', n: b.name, x: BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], h: b.hue, id: b.id });
             }
           }, 900 + Math.random() * 1500);
         }
@@ -234,11 +235,16 @@ export class BattleRoom {
         }
       }
       const viruses = [];
-      for (const v of w.viruses) if (inBox(v.x, v.y, v.r)) viruses.push(v.id, r1(v.x), r1(v.y), r1(v.r));
+      const vl = []; // [id, loot] of viruses holding thrown mass (shown on them)
+      for (const v of w.viruses) {
+        if (!inBox(v.x, v.y, v.r)) continue;
+        viruses.push(v.id, r1(v.x), r1(v.y), r1(v.r));
+        if (v.loot >= 1) vl.push(v.id, r1(v.loot));
+      }
       const orbs = [];
       for (const b of w.orbs) if (inBox(b.x, b.y, b.r)) orbs.push(b.id, r1(b.x), r1(b.y));
       // ts: when this picture of the world was taken (the phone draws between two of them).
-      this.send(c, { t: 's', ts: Date.now(), c: cells, v: viruses, o: orbs, ow: ow.length ? ow : undefined, al: c.owner.dead ? 0 : 1 });
+      this.send(c, { t: 's', ts: Date.now(), c: cells, v: viruses, vl: vl.length ? vl : undefined, o: orbs, ow: ow.length ? ow : undefined, al: c.owner.dead ? 0 : 1 });
     }
   }
 

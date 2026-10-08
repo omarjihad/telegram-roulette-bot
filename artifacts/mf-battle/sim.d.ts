@@ -6,6 +6,7 @@ export const REVENGE_MASS: number;
 export const THROW_SPEEDS: number[];
 export const BOT_NAMES: string[];
 export const MERGE_SECONDS: number;
+export const MAX_CELL_MASS: number;
 export function rad(m: number): number;
 
 export interface SimOwner {
@@ -24,10 +25,10 @@ export interface SimOwner {
   stats: { maxMass: number; eaten: number; born: number };
   killer: SimOwner | null;
 }
-export interface SimCell { id: number; x: number; y: number; m: number; r: number; owner: SimOwner }
+export interface SimCell { id: number; x: number; y: number; m: number; r: number; bx: number; by: number; mergeAt: number; owner: SimOwner }
 export interface SimFood { id: number; x: number; y: number; c: number; r: number }
 export interface SimPellet { id: number; x0: number; y0: number; x: number; y: number; vx: number; vy: number; born: number; m: number; r: number; hue: number; owner: SimOwner }
-export interface SimThing { id: number; x: number; y: number; m: number; r: number }
+export interface SimThing { id: number; x: number; y: number; m: number; r: number; loot?: number }
 export type SimEvent =
   | { type: 'kill'; victim: SimOwner; killer: SimOwner | null; mass: number }
   | { type: 'orb'; owner: SimOwner }
@@ -62,6 +63,7 @@ export interface SimWorld {
   massOf(o: SimOwner): number;
   ranking(): { o: SimOwner; m: number }[];
   split(o: SimOwner, dx: number, dy: number): boolean;
+  eject(o: SimOwner, dx: number, dy: number, level?: number): void;
   step(dt: number): void;
 }
 

@@ -5,6 +5,7 @@
 // No sound effects in here: sounds are for the menus only.
 
 import { skinSVG, skinImageUrl } from './skins.js';
+import { createChatKeyboard } from './keyboard.js';
 import { CONTROLS, byId, fullLayout, controlHTML, placeIn } from './controls.js';
 import {
   createWorld, FoodGrid, WORLD, START_MASS, REVENGE_MASS, EAT_RATIO, THROW_SPEEDS, MAP_SECTIONS,
@@ -127,12 +128,6 @@ export function startGame(opts) {
   topBar.className = 'g-top';
   topBar.innerHTML = '<button class="g-tbtn g-exit" data-top="exit" aria-label="خروج">✕</button><button class="g-tbtn" data-top="pause" aria-label="إيقاف مؤقت">❚❚</button><button class="g-tbtn" data-top="controls" aria-label="إعدادات التحكم">⚙️</button>';
   hud.appendChild(topBar);
-  const chatBar = document.createElement('form');
-  chatBar.className = 'g-chatbar';
-  chatBar.hidden = true;
-  chatBar.innerHTML = '<input maxlength="60" placeholder="اكتب رسالتك…" autocomplete="off" /><button type="submit">إرسال</button><button type="button" data-cancel>✕</button>';
-  hud.appendChild(chatBar);
-  const chatInput = chatBar.querySelector('input');
   const popEl = document.createElement('div');
   popEl.className = 'g-pop';
   hud.appendChild(popEl);
@@ -221,6 +216,25 @@ export function startGame(opts) {
     chatEl.innerHTML = chat.map((m) => `<div style="color:${m.color}">${m.text}</div>`).join('');
   }
 
+  // A message also shows for a few seconds over the sender's biggest piece; one made only
+  // of emojis shows big, with no box.
+  const BUBBLE_SECONDS = 4.5;
+  const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f|\s)+$/u;
+  const bubbles = new Map(); // owner id → { text, at, emoji }
+  function bubble(id, text) {
+    if (!settings.chat || id == null || !text) return;
+    bubbles.set(id, { text: String(text), at: performance.now(), emoji: EMOJI_ONLY.test(text) });
+  }
+  // The server lets one message through a second.
+  let lastChatAt = 0;
+  function sendChat(text) {
+    const now = Date.now();
+    if (now - lastChatAt < 1000) { popText('⏳ استنى ثانية'); return false; }
+    lastChatAt = now;
+    D.sendChat(text);
+    return true;
+  }
+
   // ───────────── Practice: the world runs here ─────────────
   function practiceDriver() {
     const FOOD = settings.quality === 'low' ? 3200 : settings.quality === 'high' ? 4800 : 4000;
@@ -273,10 +287,15 @@ export function startGame(opts) {
       split(x, y) { if (world.split(me, x, y) && haptic) haptic('light'); },
       sendChat(text) {
         say(`<b>${escName(me.name)}:</b> ${escName(text)}`, '#22e3ff');
+        bubble(me.id, text);
         if (Math.random() < 0.6) {
           setTimeout(() => {
             const alive = world.owners.filter((o) => o.bot && !o.dead);
-            if (alive.length && !over) say(`<b>${escName(pick(alive).name)}:</b> ${pick(BOT_REPLIES)}`, '#cbd5e1');
+            if (!alive.length || over) return;
+            const b = pick(alive);
+            const reply = pick(BOT_REPLIES);
+            say(`<b>${escName(b.name)}:</b> ${reply}`, '#cbd5e1');
+            bubble(b.id, reply);
           }, rand(900, 2200));
         }
       },
@@ -385,6 +404,9 @@ export function startGame(opts) {
         if (haptic) haptic('heavy');
       } else if (msg.t === 'chat') {
         say(`<b style="color:${hueColor(msg.h)}">${escName(msg.n)}:</b> ${escName(msg.x)}`, '#e2e8f0');
+        let from = msg.id;
+        if (from == null) for (const o of owners.values()) if (o.name === msg.n) { from = o.id; break; }
+        bubble(from, msg.x);
       } else if (msg.t === 'ev') {
         if (msg.e === 'orb') popText('+50');
         else if (msg.e === 'ate') {
@@ -452,12 +474,15 @@ export function startGame(opts) {
       }
       for (const id of cells.keys()) if (!seen.has(id)) cells.delete(id);
       const old = new Map(viruses.map((v) => [v.id, v]));
+      const loot = new Map();
+      if (msg.vl) for (let i = 0; i < msg.vl.length; i += 2) loot.set(msg.vl[i], msg.vl[i + 1]);
       viruses = [];
       for (let i = 0; i < msg.v.length; i += 4) {
         const v = old.get(msg.v[i]) || { id: msg.v[i], x: msg.v[i + 1], y: msg.v[i + 2], r: msg.v[i + 3] };
         v.tx = msg.v[i + 1];
         v.ty = msg.v[i + 2];
         v.r = msg.v[i + 3];
+        v.loot = loot.get(v.id) || 0;
         viruses.push(v);
       }
       orbs = [];
@@ -646,12 +671,12 @@ export function startGame(opts) {
     // small piece can hide under a virus and a big one covers it.
     const things = [];
     for (const c of D.cells()) if (vis(c.x, c.y, c.r)) things.push(c);
-    for (const v of D.viruses()) if (vis(v.x, v.y, v.r + 10)) things.push({ virus: true, x: v.x, y: v.y, r: v.r });
+    for (const v of D.viruses()) if (vis(v.x, v.y, v.r + 10)) things.push({ virus: true, x: v.x, y: v.y, r: v.r, loot: v.loot || 0 });
     things.sort((a, b) => a.r - b.r);
     const glow = settings.quality === 'high';
     const meId = D.meId;
     for (const c of things) {
-      if (c.virus) { drawVirus(c, time); continue; }
+      if (c.virus) { drawVirus(c, time, s); continue; }
       const own = c.owner;
       const isMe = own.id === meId;
       const sprite = skinSprite(own.skin);
@@ -719,9 +744,102 @@ export function startGame(opts) {
       ctx.fill();
       ctx.restore();
     }
+    drawBubbles(s);
   }
 
-  function drawVirus(v, time) {
+  /** Chat messages over the senders' biggest pieces, in screen pixels (readable at any zoom). */
+  function drawBubbles(s) {
+    if (!bubbles.size) return;
+    const now = performance.now();
+    const big = new Map();
+    for (const c of D.cells()) {
+      const id = c.owner && c.owner.id;
+      if (id == null || !bubbles.has(id)) continue;
+      const b = big.get(id);
+      if (!b || c.r > b.r) big.set(id, c);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const [id, b] of bubbles) {
+      const age = (now - b.at) / 1000;
+      if (age > BUBBLE_SECONDS) { bubbles.delete(id); continue; }
+      const c = big.get(id);
+      if (!c) continue;
+      const x = (c.x - cam.x) * s + SW / 2;
+      const top = (c.y - c.r - cam.y) * s + SH / 2;
+      if (x < -200 || x > SW + 200 || top > SH + 40) continue;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (BUBBLE_SECONDS - age) / 0.5);
+      const grow = age < 0.18 ? 0.55 + 0.45 * (age / 0.18) : 1;
+      ctx.translate(x, Math.max(SH * 0.12, top - 6));
+      ctx.scale(grow, grow);
+      ctx.textAlign = 'center';
+      if (b.emoji) {
+        ctx.textBaseline = 'bottom';
+        ctx.font = `${Math.round(SH * 0.09)}px sans-serif`;
+        ctx.fillText(b.text, 0, Math.sin(age * 6) * 2);
+      } else {
+        const fs = Math.max(12, Math.round(SH * 0.036));
+        ctx.font = `800 ${fs}px Cairo, Tahoma, sans-serif`;
+        const lines = wrapText(b.text, SW * 0.3);
+        const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + fs * 1.3;
+        const h = lines.length * fs * 1.25 + fs * 0.7;
+        const tail = fs * 0.5;
+        ctx.fillStyle = 'rgba(10,12,30,0.9)';
+        ctx.strokeStyle = 'rgba(34,227,255,0.7)';
+        ctx.lineWidth = 1.5;
+        roundBox(-w / 2, -h - tail, w, h, Math.min(12, h / 2), tail);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'middle';
+        lines.forEach((l, i) => {
+          ctx.direction = /[\u0600-\u06FF]/.test(l) ? 'rtl' : 'ltr';
+          ctx.fillText(l, 0, -h - tail + fs * 0.35 + fs * 1.25 * (i + 0.5));
+        });
+        ctx.direction = 'inherit';
+      }
+      ctx.restore();
+    }
+  }
+  /** A box with rounded corners and a little tail pointing down at the piece. */
+  function roundBox(x, y, w, h, r, tail) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(tail * 0.8, y + h);
+    ctx.lineTo(0, y + h + tail);
+    ctx.lineTo(-tail * 0.8, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+  /** Up to two lines that fit maxW (the font is already set); longer text ends with "…". */
+  function wrapText(text, maxW) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = '';
+    for (const word of words) {
+      const next = cur ? `${cur} ${word}` : word;
+      if (ctx.measureText(next).width <= maxW || !cur) cur = next;
+      else { lines.push(cur); cur = word; }
+    }
+    if (cur) lines.push(cur);
+    const out = lines.slice(0, 2).map((l) => {
+      if (ctx.measureText(l).width <= maxW) return l;
+      const chars = Array.from(l);
+      while (chars.length > 1 && ctx.measureText(`${chars.join('')}…`).width > maxW) chars.pop();
+      return `${chars.join('')}…`;
+    });
+    if (lines.length > 2 && !out[1].endsWith('…')) out[1] += '…';
+    return out.length ? out : [''];
+  }
+
+  function drawVirus(v, time, s) {
     ctx.fillStyle = '#33e06a';
     ctx.strokeStyle = '#15803d';
     ctx.lineWidth = Math.max(4, v.r * 0.06);
@@ -737,6 +855,21 @@ export function startGame(opts) {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    // Thrown mass it holds: whoever eats it gets this.
+    if (v.loot >= 1) {
+      const fs = Math.max(v.r * 0.42, 13 / s);
+      ctx.font = `900 ${fs}px Cairo, Tahoma, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = fs * 0.2;
+      ctx.strokeStyle = 'rgba(5,46,22,0.9)';
+      ctx.fillStyle = '#fff';
+      const label = `+${full(v.loot)}`;
+      ctx.direction = 'ltr'; // the page is right-to-left: keep the + in front
+      ctx.strokeText(label, v.x, v.y);
+      ctx.fillText(label, v.x, v.y);
+      ctx.direction = 'inherit';
+    }
   }
 
   function drawLevel(x, y, size, level) {
@@ -912,7 +1045,7 @@ export function startGame(opts) {
   function onDown(e) {
     if (over || paused) return;
     const t = e.target;
-    if (t.closest && (t.closest('.g-top') || t.closest('.g-chatbar') || t.closest('.g-zbtn') || t.closest('.g-overlay'))) return;
+    if (t.closest && (t.closest('.g-top') || t.closest('.kb') || t.closest('.g-zbtn') || t.closest('.g-overlay'))) return;
     const at = toStage(e.clientX, e.clientY);
     const id = t.closest && t.closest('[data-id]') ? t.closest('[data-id]').dataset.id : null;
     if (id === 'split') { e.preventDefault(); const a = aim(); D.split(a.x, a.y); pulse(ctl.split); return; }
@@ -963,7 +1096,8 @@ export function startGame(opts) {
     if (free.delete(e.pointerId)) pinch = null;
   }
   function onKey(e) {
-    if (over || document.activeElement === chatInput) return;
+    if (kb.key(e)) return;
+    if (over) return;
     if (e.code === 'Space' && e.type === 'keydown') { e.preventDefault(); const a = aim(); D.split(a.x, a.y); }
     if (e.code === 'KeyW') input.throwing = e.type === 'keydown';
     if (e.code === 'Enter' && e.type === 'keydown' && settings.chat) openChat();
@@ -990,26 +1124,26 @@ export function startGame(opts) {
   });
 
   // ───────────── Chat ─────────────
+  // The game's own keyboard (landscape like the game): a reaction sends with one tap.
+  const kb = createChatKeyboard(root, {
+    onSend(text, reaction) {
+      if (!sendChat(text)) return false;
+      if (haptic) haptic('light');
+      if (reaction) kb.close();
+      return true;
+    },
+  });
   function openChat() {
     if (!settings.chat) return;
-    chatBar.hidden = false;
-    chatInput.value = '';
-    chatInput.focus(); // inside the tap, so phones open the keyboard
+    kb.open();
   }
   function closeChat() {
-    chatBar.hidden = true;
-    chatInput.blur();
+    kb.close();
   }
-  chatBar.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = chatInput.value.trim().slice(0, 60);
-    closeChat();
-    if (text) D.sendChat(text);
-  });
-  chatBar.querySelector('[data-cancel]').addEventListener('click', closeChat);
 
   // ───────────── Top buttons: exit (with confirm), pause, control settings ─────────────
   function showOverlay(html) {
+    closeChat(); // the keyboard sits above everything: never cover a card with it
     overlay.innerHTML = `<div class="g-card">${html}</div>`;
     overlay.hidden = false;
     return overlay.firstElementChild;
