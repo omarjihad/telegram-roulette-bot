@@ -100,7 +100,8 @@ function goRoulette() {
     if (tg && tg.isFullscreen && tg.exitFullscreen) tg.exitFullscreen();
   } catch (e) { /* not supported */ }
   const hash = tgHash();
-  location.href = `${API}/${hash ? `#${hash}` : ''}`;
+  // ?from=battle: the roulette must not jump back here when it was opened by the game's link.
+  location.href = `${API}/?from=battle${hash ? `#${hash}` : ''}`;
 }
 
 function onBack() {
@@ -1029,6 +1030,7 @@ function demoAllowed(t) {
 function demoAdmin() {
   return {
     public: !!demo.public,
+    link: 'https://t.me/MfRuLiTbot/MFR?startapp=battle',
     stats: { online: 3, profiles: 128, newToday: 9, newWeek: 41, weekPlayers: 63, matches: 2210, hours: 187, kills: 9120, coins: 412300,
       topKills: [{ telegramId: 1, name: 'عمر', value: 312 }, { telegramId: 2, name: 'SASUKE', value: 201 }],
       topMass: [{ telegramId: 1, name: 'عمر', value: 67976 }, { telegramId: 3, name: 'زيد', value: 31020 }],

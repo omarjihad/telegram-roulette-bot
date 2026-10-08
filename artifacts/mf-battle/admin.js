@@ -304,7 +304,10 @@ function statsHTML() {
 
 // ───────────── Commands ─────────────
 function cmdHTML() {
-  return `<div class="set-list">
+  const link = data.link
+    ? `<div class="adm-card adm-link"><div class="adm-title">🔗 رابط اللعبة المباشر</div><div class="adm-line"><input class="adm-input wide ltr" readonly value="${ctx.esc(data.link)}" data-link /><button class="btn btn-cyan" data-copy>📋 نسخ</button></div><small>تكدر تنشره بأي مكان: اللي يضغطه تنفتح عنده اللعبة (للمطورين، أو للكل إذا فتحتها).</small></div>`
+    : '';
+  return `${link}<div class="set-list">
       <div class="set-row"><div class="lbl">🌍 اللعبة مفتوحة للكل<small>${data.public ? 'هسه: كل مستخدمي البوت يكدرون يلعبون' : 'هسه: المطورين بس'}</small></div><button class="switch ${data.public ? 'on' : ''}" data-public role="switch" aria-checked="${data.public}"></button></div>
       <div class="set-row"><div class="lbl">🔄 تحديث الأرقام<small>يجيب آخر الإحصائيات والبطولة</small></div><button class="btn btn-cyan" data-reload>تحديث</button></div>
       <div class="set-row"><div class="lbl">🎁 هدية للاعب<small>سكن، مايكرو دائمي، حجم بداية أو عملات</small></div><button class="btn" data-goto="gift">الهدايا</button></div>
@@ -320,5 +323,20 @@ function bindCmd() {
     });
   };
   q('[data-reload]').onclick = () => { ctx.sfx('open'); load(); };
+  const copyBtn = q('[data-copy]');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      const input = q('[data-link]');
+      try {
+        await navigator.clipboard.writeText(data.link);
+        ctx.toast('✅ انتسخ الرابط');
+      } catch (e) {
+        // Clipboard blocked: select the text so a long press copies it.
+        input.focus();
+        input.select();
+        ctx.toast('اضغط على الرابط مطولاً حتى تنسخه');
+      }
+    };
+  }
   qa('[data-goto]').forEach((b) => { b.onclick = () => { tab = b.getAttribute('data-goto'); render(); }; });
 }

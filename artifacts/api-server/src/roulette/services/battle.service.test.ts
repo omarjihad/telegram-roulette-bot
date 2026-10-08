@@ -39,7 +39,7 @@ vi.mock('../models/Settings', () => ({ getSettings: async () => ({ adsgramBlockI
 vi.mock('../config/env', () => ({ env: { MF_BATTLE_URL: '' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { battleAdView, allowedThrows, battleLevel, battleUrl, buySkin, buyThrow, killReward, levelReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
+import { battleAdView, battleDirectLink, allowedThrows, battleLevel, battleUrl, buySkin, buyThrow, killReward, levelReward, cleanLayout, cleanSettings, getBattleHome, getSharedLayout, recordBattleMatch, shareLayout, weekKey } from './battle.service';
 
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 7, firstName: 'Omar', username: 'omar' } as never;
 
@@ -166,5 +166,17 @@ describe('MF Battle', () => {
     mocks.adCreate.mockClear();
     await battleAdView(7);
     expect(mocks.adCreate).not.toHaveBeenCalled();
+  });
+
+  it('the game\'s direct link: one tap through the Mini App, else the bot\'s /start battle', async () => {
+    const { env } = await import('../config/env');
+    const e = env as unknown as Record<string, string>;
+    e.BOT_USERNAME = '';
+    expect(battleDirectLink()).toBeNull();
+    e.BOT_USERNAME = 'MfRuLiTbot';
+    e.MINI_APP_SHORT_NAME = '';
+    expect(battleDirectLink()).toBe('https://t.me/MfRuLiTbot?start=battle');
+    e.MINI_APP_SHORT_NAME = 'MFR';
+    expect(battleDirectLink()).toBe('https://t.me/MfRuLiTbot/MFR?startapp=battle');
   });
 });

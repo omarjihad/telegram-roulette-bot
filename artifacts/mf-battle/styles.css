@@ -699,3 +699,5 @@ select.adm-input { appearance: none; }
 .tour-banner.done span b { color: var(--gold); }
 .tour-banner .tour-prize { flex-basis: 100%; text-align: center; color: #fff; font-weight: 800; }
 .adm-text.short { min-height: 56px; }
+.adm-input.ltr { direction: ltr; text-align: left; font-family: ui-monospace, monospace; font-size: calc(var(--u) * 2.8); }
+.adm-link { margin-bottom: calc(var(--u) * 2); }

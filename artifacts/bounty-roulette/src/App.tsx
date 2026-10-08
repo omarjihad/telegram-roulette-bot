@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useTelegramWebApp, getTelegramWebApp } from './hooks/useTelegramWebApp';
+import { battleHref, useTelegramWebApp, getTelegramWebApp } from './hooks/useTelegramWebApp';
 import { api } from './services/api';
 import { DailyLoginResponse, DailyLoginStatusResponse, MeResponse } from './types';
 import { LoadingScreen } from './components/Common';
@@ -57,6 +57,22 @@ function initialListingId(): string | null {
   return id && /^[a-f0-9]{24}$/.test(id) ? id : null;
 }
 
+// MF Battle's direct link (startapp=battle, or ?tab=battle) goes straight into the game, once per
+// app open: coming back from the game (?from=battle, same launch data) stays on the roulette.
+const BATTLE_OPENED_KEY = 'mfr-battle-link-opened';
+function wantsBattle(): boolean {
+  const tg = getTelegramWebApp() as { initDataUnsafe?: { start_param?: string } } | null;
+  const params = new URLSearchParams(window.location.search);
+  if ((tg?.initDataUnsafe?.start_param ?? '') !== 'battle' && params.get('tab') !== 'battle') return false;
+  if (params.get('from') === 'battle') return false;
+  try {
+    if (sessionStorage.getItem(BATTLE_OPENED_KEY)) return false;
+  } catch {
+    // No session storage: the ?from=battle check above still stops a loop.
+  }
+  return true;
+}
+
 export default function App() {
   const { ready: tgReady } = useTelegramWebApp();
   // Re-render the whole app when the language changes.
@@ -71,6 +87,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<DailyLoginStatusResponse['status'] | null>(null);
   const dailyAutoShownRef = useRef(false);
+  const [openingBattle, setOpeningBattle] = useState(wantsBattle);
 
   // Opening the app only reads the daily state; the reward is collected when the user
   // presses the collect button in the modal.
@@ -141,12 +158,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
+  // The game's direct link: once signed in (subscriptions and captcha passed), open MF Battle.
+  // People who may not play it yet (it's for developers until opened to all) stay on home.
+  useEffect(() => {
+    if (!openingBattle || stage !== 'ready' || !me) return;
+    if (!me.battleUrl) {
+      setOpeningBattle(false);
+      return;
+    }
+    try {
+      sessionStorage.setItem(BATTLE_OPENED_KEY, '1');
+    } catch {
+      // Private mode: fine.
+    }
+    window.location.href = battleHref(me.battleUrl);
+  }, [openingBattle, stage, me]);
+
   // A stopped race is hidden: links or taps that land on its tab fall back to home.
   useEffect(() => {
     if (me && me.contestEnabled === false && tab === 'contest') setTab('home');
   }, [me, tab]);
 
   if (stage === 'loading' || !tgReady) return <LoadingScreen label={tr('جاري التحضير...', 'Getting ready...')} />;
+  if (openingBattle && stage === 'ready') return <LoadingScreen label={tr('⚔️ جاري فتح MF Battle...', '⚔️ Opening MF Battle...')} />;
 
   if (stage === 'error') {
     return (

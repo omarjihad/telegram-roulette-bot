@@ -123,6 +123,12 @@ export function openSharePicker(preparedId: string, timeoutMs = 30_000): Promise
  * The Telegram launch data as a URL hash, so a page on another site (MF Battle on
  * Cloudflare) opened from the Mini App is still signed in as this Telegram user.
  */
+/** MF Battle's address with the Telegram launch data, so the game signs the same person in. */
+export function battleHref(battleUrl: string): string {
+  const hash = telegramLaunchHash();
+  return `${battleUrl.replace(/\/+$/, '')}/${hash ? `#${hash}` : ''}`;
+}
+
 export function telegramLaunchHash(): string {
   const tg = window.Telegram?.WebApp as (TelegramWebApp & { version?: string; platform?: string; themeParams?: Record<string, string> }) | undefined;
   if (!tg?.initData) return '';

@@ -5,7 +5,7 @@ import { useCountdown } from '../hooks/useCountdown';
 import { TabKey } from '../components/BottomNav';
 import { api } from '../services/api';
 import { getLang, setLang, tr } from '../i18n';
-import { haptic, telegramLaunchHash } from '../hooks/useTelegramWebApp';
+import { battleHref, haptic } from '../hooks/useTelegramWebApp';
 
 function LanguageToggle() {
   const next = getLang() === 'ar' ? 'en' : 'ar';
@@ -38,8 +38,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
       return;
     }
     haptic('medium');
-    const hash = telegramLaunchHash();
-    window.location.href = `${me.battleUrl.replace(/\/+$/, '')}/${hash ? `#${hash}` : ''}`;
+    window.location.href = battleHref(me.battleUrl);
   }
 
   function comingSoon() {

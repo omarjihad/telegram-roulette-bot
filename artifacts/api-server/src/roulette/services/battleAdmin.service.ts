@@ -15,6 +15,7 @@ import {
   BATTLE_SKINS,
   START_SIZES,
   THROW_SHOP,
+  battleDirectLink,
   battleIsPublic,
   battleLevel,
   displayName,
@@ -46,10 +47,10 @@ const fmtMinutes = (minutes: number) => fmtDuration(minutes * 60);
 const baghdadTime = (d: Date) =>
   new Date(d.getTime() + 3 * 3600e3).toISOString().slice(11, 16) + ' (بتوقيت بغداد)';
 
-/** A button that opens MF Battle from a bot message (/start battle). */
+/** A button under a bot message that opens MF Battle (one tap with the Mini App's short name). */
 function playButton() {
-  if (!env.BOT_USERNAME) return undefined;
-  return [{ text: '⚔️ ادخل MF Battle', url: `https://t.me/${env.BOT_USERNAME}?start=battle` }];
+  const url = battleDirectLink();
+  return url ? [{ text: '⚔️ ادخل MF Battle', url }] : undefined;
 }
 
 let runningCache: { value: IBattleTournament | null; at: number } = { value: null, at: 0 };
@@ -468,6 +469,8 @@ export async function battleAdminHome() {
   const s = sums[0] ?? { matches: 0, seconds: 0, kills: 0, coins: 0 };
   return {
     public: await battleIsPublic(),
+    // The game's direct link, to share anywhere.
+    link: battleDirectLink(),
     stats: {
       online: onlineNow(),
       profiles,

@@ -581,6 +581,18 @@ export async function battleIdentity(initData: string) {
 /** Where the API server itself serves the MF Battle files (same domain as the Mini App). */
 export const MF_BATTLE_PATH = '/mf-battle';
 
+/**
+ * A link that opens MF Battle from anywhere in Telegram. With the Mini App's short name it
+ * opens the roulette app, which goes straight into the game (startapp=battle); without it,
+ * the bot's chat answers /start battle with an "enter the game" button.
+ */
+export function battleDirectLink() {
+  if (!env.BOT_USERNAME) return null;
+  return env.MINI_APP_SHORT_NAME
+    ? `https://t.me/${env.BOT_USERNAME}/${env.MINI_APP_SHORT_NAME}?startapp=battle`
+    : `https://t.me/${env.BOT_USERNAME}?start=battle`;
+}
+
 /** MF Battle's address: MF_BATTLE_URL when set (e.g. Cloudflare), otherwise this server's /mf-battle. */
 export function battleUrl() {
   return env.MF_BATTLE_URL || MF_BATTLE_PATH;
