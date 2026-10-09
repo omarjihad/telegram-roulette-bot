@@ -13,6 +13,7 @@ import { parseGiftToken, redeemGiftLink } from '../services/giftLink.service';
 import { isContestEnabled, parseContestToken, registerContestReferralIfNew } from '../services/contest.service';
 import { Lang, runWithLang, t, userLang } from '../i18n';
 import { battleIsPublic, battleUrl } from '../services/battle.service';
+import { handleGiveawayStart } from './giveawayActions';
 
 export function buildMiniAppKeyboard(label?: string, tab?: string): TelegramBot.SendMessageOptions {
   if (!env.MINI_APP_URL) return {};
@@ -110,6 +111,10 @@ export function registerStartHandler(bot: TelegramBot) {
         await bot.sendMessage(msg.chat.id, t('🔧 البوت في وضع الصيانة حالياً. حاول لاحقاً.', '🔧 The bot is under maintenance. Please try again later.'));
         return;
       }
+
+      // Giveaway boost links (gwb_ my link, gwr_ came through someone's link): the giveaway has
+      // its own conditions, so this comes before the bot's own required channels.
+      if (startParam && /^gw[br]_/.test(startParam) && (await handleGiveawayStart(bot, msg.chat.id, telegramUser, startParam))) return;
 
       const taskToken = parseTaskTokenFromStartParam(startParam);
       const generalReferralToken = parseGeneralReferralToken(startParam);
