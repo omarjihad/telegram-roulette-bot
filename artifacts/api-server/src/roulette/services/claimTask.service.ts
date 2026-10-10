@@ -13,7 +13,7 @@ import { consumeAdView } from './games.service';
 /** Friends the prize card must be shared with (step 2 of a step-by-step claim). */
 export const CLAIM_SHARES_REQUIRED = 3;
 
-/** The deadline of a task whose prize never expires (gift-link prizes). */
+/** The deadline of a task whose prize never expires. */
 export const NO_DEADLINE = new Date('2100-01-01T00:00:00Z');
 
 /**
@@ -112,7 +112,7 @@ export async function createClaimTaskForPrize(
 
 /**
  * The prize's claim task, made now if it has none yet (gift-link prizes given before they
- * needed one). A prize without a deadline gets a task without one.
+ * needed one). The task ends with its prize.
  */
 export async function ensureClaimTask(userPrize: HydratedDocument<IUserPrize>): Promise<HydratedDocument<IClaimTask>> {
   const existing = await ClaimTask.findOne({ userPrize: userPrize._id });

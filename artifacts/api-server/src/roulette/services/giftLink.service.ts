@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { GiftLink, GiftLinkRewardType } from '../models/GiftLink';
+import { ClaimTask } from '../models/ClaimTask';
 import { Prize } from '../models/Prize';
 import { User } from '../models/User';
 import { UserPrize } from '../models/UserPrize';
@@ -11,6 +12,9 @@ import { ensureClaimTask } from './claimTask.service';
 
 /** The longest message a developer can set on a gift link. */
 export const GIFT_MESSAGE_MAX = 2000;
+
+/** A prize from a gift link disappears if its claim steps aren't done within this time. */
+export const GIFT_PRIZE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 export function parseGiftToken(value?: string | null): string | null {
   if (!value) return null;
@@ -86,6 +90,19 @@ export async function revokeGiftLink(token: string) {
   );
   if (!updated) throw new AppError('Gift link is already used or unavailable', 409, 'GIFT_NOT_AVAILABLE');
   return updated;
+}
+
+/**
+ * Gift prizes given before they had a deadline get the same 24 hours, counted from now (and
+ * their claim tasks with them). Safe to run on every start.
+ */
+export async function backfillGiftPrizeExpiry(now = new Date()) {
+  const ids = await UserPrize.find({ source: 'referral', status: 'active', expiresAt: null }).distinct('_id');
+  if (!ids.length) return 0;
+  const expiresAt = new Date(now.getTime() + GIFT_PRIZE_EXPIRY_MS);
+  const res = await UserPrize.updateMany({ _id: { $in: ids }, expiresAt: null }, { $set: { expiresAt } });
+  await ClaimTask.updateMany({ userPrize: { $in: ids } }, { $set: { expiresAt } });
+  return res.modifiedCount;
 }
 
 /**
@@ -168,7 +185,9 @@ export async function redeemGiftLink(token: string, telegramId: number): Promise
     } else {
       await Prize.updateOne({ _id: prize._id }, { $inc: { pendingCount: 1 } });
     }
-    // source 'referral' = a gift-link prize.
+    // source 'referral' = a gift-link prize. Like a wheel prize, it's withdrawn only after every
+    // claim step (ad, share, invites), and it disappears (stock back to the bot) if they aren't
+    // done within 24 hours.
     const userPrize = await UserPrize.create({
       user: user._id,
       telegramId,
@@ -176,16 +195,15 @@ export async function redeemGiftLink(token: string, telegramId: number): Promise
       prizeNameSnapshot: prize.name,
       source: 'referral',
       wonAt: now,
-      expiresAt: null,
+      expiresAt: new Date(now.getTime() + GIFT_PRIZE_EXPIRY_MS),
       status: 'active',
     });
-    // Like a wheel prize, it's withdrawn only after every claim step (ad, share, invites).
     // Should this fail, the inventory and the claim make the task anyway.
     await ensureClaimTask(userPrize).catch((err) => logger.warn({ err, userPrize: userPrize._id }, 'gift prize task failed'));
     return reply(
       t(
-        `🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.\n\n📋 حتى تكدر تسحبها، كمّل مهام الاستلام كاملة (إعلان، مشاركة، دعوات).`,
-        `🎁 Congrats! You received: ${prize.name}.\nYou’ll find it in your inventory.\n\n📋 Finish all its claim tasks (ad, share, invites) to withdraw it.`
+        `🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.\n\n📋 حتى تكدر تسحبها، كمّل مهام الاستلام كاملة (إعلان، مشاركة، دعوات) خلال 24 ساعة.\n⏳ إذا ما كمّلتها خلال 24 ساعة، الجائزة تختفي.`,
+        `🎁 Congrats! You received: ${prize.name}.\nYou’ll find it in your inventory.\n\n📋 Finish all its claim tasks (ad, share, invites) within 24 hours to withdraw it.\n⏳ If they aren’t done in 24 hours, the prize disappears.`
       )
     );
   } catch (err) {

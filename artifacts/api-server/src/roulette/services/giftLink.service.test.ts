@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   userFindOne: vi.fn(),
   userUpdateOne: vi.fn(),
   userPrizeCreate: vi.fn(),
+  userPrizeIds: vi.fn(),
+  userPrizeUpdateMany: vi.fn(),
+  taskUpdateMany: vi.fn(),
   ensureTask: vi.fn(),
 }));
 
@@ -21,12 +24,15 @@ vi.mock('../models/Prize', () => ({
   Prize: { findOne: (...a: unknown[]) => ({ select: () => mocks.prizeFindOne(...a) }), findById: mocks.prizeFindById, updateOne: mocks.prizeUpdateOne },
 }));
 vi.mock('../models/User', () => ({ User: { findOne: mocks.userFindOne, updateOne: mocks.userUpdateOne } }));
-vi.mock('../models/UserPrize', () => ({ UserPrize: { create: mocks.userPrizeCreate } }));
+vi.mock('../models/UserPrize', () => ({
+  UserPrize: { create: mocks.userPrizeCreate, find: (...a: unknown[]) => ({ distinct: () => mocks.userPrizeIds(...a) }), updateMany: mocks.userPrizeUpdateMany },
+}));
+vi.mock('../models/ClaimTask', () => ({ ClaimTask: { updateMany: mocks.taskUpdateMany } }));
 vi.mock('./claimTask.service', () => ({ ensureClaimTask: mocks.ensureTask }));
 vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { createGiftLink, redeemGiftLink } from './giftLink.service';
+import { backfillGiftPrizeExpiry, createGiftLink, GIFT_PRIZE_EXPIRY_MS, redeemGiftLink } from './giftLink.service';
 
 const link = (over: Record<string, unknown> = {}) => ({
   _id: 'G1',
@@ -72,18 +78,41 @@ describe('gift links: the developer\'s own message', () => {
     expect(usual.message).toContain('10 نقطة');
   });
 
-  it('a prize from a link goes to the bag with the full claim steps before it can be withdrawn', async () => {
+  it('a prize from a link goes to the bag with the full claim steps, and 24 hours to do them', async () => {
     mocks.giftClaim.mockResolvedValueOnce(link({ rewardType: 'prize', prize: 'P1', pointsAmount: null }));
     mocks.prizeFindById.mockResolvedValueOnce({ _id: 'P1', name: 'لوفي جير 5', isUnlimited: true });
     const userPrize = { _id: 'UP1', source: 'referral', expiresAt: null };
     mocks.userPrizeCreate.mockResolvedValueOnce(userPrize);
     mocks.ensureTask.mockResolvedValueOnce({ status: 'pending' });
 
+    const before = Date.now();
     const res = await redeemGiftLink('tok', 7);
     expect(mocks.userPrizeCreate).toHaveBeenCalledWith(expect.objectContaining({ source: 'referral', status: 'active', prizeNameSnapshot: 'لوفي جير 5' }));
+    const expiresAt = (mocks.userPrizeCreate.mock.calls[0][0] as { expiresAt: Date }).expiresAt.getTime();
+    expect(expiresAt).toBeGreaterThanOrEqual(before + GIFT_PRIZE_EXPIRY_MS);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + GIFT_PRIZE_EXPIRY_MS);
+    expect(GIFT_PRIZE_EXPIRY_MS).toBe(24 * 60 * 60 * 1000);
     expect(mocks.ensureTask).toHaveBeenCalledWith(userPrize);
     expect(res.custom).toBe(false);
     expect(res.message).toContain('لوفي جير 5');
     expect(res.message).toContain('كمّل مهام الاستلام كاملة');
+    expect(res.message).toContain('خلال 24 ساعة');
+  });
+
+  it('gift prizes from before the deadline get 24 hours from now, and so do their tasks', async () => {
+    const now = new Date('2026-10-10T12:00:00Z');
+    const deadline = new Date('2026-10-11T12:00:00Z');
+    mocks.userPrizeIds.mockResolvedValueOnce(['UP1', 'UP2']);
+    mocks.userPrizeUpdateMany.mockResolvedValueOnce({ modifiedCount: 2 });
+    expect(await backfillGiftPrizeExpiry(now)).toBe(2);
+    expect(mocks.userPrizeIds).toHaveBeenCalledWith({ source: 'referral', status: 'active', expiresAt: null });
+    expect(mocks.userPrizeUpdateMany).toHaveBeenCalledWith({ _id: { $in: ['UP1', 'UP2'] }, expiresAt: null }, { $set: { expiresAt: deadline } });
+    expect(mocks.taskUpdateMany).toHaveBeenCalledWith({ userPrize: { $in: ['UP1', 'UP2'] } }, { $set: { expiresAt: deadline } });
+
+    // Nothing left to do: nothing touched.
+    mocks.userPrizeIds.mockResolvedValueOnce([]);
+    mocks.userPrizeUpdateMany.mockClear();
+    expect(await backfillGiftPrizeExpiry(now)).toBe(0);
+    expect(mocks.userPrizeUpdateMany).not.toHaveBeenCalled();
   });
 });

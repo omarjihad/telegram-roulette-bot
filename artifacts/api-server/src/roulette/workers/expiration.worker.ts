@@ -14,6 +14,7 @@ import { processSpinReadyReminders } from './spinReady.worker';
 import { expireOldListings, sendRenewReminders } from '../services/exchange.service';
 import { expireMediationTickets, remindWaitingTickets } from '../services/mediation.service';
 import { backfillDailyPrizeExpiry } from '../services/dailyLogin.service';
+import { backfillGiftPrizeExpiry } from '../services/giftLink.service';
 import { applyZigguratRateV2 } from '../services/games.service';
 import { refreshProofs } from '../services/proofs.service';
 import { keepDeliveryAccountConnected } from '../services/deliveryAccount.service';
@@ -39,6 +40,12 @@ export function startExpirationWorker() {
       if (count > 0) logger.info({ count }, 'gave old daily prizes a 12-hour deadline');
     })
     .catch((err) => logger.error({ err }, 'failed to backfill daily prize expiry'));
+
+  backfillGiftPrizeExpiry()
+    .then((count) => {
+      if (count > 0) logger.info({ count }, 'gave old gift-link prizes a 24-hour deadline');
+    })
+    .catch((err) => logger.error({ err }, 'failed to backfill gift prize expiry'));
 
   cron.schedule('*/5 * * * *', async () => {
     try {
