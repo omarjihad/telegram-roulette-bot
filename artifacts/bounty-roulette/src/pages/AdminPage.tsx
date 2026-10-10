@@ -289,6 +289,7 @@ interface GiftLinkRow {
   rewardType: 'points' | 'daily_spin' | 'prize' | 'guaranteed_daily_prize';
   pointsAmount: number | null;
   prizeNameSnapshot: string | null;
+  message?: string | null;
   maxRedemptions: number;
   redemptionCount: number;
   status: 'unused' | 'redeemed' | 'expired' | 'revoked';
@@ -961,6 +962,7 @@ function GiftLinksTab() {
   const [prizeKey, setPrizeKey] = useState('');
   const [expiresInHours, setExpiresInHours] = useState('72');
   const [maxRedemptions, setMaxRedemptions] = useState('1');
+  const [message, setMessage] = useState('');
   const [deductTelegramId, setDeductTelegramId] = useState('');
   const [deductAmount, setDeductAmount] = useState('');
   const [busy, setBusy] = useState(false);
@@ -991,7 +993,9 @@ function GiftLinksTab() {
         prizeKey: rewardType === 'prize' || rewardType === 'guaranteed_daily_prize' ? prizeKey : undefined,
         expiresInHours: expiresInHours.trim() ? Number(expiresInHours) : null,
         maxRedemptions: Number(maxRedemptions),
+        message: message.trim() || null,
       });
+      setMessage('');
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذر إنشاء رابط الهدية');
@@ -1089,6 +1093,17 @@ function GiftLinksTab() {
             {prizes.map((prize) => <option key={prize.key} value={prize.key}>{prize.icon} {prize.name}</option>)}
           </select>
         )}
+        {rewardType === 'prize' && (
+          <p className="card-sub" style={{ marginTop: 8 }}>📋 الجائزة تنضاف للحقيبة، وما تنسحب إلا بعد ما يكمّل مهام الاستلام كاملة (إعلان، مشاركة، دعوات) مثل جوائز العجلة.</p>
+        )}
+        <textarea
+          className="input"
+          style={{ marginTop: 10, minHeight: 100, width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, font: 'inherit', fontSize: 14, lineHeight: 1.6, resize: 'vertical' }}
+          maxLength={2000}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder="رسالة مخصصة تنرسل لما يفتح الرابط (اختياري). إذا تركتها فارغة تنرسل الرسالة الطبيعية."
+        />
         <input className="input" style={{ marginTop: 10 }} type="number" min="1" value={maxRedemptions} onChange={(event) => setMaxRedemptions(event.target.value)} placeholder="عدد المستخدمين المسموح لهم" />
         <input className="input" style={{ marginTop: 10 }} type="number" min="1" value={expiresInHours} onChange={(event) => setExpiresInHours(event.target.value)} placeholder="مدة الصلاحية بالساعات (فارغ = بدون انتهاء)" />
         <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy || ((rewardType === 'prize' || rewardType === 'guaranteed_daily_prize') && !prizeKey)} onClick={() => void create()}>
@@ -1113,6 +1128,9 @@ function GiftLinksTab() {
             </span>
           </div>
           <div className="card-sub" style={{ marginTop: 6 }}>المستخدمون: {gift.redemptionCount}/{gift.maxRedemptions}</div>
+          <div className="card-sub" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
+            {gift.message ? `✉️ رسالة مخصصة:\n${gift.message}` : '✉️ الرسالة الطبيعية'}
+          </div>
           {gift.link && <div style={{ direction: 'ltr', wordBreak: 'break-all', fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>{gift.link}</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             {gift.link && gift.status === 'unused' && <button className="btn btn-secondary" onClick={() => void copy(gift.link)}>📋 نسخ</button>}

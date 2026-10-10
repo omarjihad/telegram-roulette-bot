@@ -171,10 +171,11 @@ export function registerStartHandler(bot: TelegramBot) {
       if (giftToken) {
         try {
           const gift = await redeemGiftLink(giftToken, user.telegramId);
-          const text = 'isSpin' in gift && gift.isSpin
+          // The developer's own message goes out exactly as written; the usual one gets a hint.
+          const text = gift.isSpin || gift.custom
             ? gift.message
             : `${gift.message}\n\n${t('اضغط الزر حتى تفتح البوت وتشوف الهدية بحسابك 🎁', 'Tap the button to open the bot and see the gift in your account 🎁')}`;
-          await bot.sendMessage(msg.chat.id, text, buildMiniAppKeyboard('isSpin' in gift && gift.isSpin ? t('🎡 أدر العجلة الآن', '🎡 Spin the wheel now') : undefined));
+          await bot.sendMessage(msg.chat.id, text, buildMiniAppKeyboard(gift.isSpin ? t('🎡 أدر العجلة الآن', '🎡 Spin the wheel now') : undefined));
         } catch (err) {
           await bot.sendMessage(msg.chat.id, err instanceof Error ? `⚠️ ${err.message}` : t('⚠️ رابط الهدية غير صالح.', '⚠️ This gift link is not valid.'));
         }

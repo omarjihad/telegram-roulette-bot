@@ -5,7 +5,12 @@ import { User } from '../models/User';
 import { UserPrize } from '../models/UserPrize';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
+import { logger } from '../config/logger';
 import { t } from '../i18n';
+import { ensureClaimTask } from './claimTask.service';
+
+/** The longest message a developer can set on a gift link. */
+export const GIFT_MESSAGE_MAX = 2000;
 
 export function parseGiftToken(value?: string | null): string | null {
   if (!value) return null;
@@ -25,6 +30,7 @@ export async function createGiftLink(params: {
   createdByTelegramId: number;
   expiresInHours?: number | null;
   maxRedemptions?: number;
+  message?: string | null;
 }) {
   let prize: { _id: unknown; name: string } | null = null;
   if (params.rewardType === 'points') {
@@ -48,12 +54,19 @@ export async function createGiftLink(params: {
     throw new AppError('expiresInHours must be positive or null', 422, 'VALIDATION_ERROR');
   }
 
+  // Blank = the usual message.
+  const message = typeof params.message === 'string' && params.message.trim() ? params.message.trim() : null;
+  if (message && message.length > GIFT_MESSAGE_MAX) {
+    throw new AppError(`الرسالة أطول من ${GIFT_MESSAGE_MAX} حرف`, 422, 'VALIDATION_ERROR');
+  }
+
   const gift = await GiftLink.create({
     token: nanoid(20),
     rewardType: params.rewardType,
     pointsAmount: params.rewardType === 'points' ? params.pointsAmount : null,
     prize: prize?._id ?? null,
     prizeNameSnapshot: prize?.name ?? null,
+    message,
     maxRedemptions,
     createdByTelegramId: params.createdByTelegramId,
     expiresAt: hours === null ? null : new Date(Date.now() + hours * 60 * 60 * 1000),
@@ -75,7 +88,11 @@ export async function revokeGiftLink(token: string) {
   return updated;
 }
 
-export async function redeemGiftLink(token: string, telegramId: number) {
+/**
+ * Gives the link's reward. `message` is the developer's own message when the link has one,
+ * otherwise the usual one (`custom` says which).
+ */
+export async function redeemGiftLink(token: string, telegramId: number): Promise<{ message: string; custom: boolean; isSpin?: boolean }> {
   const now = new Date();
   const claimed = await GiftLink.findOneAndUpdate(
     {
@@ -119,14 +136,18 @@ export async function redeemGiftLink(token: string, telegramId: number) {
   const user = await User.findOne({ telegramId });
   if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
 
+  // The developer's own message replaces the usual one (the reward is the same).
+  const custom = claimed.message?.trim() || null;
+  const reply = (usual: string, extra: { isSpin?: boolean } = {}) => ({ message: custom ?? usual, custom: Boolean(custom), ...extra });
+
   try {
     if (claimed.rewardType === 'points') {
       await User.updateOne({ _id: user._id }, { $inc: { spinPoints: claimed.pointsAmount ?? 0 } });
-       return { message: t(`🎁 مبروك! استلمت هدية بقيمة ${claimed.pointsAmount} نقطة.\nتلقاها مضافة بحسابك، افتح البوت حتى تستخدمها.`, `🎁 Congrats! You received a gift of ${claimed.pointsAmount} points.\nIt’s in your account — open the bot to use it.`) };
+      return reply(t(`🎁 مبروك! استلمت هدية بقيمة ${claimed.pointsAmount} نقطة.\nتلقاها مضافة بحسابك، افتح البوت حتى تستخدمها.`, `🎁 Congrats! You received a gift of ${claimed.pointsAmount} points.\nIt’s in your account — open the bot to use it.`));
     }
     if (claimed.rewardType === 'daily_spin') {
       await User.updateOne({ _id: user._id }, { $inc: { bonusDailySpins: 1 } });
-       return { message: t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), isSpin: true };
+      return reply(t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), { isSpin: true });
     }
 
     if (!claimed.prize) throw new AppError('Gift prize is missing', 500, 'GIFT_INVALID');
@@ -138,7 +159,7 @@ export async function redeemGiftLink(token: string, telegramId: number) {
         { $inc: { bonusDailySpins: 1 }, $push: { guaranteedDailyPrizes: prize._id } },
       );
       // The prize stays a surprise: the message only announces the extra daily spin.
-      return { message: t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), isSpin: true };
+      return reply(t('🎡 تم إضافة عجلة يومية إلى حسابك!\nقم بإدارتها الآن 👇', '🎡 A daily spin was added to your account!\nSpin it now 👇'), { isSpin: true });
     }
 
     if (!prize.isUnlimited) {
@@ -147,6 +168,7 @@ export async function redeemGiftLink(token: string, telegramId: number) {
     } else {
       await Prize.updateOne({ _id: prize._id }, { $inc: { pendingCount: 1 } });
     }
+    // source 'referral' = a gift-link prize.
     const userPrize = await UserPrize.create({
       user: user._id,
       telegramId,
@@ -157,7 +179,15 @@ export async function redeemGiftLink(token: string, telegramId: number) {
       expiresAt: null,
       status: 'active',
     });
-     return { message: t(`🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.`, `🎁 Congrats! You received: ${prize.name}.\nYou’ll find it in your inventory.`) };
+    // Like a wheel prize, it's withdrawn only after every claim step (ad, share, invites).
+    // Should this fail, the inventory and the claim make the task anyway.
+    await ensureClaimTask(userPrize).catch((err) => logger.warn({ err, userPrize: userPrize._id }, 'gift prize task failed'));
+    return reply(
+      t(
+        `🎁 مبروك! استلمت الجائزة: ${prize.name}.\nتلقاها حالياً داخل المخزون/الحقيبة.\n\n📋 حتى تكدر تسحبها، كمّل مهام الاستلام كاملة (إعلان، مشاركة، دعوات).`,
+        `🎁 Congrats! You received: ${prize.name}.\nYou’ll find it in your inventory.\n\n📋 Finish all its claim tasks (ad, share, invites) to withdraw it.`
+      )
+    );
   } catch (err) {
     await GiftLink.updateOne(
       { _id: claimed._id },

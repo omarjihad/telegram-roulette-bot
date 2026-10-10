@@ -9,6 +9,8 @@ export interface IGiftLink extends Document {
   pointsAmount: number | null;
   prize?: Types.ObjectId | null;
   prizeNameSnapshot?: string | null;
+  // The developer's own message for whoever opens the link (null = the usual message).
+  message?: string | null;
   createdByTelegramId: number;
   status: GiftLinkStatus;
   redeemedByTelegramId?: number | null;
@@ -28,6 +30,7 @@ const giftLinkSchema = new Schema<IGiftLink>(
     pointsAmount: { type: Number, default: null },
     prize: { type: Schema.Types.ObjectId, ref: 'Prize', default: null },
     prizeNameSnapshot: { type: String, default: null },
+    message: { type: String, default: null, maxlength: 2000 },
     createdByTelegramId: { type: Number, required: true, index: true },
     status: { type: String, enum: ['unused', 'redeemed', 'expired', 'revoked'], default: 'unused', index: true },
     redeemedByTelegramId: { type: Number, default: null },

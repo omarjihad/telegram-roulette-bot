@@ -15,12 +15,13 @@ export const adminListGiftLinks = asyncHandler(async (_req: Request, res: Respon
 });
 
 export const adminCreateGiftLink = asyncHandler(async (req: Request, res: Response) => {
-  const { rewardType, pointsAmount, prizeKey, expiresInHours, maxRedemptions } = req.body as {
+  const { rewardType, pointsAmount, prizeKey, expiresInHours, maxRedemptions, message } = req.body as {
     rewardType?: 'points' | 'daily_spin' | 'prize' | 'guaranteed_daily_prize';
     pointsAmount?: number;
     prizeKey?: string;
     expiresInHours?: number | null;
     maxRedemptions?: number;
+    message?: string | null;
   };
   if (!rewardType || !['points', 'daily_spin', 'prize', 'guaranteed_daily_prize'].includes(rewardType)) {
     throw new AppError('rewardType is invalid', 422, 'VALIDATION_ERROR');
@@ -31,6 +32,7 @@ export const adminCreateGiftLink = asyncHandler(async (req: Request, res: Respon
     prizeKey,
     expiresInHours,
     maxRedemptions,
+    message: typeof message === 'string' ? message : null,
     createdByTelegramId: req.telegramId!,
   });
   res.json({ ok: true, gift: { ...result.gift.toObject(), link: result.link } });

@@ -10,6 +10,8 @@ import {
   completeClaimAdStep,
   confirmShareSent,
   currentStep,
+  ensureClaimTask,
+  needsClaimTask,
   rememberSharePrepared,
   shareCount,
 } from '../services/claimTask.service';
@@ -29,15 +31,22 @@ export const listMyInventory = asyncHandler(async (req: Request, res: Response) 
     .limit(200)
     .populate('prize', 'key icon hasImage');
 
-  const claimableItemIds = items.filter((i) => i.source === 'wheel' || i.source === 'daily').map((i) => i._id);
+  const claimableItemIds = items.filter((i) => needsClaimTask(i.source)).map((i) => i._id);
   const tasks = await ClaimTask.find({ userPrize: { $in: claimableItemIds } });
   const taskByUserPrize = new Map(tasks.map((t) => [String(t.userPrize), t]));
+  // Gift-link prizes from before they needed the claim steps get them now.
+  for (const i of items) {
+    if (i.source === 'referral' && i.status === 'active' && !taskByUserPrize.has(String(i._id))) {
+      const task = await ensureClaimTask(i).catch((err) => logger.warn({ err, userPrize: i._id }, 'gift prize task failed'));
+      if (task) taskByUserPrize.set(String(i._id), task);
+    }
+  }
   const settings = await getSettings();
 
   res.json({
     ok: true,
     items: items.map((i) => {
-      const task = (i.source === 'wheel' || i.source === 'daily') ? taskByUserPrize.get(String(i._id)) : undefined;
+      const task = needsClaimTask(i.source) ? taskByUserPrize.get(String(i._id)) : undefined;
       const prize = i.prize as unknown as { key?: string; icon?: string; hasImage?: boolean } | null;
       return {
         id: i._id,
@@ -108,7 +117,7 @@ export const shareCard = asyncHandler(async (req: Request, res: Response) => {
 
   const userPrize = await UserPrize.findOne({ _id: userPrizeId, telegramId: req.telegramId });
   if (!userPrize) throw new AppError('Prize not found', 404, 'NOT_FOUND');
-  if (userPrize.source !== 'wheel' && userPrize.source !== 'daily') {
+  if (!needsClaimTask(userPrize.source)) {
     throw new AppError('This prize has no referral link to share', 422, 'VALIDATION_ERROR');
   }
 

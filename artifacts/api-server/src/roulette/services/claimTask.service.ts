@@ -13,6 +13,17 @@ import { consumeAdView } from './games.service';
 /** Friends the prize card must be shared with (step 2 of a step-by-step claim). */
 export const CLAIM_SHARES_REQUIRED = 3;
 
+/** The deadline of a task whose prize never expires (gift-link prizes). */
+export const NO_DEADLINE = new Date('2100-01-01T00:00:00Z');
+
+/**
+ * Prizes that go through the claim steps (ad, share, invites) before they can be withdrawn:
+ * wheel, daily-login, and gift-link prizes (source 'referral'). Store purchases don't.
+ */
+export function needsClaimTask(source: IUserPrize['source']) {
+  return source === 'wheel' || source === 'daily' || source === 'referral';
+}
+
 type TaskLike = Pick<IClaimTask, 'steps' | 'adWatchedAt' | 'shareRequired' | 'sharedInlineIds' | 'shareConfirmedIds' | 'creditedCount' | 'requiredCount'> &
   Partial<Pick<IClaimTask, 'shareOpeners'>>;
 
@@ -72,7 +83,7 @@ async function completeIfDone(task: HydratedDocument<IClaimTask>) {
  */
 export async function createClaimTaskForPrize(
   userPrize: HydratedDocument<IUserPrize>,
-  options: { requiredCount?: number; session?: ClientSession; now?: Date } = {}
+  options: { requiredCount?: number; session?: ClientSession; now?: Date; expiresAt?: Date } = {}
 ): Promise<HydratedDocument<IClaimTask>> {
   const settings = options.requiredCount === undefined ? await getSettings() : null;
   const now = options.now ?? new Date();
@@ -88,7 +99,7 @@ export async function createClaimTaskForPrize(
         requiredCount: options.requiredCount ?? settings!.wheelClaimReferralsRequired ?? settings!.claimReferralsRequired,
         creditedCount: 0,
         status: 'pending',
-        expiresAt: userPrize.expiresAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        expiresAt: options.expiresAt ?? userPrize.expiresAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
         steps: true,
         shareRequired: CLAIM_SHARES_REQUIRED,
       },
@@ -97,6 +108,23 @@ export async function createClaimTaskForPrize(
   );
 
   return task;
+}
+
+/**
+ * The prize's claim task, made now if it has none yet (gift-link prizes given before they
+ * needed one). A prize without a deadline gets a task without one.
+ */
+export async function ensureClaimTask(userPrize: HydratedDocument<IUserPrize>): Promise<HydratedDocument<IClaimTask>> {
+  const existing = await ClaimTask.findOne({ userPrize: userPrize._id });
+  if (existing) return existing;
+  try {
+    return await createClaimTaskForPrize(userPrize, { expiresAt: userPrize.expiresAt ?? NO_DEADLINE });
+  } catch (err) {
+    // Made at the same moment by another request (one task per prize).
+    const made = await ClaimTask.findOne({ userPrize: userPrize._id });
+    if (made) return made;
+    throw err;
+  }
 }
 
 export function buildTaskLink(token: string): string | null {

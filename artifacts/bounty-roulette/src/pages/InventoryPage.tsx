@@ -327,7 +327,7 @@ export function InventoryPage() {
                   <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{item.prizeName}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                     {item.source === 'referral'
-                      ? tr('🎁 مكافأة إحالة', '🎁 Referral reward')
+                      ? tr('🎁 هدية من رابط', '🎁 Gift link')
                       : item.source === 'store'
                       ? tr('🏪 من المتجر', '🏪 From the store')
                       : tr('🎰 من الفرة المجانية', '🎰 From the free spin')}

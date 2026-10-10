@@ -8,7 +8,7 @@ import { Referral } from '../models/Referral';
 import { RouletteSpin } from '../models/RouletteSpin';
 import { AppError } from '../utils/AppError';
 import { createNotification, markWithdrawalDecidedForAdmins, notifyAdminsNewWithdrawal, notifyDeliveryAccountNewWithdrawal } from './notification.service';
-import { expireClaimTaskForUserPrize, getClaimTaskForUserPrize } from './claimTask.service';
+import { ensureClaimTask, expireClaimTaskForUserPrize, getClaimTaskForUserPrize, needsClaimTask } from './claimTask.service';
 import { writeAudit } from '../models/AuditLog';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -64,10 +64,14 @@ export async function requestClaim(telegramId: number, userPrizeId: string) {
     throw new AppError('This prize has expired', 410, 'EXPIRED');
   }
 
-  // Wheel and daily-login prizes require the winner to have completed this prize's own
-  // invite task before a withdrawal can even be requested. Store purchases remain ungated.
-  if (userPrize.source === 'wheel' || userPrize.source === 'daily') {
-    const task = await getClaimTaskForUserPrize(userPrize._id as mongoose.Types.ObjectId);
+  // Wheel, daily-login and gift-link prizes require the winner to have completed this prize's
+  // own claim task before a withdrawal can even be requested. Store purchases remain ungated.
+  if (needsClaimTask(userPrize.source)) {
+    // Gift prizes from before they needed the steps get their task now.
+    const task =
+      userPrize.source === 'referral'
+        ? await ensureClaimTask(userPrize)
+        : await getClaimTaskForUserPrize(userPrize._id as mongoose.Types.ObjectId);
     if (!task || task.status !== 'completed') {
       const remaining = task ? Math.max(0, task.requiredCount - task.creditedCount) : null;
       throw new AppError(
