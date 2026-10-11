@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
-import { buildGiftLink, createGiftLink, listGiftLinks, revokeGiftLink } from '../services/giftLink.service';
+import { addGiftLinkUses, buildGiftLink, createGiftLink, listGiftLinks, revokeGiftLink } from '../services/giftLink.service';
 
 export const adminListGiftLinks = asyncHandler(async (_req: Request, res: Response) => {
   const gifts = await listGiftLinks();
@@ -36,6 +36,13 @@ export const adminCreateGiftLink = asyncHandler(async (req: Request, res: Respon
     createdByTelegramId: req.telegramId!,
   });
   res.json({ ok: true, gift: { ...result.gift.toObject(), link: result.link } });
+});
+
+/** The "+" button: more people for a link, even one that's full or out of time. */
+export const adminAddGiftLinkUses = asyncHandler(async (req: Request, res: Response) => {
+  const { amount, expiresInHours } = req.body as { amount?: number; expiresInHours?: number | null };
+  const gift = await addGiftLinkUses(req.params.token, Number(amount), expiresInHours);
+  res.json({ ok: true, gift: { ...gift.toObject(), link: buildGiftLink(gift.token) } });
 });
 
 export const adminRevokeGiftLink = asyncHandler(async (req: Request, res: Response) => {

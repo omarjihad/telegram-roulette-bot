@@ -32,7 +32,7 @@ vi.mock('./claimTask.service', () => ({ ensureClaimTask: mocks.ensureTask }));
 vi.mock('../config/env', () => ({ env: { BOT_USERNAME: 'MfRuLiTbot' } }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { backfillGiftPrizeExpiry, createGiftLink, GIFT_PRIZE_EXPIRY_MS, redeemGiftLink } from './giftLink.service';
+import { addGiftLinkUses, backfillGiftPrizeExpiry, createGiftLink, GIFT_PRIZE_EXPIRY_MS, redeemGiftLink } from './giftLink.service';
 
 const link = (over: Record<string, unknown> = {}) => ({
   _id: 'G1',
@@ -114,5 +114,64 @@ describe('gift links: the developer\'s own message', () => {
     mocks.userPrizeUpdateMany.mockClear();
     expect(await backfillGiftPrizeExpiry(now)).toBe(0);
     expect(mocks.userPrizeUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('gift links: "+" makes room for more people', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.userFindOne.mockResolvedValue({ _id: 'U1', telegramId: 7 });
+  });
+  const setOf = (call: number) => (mocks.giftClaim.mock.calls[call][1] as { $set: Record<string, unknown> }).$set;
+
+  it('50 + 100 = 150, and a full link opens again', async () => {
+    mocks.giftFindOne.mockResolvedValueOnce({ _id: 'G1', status: 'redeemed', maxRedemptions: 50, redemptionCount: 50, expiresAt: null });
+    mocks.giftClaim.mockResolvedValueOnce({ maxRedemptions: 150, status: 'unused' });
+    expect(await addGiftLinkUses('tok', 100)).toMatchObject({ maxRedemptions: 150 });
+    expect(mocks.giftClaim).toHaveBeenCalledWith(
+      { _id: 'G1', status: { $ne: 'revoked' } },
+      { $inc: { maxRedemptions: 100 }, $set: { status: 'unused' } },
+      { new: true }
+    );
+  });
+
+  it('a link out of time opens again for the new hours (blank = no end); one in time keeps its time', async () => {
+    const past = new Date(Date.now() - 3600e3);
+    mocks.giftFindOne.mockResolvedValueOnce({ _id: 'G1', status: 'expired', maxRedemptions: 5, redemptionCount: 2, expiresAt: past });
+    mocks.giftClaim.mockResolvedValueOnce({ maxRedemptions: 15 });
+    const before = Date.now();
+    await addGiftLinkUses('tok', 10, 48);
+    expect(setOf(0).status).toBe('unused');
+    expect((setOf(0).expiresAt as Date).getTime()).toBeGreaterThanOrEqual(before + 48 * 3600e3);
+
+    // Time passed but nobody tried it yet (still "unused"): same thing, no end this time.
+    mocks.giftFindOne.mockResolvedValueOnce({ _id: 'G1', status: 'unused', maxRedemptions: 5, redemptionCount: 2, expiresAt: past });
+    mocks.giftClaim.mockResolvedValueOnce({ maxRedemptions: 15 });
+    await addGiftLinkUses('tok', 10, null);
+    expect(setOf(1)).toEqual({ status: 'unused', expiresAt: null });
+
+    mocks.giftFindOne.mockResolvedValueOnce({ _id: 'G1', status: 'unused', maxRedemptions: 5, redemptionCount: 2, expiresAt: new Date(Date.now() + 3600e3) });
+    mocks.giftClaim.mockResolvedValueOnce({ maxRedemptions: 15 });
+    await addGiftLinkUses('tok', 10, 48);
+    expect(setOf(2)).toEqual({ status: 'unused' });
+  });
+
+  it('refuses bad numbers and cancelled links', async () => {
+    await expect(addGiftLinkUses('tok', 0)).rejects.toThrow();
+    await expect(addGiftLinkUses('tok', 2.5)).rejects.toThrow();
+    mocks.giftFindOne.mockResolvedValueOnce({ _id: 'G1', status: 'revoked' });
+    await expect(addGiftLinkUses('tok', 10)).rejects.toMatchObject({ code: 'GIFT_REVOKED' });
+    mocks.giftFindOne.mockResolvedValueOnce(null);
+    await expect(addGiftLinkUses('tok', 10)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(mocks.giftClaim).not.toHaveBeenCalled();
+  });
+
+  it('the last person marks the link full only if no "+" came in meanwhile', async () => {
+    mocks.giftClaim.mockResolvedValueOnce(link({ redemptionCount: 5, maxRedemptions: 5 }));
+    await redeemGiftLink('tok', 7);
+    expect(mocks.giftUpdateOne).toHaveBeenCalledWith(
+      { _id: 'G1', status: 'unused', $expr: { $gte: ['$redemptionCount', '$maxRedemptions'] } },
+      { $set: { status: 'redeemed' } }
+    );
   });
 });

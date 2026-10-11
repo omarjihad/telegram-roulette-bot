@@ -56,7 +56,7 @@ import {
   adminRemoveDeliveryAccount,
   adminSyncDeliveryContacts,
 } from '../controllers/deliveryAccount.controller';
-import { adminListGiftLinks, adminCreateGiftLink, adminRevokeGiftLink } from '../controllers/adminGift.controller';
+import { adminListGiftLinks, adminCreateGiftLink, adminRevokeGiftLink, adminAddGiftLinkUses } from '../controllers/adminGift.controller';
 import { adminDeductUserPoints } from '../controllers/adminPoints.controller';
 import {
   adminAnnounceContestWinner,
@@ -149,6 +149,7 @@ router.get('/users/:query/referrals', adminListUserReferrals);
 // One-use gift links
 router.get('/gifts', adminListGiftLinks);
 router.post('/gifts', adminCreateGiftLink);
+router.post('/gifts/:token/add', adminAddGiftLinkUses);
 router.delete('/gifts/:token', adminRevokeGiftLink);
 router.post('/points/deduct', adminDeductUserPoints);
 

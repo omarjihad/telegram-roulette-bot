@@ -93,6 +93,38 @@ export async function revokeGiftLink(token: string) {
 }
 
 /**
+ * The "+" on a link: room for `amount` more people (50 + 100 → 150). A link that was full opens
+ * again; one whose time ran out opens again for `expiresInHours` more (null = no end).
+ * A cancelled link stays cancelled.
+ */
+export async function addGiftLinkUses(token: string, amount: number, expiresInHours?: number | null) {
+  if (!Number.isInteger(amount) || amount < 1 || amount > 1_000_000) {
+    throw new AppError('اكتب عدد أشخاص صحيح أكبر من صفر.', 422, 'VALIDATION_ERROR');
+  }
+  const gift = await GiftLink.findOne({ token });
+  if (!gift) throw new AppError('ما لكيت هذا الرابط.', 404, 'NOT_FOUND');
+  if (gift.status === 'revoked') throw new AppError('هذا الرابط ملغى.', 409, 'GIFT_REVOKED');
+
+  const now = new Date();
+  const set: { status: 'unused'; expiresAt?: Date | null } = { status: 'unused' };
+  const timeOver = gift.status === 'expired' || (gift.expiresAt != null && gift.expiresAt <= now);
+  if (timeOver) {
+    const hours = expiresInHours == null ? null : Number(expiresInHours);
+    if (hours !== null && (!Number.isFinite(hours) || hours <= 0)) {
+      throw new AppError('اكتب عدد ساعات صحيح، أو اتركه فارغ حتى يصير بدون انتهاء.', 422, 'VALIDATION_ERROR');
+    }
+    set.expiresAt = hours === null ? null : new Date(now.getTime() + hours * 60 * 60 * 1000);
+  }
+  const updated = await GiftLink.findOneAndUpdate(
+    { _id: gift._id, status: { $ne: 'revoked' } },
+    { $inc: { maxRedemptions: amount }, $set: set },
+    { new: true }
+  );
+  if (!updated) throw new AppError('هذا الرابط ملغى.', 409, 'GIFT_REVOKED');
+  return updated;
+}
+
+/**
  * Gift prizes given before they had a deadline get the same 24 hours, counted from now (and
  * their claim tasks with them). Safe to run on every start.
  */
@@ -147,7 +179,11 @@ export async function redeemGiftLink(token: string, telegramId: number): Promise
   }
 
   if (claimed.redemptionCount >= claimed.maxRedemptions) {
-    await GiftLink.updateOne({ _id: claimed._id, status: 'unused' }, { $set: { status: 'redeemed' } });
+    // Checked again on the stored counts: a "+" at this moment keeps the link open.
+    await GiftLink.updateOne(
+      { _id: claimed._id, status: 'unused', $expr: { $gte: ['$redemptionCount', '$maxRedemptions'] } },
+      { $set: { status: 'redeemed' } }
+    );
   }
 
   const user = await User.findOne({ telegramId });

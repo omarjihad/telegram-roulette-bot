@@ -1010,6 +1010,43 @@ function GiftLinksTab() {
     window.alert('تم نسخ رابط الهدية');
   }
 
+  // Arabic keyboards type ١٠٠ / ۱۰۰: read them as 100.
+  const westernDigits = (v: string) =>
+    v.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+
+  // "+": room for more people (50 + 100 → 150), even on a link that's full or out of time.
+  async function addUses(gift: GiftLinkRow) {
+    const raw = window.prompt(`كم شخص تضيف لهذا الرابط؟\nهسه: ${gift.redemptionCount} من ${gift.maxRedemptions}`, '100');
+    if (raw == null) return;
+    const amount = Number(westernDigits(raw));
+    if (!Number.isInteger(amount) || amount < 1) {
+      window.alert('اكتب عدد أشخاص صحيح أكبر من صفر.');
+      return;
+    }
+    let expiresInHours: number | null | undefined;
+    const timeOver = gift.status === 'expired' || (gift.expiresAt != null && new Date(gift.expiresAt).getTime() <= Date.now());
+    if (timeOver) {
+      const hours = window.prompt('وقت هذا الرابط خلص. كم ساعة تمدده؟\n(فارغ = بدون انتهاء)', '72');
+      if (hours == null) return;
+      expiresInHours = hours.trim() ? Number(westernDigits(hours)) : null;
+      if (expiresInHours !== null && !(expiresInHours > 0)) {
+        window.alert('اكتب عدد ساعات صحيح، أو اتركه فارغ.');
+        return;
+      }
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<{ ok: true; gift: GiftLinkRow }>(`/admin/gifts/${encodeURIComponent(gift.token)}/add`, { amount, expiresInHours });
+      await load();
+      window.alert(`تم ✅ صار الحد ${res.gift.maxRedemptions} شخص.`);
+    } catch (err) {
+      // Shown right away: the list can be far below the form's error line.
+      window.alert(err instanceof ApiError ? err.message : 'تعذر زيادة عدد الأشخاص');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function revoke(token: string) {
     if (!window.confirm('إلغاء رابط الهدية؟')) return;
     setBusy(true);
@@ -1134,6 +1171,7 @@ function GiftLinksTab() {
           {gift.link && <div style={{ direction: 'ltr', wordBreak: 'break-all', fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>{gift.link}</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             {gift.link && gift.status === 'unused' && <button className="btn btn-secondary" onClick={() => void copy(gift.link)}>📋 نسخ</button>}
+            {gift.status !== 'revoked' && <button className="btn btn-secondary" disabled={busy} onClick={() => void addUses(gift)}>➕ زيادة</button>}
             {gift.status === 'unused' && <button className="btn btn-secondary" onClick={() => void revoke(gift.token)}>إلغاء الرابط</button>}
           </div>
         </div>
