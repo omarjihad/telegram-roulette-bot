@@ -8,11 +8,15 @@ export function GamesHubPage({
   onBack,
   onOpenSnake,
   onOpenZiggurat,
+  onOpenFlappy,
+  onOpenTimer,
   snakeLocked,
 }: {
   onBack: () => void;
   onOpenSnake: () => void;
   onOpenZiggurat: () => void;
+  onOpenFlappy: () => void;
+  onOpenTimer: () => void;
   snakeLocked: boolean;
 }) {
   const [toast, setToast] = useState<string | null>(null);
@@ -32,7 +36,7 @@ export function GamesHubPage({
         onBack={onBack}
       />
 
-      {/* Two games per row: Snake · Ziggurat, then Flying · Timer (both coming soon). */}
+      {/* Two games per row: Snake · Ziggurat, then Flying · Timer. */}
       <div className="games-grid">
         <button className="art-card game-tile" onClick={snakeLocked ? soon : onOpenSnake}>
           <span className="art-bg" style={{ backgroundImage: 'url(/art/snake.svg)' }} />
@@ -50,21 +54,20 @@ export function GamesHubPage({
           {snakeLocked ? <span className="art-card-pill">{tr('قريباً', 'Soon')}</span> : <span className="art-card-play">{tr('▶ العب', '▶ Play')}</span>}
         </button>
 
-        {/* Teasers only: these games aren't built yet. */}
-        <button className="art-card game-tile game-tile-locked" onClick={soon} aria-label={tr('طيران، قريباً', 'Flying, coming soon')}>
+        <button className="art-card game-tile" onClick={snakeLocked ? soon : onOpenFlappy}>
           <span className="art-bg" style={{ backgroundImage: 'url(/art/flappy.svg)' }} />
           <span className="art-shade" />
           <strong>{tr('🐦 طيران', '🐦 Flying')}</strong>
-          <span className="art-card-sub">{tr('طير بين الأنابيب', 'Fly between the pipes')}</span>
-          <span className="game-soon-center"><b>{tr('قريباً', 'SOON')}</b></span>
+          <span className="art-card-sub">{tr('طير بين الأعمدة', 'Fly between the columns')}</span>
+          {snakeLocked ? <span className="art-card-pill">{tr('قريباً', 'Soon')}</span> : <span className="art-card-play">{tr('▶ العب', '▶ Play')}</span>}
         </button>
 
-        <button className="art-card game-tile game-tile-locked" onClick={soon} aria-label={tr('المؤقت، قريباً', 'The Timer, coming soon')}>
+        <button className="art-card game-tile" onClick={snakeLocked ? soon : onOpenTimer}>
           <span className="art-bg" style={{ backgroundImage: 'url(/art/timer.svg)' }} />
           <span className="art-shade" />
           <strong>{tr('⏱️ المؤقت', '⏱️ The Timer')}</strong>
           <span className="art-card-sub">{tr('وقّف الساعة بالضبط', 'Stop the clock exactly')}</span>
-          <span className="game-soon-center"><b>{tr('قريباً', 'SOON')}</b></span>
+          {snakeLocked ? <span className="art-card-pill">{tr('قريباً', 'Soon')}</span> : <span className="art-card-play">{tr('▶ العب', '▶ Play')}</span>}
         </button>
       </div>
 

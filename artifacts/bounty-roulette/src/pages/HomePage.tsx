@@ -6,6 +6,7 @@ import { TabKey } from '../components/BottomNav';
 import { api } from '../services/api';
 import { getLang, setLang, tr } from '../i18n';
 import { battleHref, haptic } from '../hooks/useTelegramWebApp';
+import { SuggestionSheet } from '../components/SuggestionSheet';
 
 function LanguageToggle() {
   const next = getLang() === 'ar' ? 'en' : 'ar';
@@ -28,6 +29,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
   const { label, isReady } = useCountdown(me.wheel.nextSpinAt);
   const initial = (me.user.firstName || me.user.username || '؟').charAt(0).toUpperCase();
   const [toast, setToast] = useState<string | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   // Developers can use the exchange while it's being tested; members get "coming soon".
   const exchangeOpen = me.isAdmin || me.exchangePublic === true;
@@ -172,7 +174,7 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         <span className="art-shade" />
         <span className="home-section-label">{tr('🎮 قسم الألعاب', '🎮 Games')}</span>
         <strong>{tr('العب واربح نقاط', 'Play and earn points')}</strong>
-        <span className="art-card-sub">{tr('لعبة الحية، وألعاب جديدة جاية قريباً', 'Snake, with new games coming soon')}</span>
+        <span className="art-card-sub">{tr('الحية، الزقورة، طيران والمؤقت', 'Snake, Ziggurat, Flying and The Timer')}</span>
         <span className="art-card-pill">{tr('ادخل ←', 'Enter →')}</span>
       </button>
 
@@ -196,6 +198,17 @@ export function HomePage({ me, onNavigate, onDailyLogin }: { me: MeResponse; onN
         <strong>{tr('شوف الجوائز اللي تسلّمت', 'See the prizes we delivered')}</strong>
         <span className="art-card-sub">{tr('صور حقيقية لتسليم الجوائز للفائزين', 'Real photos of prizes handed to winners')}</span>
       </button>
+
+      {/* Ideas for the bot: an accepted one can win a reward. */}
+      <button className="card suggest-card" onClick={() => { haptic('light'); setSuggestOpen(true); }}>
+        <span className="suggest-icon">💡</span>
+        <span>
+          <strong>{tr('اقترح ميزة', 'Suggest a feature')}</strong>
+          <small>{tr('إذا انقبل اقتراحك ممكن تربح جائزة 🎁', 'An accepted idea can win a reward 🎁')}</small>
+        </span>
+        <span className="home-link-arrow">←</span>
+      </button>
+      {suggestOpen && <SuggestionSheet onClose={() => setSuggestOpen(false)} />}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

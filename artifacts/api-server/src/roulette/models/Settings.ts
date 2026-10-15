@@ -61,6 +61,12 @@ export interface ISettings extends Document {
   // Ziggurat: points for every brick that stays on the tower, and the most a round can pay for.
   zigguratPointsPerFloor: number;
   zigguratMaxFloors: number;
+  // Flying (flappy): points per pipe passed, and the most pipes a round pays for.
+  flappyPointsPerPipe: number;
+  flappyMaxPipes: number;
+  // The Timer: points for an exact stop (closer stops get a part of it), and stops per round.
+  timerPointsPerfect: number;
+  timerTries: number;
   // Set once the ziggurat rate moved from 0.02 to 0.01 per brick, so it only happens once.
   zigguratRateV2?: boolean;
   // Set when a round was ended without a winner (too few invites, or ended manually).
@@ -111,6 +117,10 @@ const settingsSchema = new Schema<ISettings>(
     snakeFreeCooldownHours: { type: Number, default: 12, min: 0 },
     zigguratPointsPerFloor: { type: Number, default: 0.01, min: 0 },
     zigguratMaxFloors: { type: Number, default: 100, min: 1 },
+    flappyPointsPerPipe: { type: Number, default: 0.02, min: 0 },
+    flappyMaxPipes: { type: Number, default: 50, min: 1 },
+    timerPointsPerfect: { type: Number, default: 0.1, min: 0 },
+    timerTries: { type: Number, default: 5, min: 1 },
     zigguratRateV2: { type: Boolean, default: false },
     contestNoWinner: {
       type: new Schema({ round: Number, reason: String, totalInvites: Number, endedAt: Date }, { _id: false }),

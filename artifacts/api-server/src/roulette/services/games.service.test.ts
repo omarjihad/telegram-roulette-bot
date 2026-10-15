@@ -29,7 +29,22 @@ vi.mock('../models/Settings', () => ({ getSettings: mocks.settings }));
 vi.mock('../config/env', () => ({ env: mocks.env }));
 vi.mock('../config/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn() } }));
 
-import { adsgramConfirmedSince, claimAdTask, finishSnakeRound, finishZigguratRound, gamesAllowed, recordAdsgramReward, startSnakeRound, startZigguratRound } from './games.service';
+import {
+  adsgramConfirmedSince,
+  claimAdTask,
+  finishFlappyRound,
+  finishSnakeRound,
+  finishTimerRound,
+  finishZigguratRound,
+  gamesAllowed,
+  makeTimerTargets,
+  recordAdsgramReward,
+  startFlappyRound,
+  startSnakeRound,
+  startTimerRound,
+  startZigguratRound,
+  timerTryShare,
+} from './games.service';
 
 const settings = {
   gamesPublic: false,
@@ -42,6 +57,10 @@ const settings = {
   snakeFreeCooldownHours: 12,
   zigguratPointsPerFloor: 0.02,
   zigguratMaxFloors: 100,
+  flappyPointsPerPipe: 0.02,
+  flappyMaxPipes: 50,
+  timerPointsPerfect: 0.1,
+  timerTries: 5,
 };
 const user = { _id: new mongoose.Types.ObjectId(), telegramId: 55 } as never;
 
@@ -166,5 +185,97 @@ describe('ziggurat game', () => {
     expect(mocks.adFindOne).toHaveBeenCalledWith({ telegramId: 7, source: 'adsgram_callback', createdAt: { $gte: since } });
     mocks.adFindOne.mockResolvedValueOnce(null);
     await expect(adsgramConfirmedSince(7, since)).resolves.toMatchObject({ confirmed: false });
+  });
+});
+
+describe('flying game', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.settings.mockResolvedValue({ ...settings, gamesPublic: true });
+    mocks.sessionUpdate.mockResolvedValue({ modifiedCount: 1 });
+    mocks.sessionCreate.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new mongoose.Types.ObjectId(), ...doc }));
+    mocks.userUpdate.mockResolvedValue({ modifiedCount: 1 });
+  });
+
+  it('has its own free round, then one per ad', async () => {
+    const round = await startFlappyRound(user, null, 'free');
+    expect(round).toMatchObject({ pointsPerPipe: 0.02, maxPipes: 50, mode: 'free' });
+    expect(mocks.userUpdate.mock.calls[0][1]).toEqual({ $set: { lastFreeFlappyAt: expect.any(Date) } });
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ game: 'flappy' }));
+    // Only an unfinished Flying round is given up, not another game's.
+    expect(mocks.sessionUpdateMany.mock.calls[0][0]).toMatchObject({ game: 'flappy', status: 'playing' });
+
+    mocks.userUpdate.mockResolvedValueOnce({ modifiedCount: 0 });
+    await expect(startFlappyRound(user, null, 'free')).rejects.toMatchObject({ code: 'GAME_COOLDOWN' });
+  });
+
+  it('pays per pipe, capped at the maximum and at what could fly by in the time played', async () => {
+    mocks.sessionFind.mockResolvedValueOnce(session({ game: 'flappy', maxFood: 50, pointsPerFood: 0.02, durationSec: 1800, startedAt: new Date(Date.now() - 60_000) }));
+    expect(await finishFlappyRound(user, { sessionId: String(new mongoose.Types.ObjectId()), pipes: 12 })).toMatchObject({ reward: 0.24, pipes: 12 });
+
+    // 3 seconds of flight can't pass 40 pipes.
+    mocks.sessionFind.mockResolvedValueOnce(session({ game: 'flappy', maxFood: 50, pointsPerFood: 0.02, durationSec: 1800, startedAt: new Date(Date.now() - 3000) }));
+    expect((await finishFlappyRound(user, { sessionId: String(new mongoose.Types.ObjectId()), pipes: 40 })).pipes).toBeLessThanOrEqual(5);
+
+    mocks.sessionFind.mockResolvedValueOnce(session({ game: 'flappy', maxFood: 50, pointsPerFood: 0.02, durationSec: 1800, startedAt: new Date(Date.now() - 600_000) }));
+    expect((await finishFlappyRound(user, { sessionId: String(new mongoose.Types.ObjectId()), pipes: 999 })).pipes).toBe(50);
+    expect(mocks.sessionFind.mock.calls[0][0]).toMatchObject({ game: 'flappy' });
+  });
+
+  it('a snake round can\'t be settled with another game\'s round', async () => {
+    mocks.sessionFind.mockResolvedValueOnce(null);
+    await expect(finishSnakeRound(user, { sessionId: String(new mongoose.Types.ObjectId()), food: 3, died: false })).rejects.toMatchObject({ code: 'GAME_NOT_FOUND' });
+    expect(mocks.sessionFind.mock.calls[0][0]).toMatchObject({ $or: [{ game: 'snake' }, { game: null }] });
+  });
+});
+
+describe('timer game', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.settings.mockResolvedValue({ ...settings, gamesPublic: true });
+    mocks.sessionUpdate.mockResolvedValue({ modifiedCount: 1 });
+    mocks.sessionCreate.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new mongoose.Types.ObjectId(), ...doc }));
+    mocks.userUpdate.mockResolvedValue({ modifiedCount: 1 });
+  });
+
+  it('targets are whole hundredths between 3.00 and 9.99 seconds', () => {
+    expect(makeTimerTargets(3, () => 0)).toEqual([3000, 3000, 3000]);
+    expect(makeTimerTargets(1, () => 0.9999)).toEqual([9990]);
+  });
+
+  it('exact = the clock showed the target; close stops get part of it; a hidden clock counts double', () => {
+    expect(timerTryShare(5370, 5370, false)).toBe(1);
+    expect(timerTryShare(5379, 5370, false)).toBe(1); // still showed 5.37
+    expect(timerTryShare(5369, 5370, false)).toBe(0.4); // showed 5.36
+    expect(timerTryShare(5420, 5370, false)).toBe(0.4);
+    expect(timerTryShare(5300, 5370, false)).toBe(0.15);
+    expect(timerTryShare(5600, 5370, false)).toBe(0);
+    expect(timerTryShare(5372, 5370, true)).toBe(2);
+    expect(timerTryShare(0, 5370, false)).toBe(0);
+  });
+
+  it('a round: the last two tries hide the clock, and the stops are scored on the server', async () => {
+    const round = await startTimerRound(user, null, 'free');
+    expect(round.targets).toHaveLength(5);
+    expect(round.blind).toEqual([false, false, false, true, true]);
+    expect(mocks.userUpdate.mock.calls[0][1]).toEqual({ $set: { lastFreeTimerAt: expect.any(Date) } });
+
+    mocks.sessionFind.mockResolvedValueOnce(
+      session({ game: 'timer', maxFood: 5, pointsPerFood: 0.1, durationSec: 600, targets: [5000, 6000, 7000, 8000, 9000], blind: [false, false, false, true, true], startedAt: new Date(Date.now() - 120_000) })
+    );
+    // exact, 0.04 off, miss, hidden exact, hidden 0.08 off → 1 + 0.4 + 0 + 2 + 0.3 = 3.7 shares
+    const res = await finishTimerRound(user, { sessionId: String(new mongoose.Types.ObjectId()), stops: [5004, 6040, 7500, 8001, 9080] });
+    expect(res.reward).toBe(0.37);
+    expect(res.tries.map((x) => x.share)).toEqual([1, 0.4, 0, 2, 0.3]);
+    expect(mocks.userUpdate).toHaveBeenLastCalledWith({ _id: expect.anything() }, { $inc: { spinPoints: 0.37 } });
+  });
+
+  it('stops adding up to more time than the round took pay nothing', async () => {
+    mocks.sessionFind.mockResolvedValueOnce(
+      session({ game: 'timer', maxFood: 5, pointsPerFood: 0.1, durationSec: 600, targets: [5000, 6000, 7000, 8000, 9000], blind: [false, false, false, true, true], startedAt: new Date(Date.now() - 4000) })
+    );
+    const res = await finishTimerRound(user, { sessionId: String(new mongoose.Types.ObjectId()), stops: [5000, 6000, 7000, 8000, 9000] });
+    expect(res.reward).toBe(0);
+    expect(res.tooLate).toBe(true);
   });
 });

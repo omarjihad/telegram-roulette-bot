@@ -21,6 +21,18 @@ const MIN_MS_PER_FOOD = 300;
 const MIN_MS_PER_FLOOR = 300;
 /** A ziggurat round has no clock; after this long it no longer pays. */
 const ZIGGURAT_MAX_MINUTES = 30;
+/** Flying: the next pipe is at least this far away, even at full speed. */
+const MIN_MS_PER_PIPE = 700;
+const FLAPPY_MAX_MINUTES = 30;
+/** The Timer: a round (every try) must end within this long to pay. */
+const TIMER_MAX_MINUTES = 10;
+/** The Timer: the last two tries hide the clock and count double. */
+const TIMER_BLIND_TRIES = 2;
+/** Stops the Timer's clock can't be trusted beyond (its clock and ours drift a little). */
+const TIMER_CLOCK_SLACK_MS = 3000;
+
+// Snake rounds: those from before other games existed have no `game`.
+const SNAKE_ONLY = { $or: [{ game: 'snake' }, { game: null }] };
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -37,6 +49,8 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
   const cooldownMs = settings.snakeFreeCooldownHours * HOUR_MS;
   const freeReadyAt = user.lastFreeGameAt ? new Date(user.lastFreeGameAt.getTime() + cooldownMs) : new Date(0);
   const zigguratFreeReadyAt = user.lastFreeZigguratAt ? new Date(user.lastFreeZigguratAt.getTime() + cooldownMs) : new Date(0);
+  const flappyFreeReadyAt = user.lastFreeFlappyAt ? new Date(user.lastFreeFlappyAt.getTime() + cooldownMs) : new Date(0);
+  const timerFreeReadyAt = user.lastFreeTimerAt ? new Date(user.lastFreeTimerAt.getTime() + cooldownMs) : new Date(0);
   const adTaskReward = settings.adTaskReward;
   return {
     allowed: gamesAllowed(settings, adminRole),
@@ -56,6 +70,19 @@ export async function getGamesStatus(user: HydratedDocument<IUser>, adminRole: s
       maxFloors: settings.zigguratMaxFloors,
       freeReady: Date.now() >= zigguratFreeReadyAt.getTime(),
       freeReadyAt: zigguratFreeReadyAt,
+    },
+    flappy: {
+      pointsPerPipe: settings.flappyPointsPerPipe,
+      maxPipes: settings.flappyMaxPipes,
+      freeReady: Date.now() >= flappyFreeReadyAt.getTime(),
+      freeReadyAt: flappyFreeReadyAt,
+    },
+    timer: {
+      pointsPerfect: settings.timerPointsPerfect,
+      tries: settings.timerTries,
+      blindTries: Math.min(TIMER_BLIND_TRIES, settings.timerTries),
+      freeReady: Date.now() >= timerFreeReadyAt.getTime(),
+      freeReadyAt: timerFreeReadyAt,
     },
     adTask: {
       reward: adTaskReward,
@@ -140,7 +167,7 @@ export async function startSnakeRound(user: HydratedDocument<IUser>, adminRole: 
   }
 
   // Only one round at a time: an unfinished previous round is forfeited.
-  await GameSession.updateMany({ user: user._id, status: 'playing', game: { $ne: 'ziggurat' } }, { $set: { status: 'abandoned', finishedAt: now } });
+  await GameSession.updateMany({ user: user._id, status: 'playing', ...SNAKE_ONLY }, { $set: { status: 'abandoned', finishedAt: now } });
 
   const session = await GameSession.create({
     user: user._id,
@@ -170,7 +197,8 @@ export async function finishSnakeRound(
   params: { sessionId: string; food: number; died: boolean }
 ) {
   if (!mongoose.isValidObjectId(params.sessionId)) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
-  const session = await GameSession.findOne({ _id: params.sessionId, user: user._id });
+  // Only a snake round settles here (another game's round has its own limits).
+  const session = await GameSession.findOne({ _id: params.sessionId, user: user._id, ...SNAKE_ONLY });
   if (!session) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
   if (session.status !== 'playing') throw new AppError('Round already finished', 409, 'GAME_FINISHED');
 
@@ -252,6 +280,156 @@ export async function finishZigguratRound(user: HydratedDocument<IUser>, params:
   return { reward, floors, tooLate };
 }
 
+/**
+ * A round of a game with its own free-round clock: the free one (on the shared cooldown) or
+ * one per watched ad. Any unfinished round of the same game is forfeited.
+ */
+async function openRound(
+  user: HydratedDocument<IUser>,
+  mode: 'free' | 'ad',
+  game: 'flappy' | 'timer',
+  freeField: 'lastFreeFlappyAt' | 'lastFreeTimerAt',
+  settings: ISettings
+) {
+  const now = new Date();
+  if (mode === 'free') {
+    const cutoff = new Date(now.getTime() - settings.snakeFreeCooldownHours * HOUR_MS);
+    const claimed = await User.updateOne(
+      { _id: user._id, $or: [{ [freeField]: null }, { [freeField]: { $lte: cutoff } }] },
+      { $set: { [freeField]: now } }
+    );
+    if (claimed.modifiedCount !== 1) throw new AppError(t('الجولة المجانية غير متاحة الآن', 'The free round is not available yet'), 429, 'GAME_COOLDOWN');
+  } else {
+    await consumeAdView(user.telegramId, game === 'flappy' ? 'flappy_round' : 'timer_round');
+  }
+  await GameSession.updateMany({ user: user._id, status: 'playing', game }, { $set: { status: 'abandoned', finishedAt: now } });
+  return now;
+}
+
+async function playingRound(user: HydratedDocument<IUser>, sessionId: string, game: 'flappy' | 'timer') {
+  if (!mongoose.isValidObjectId(sessionId)) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
+  const session = await GameSession.findOne({ _id: sessionId, user: user._id, game });
+  if (!session) throw new AppError('Round not found', 404, 'GAME_NOT_FOUND');
+  if (session.status !== 'playing') throw new AppError('Round already finished', 409, 'GAME_FINISHED');
+  return session;
+}
+
+/** Flying: a free round on the shared cooldown, or one per ad watched. */
+export async function startFlappyRound(user: HydratedDocument<IUser>, adminRole: string | null, mode: 'free' | 'ad') {
+  const settings = await getSettings();
+  assertAllowed(settings, adminRole);
+  const now = await openRound(user, mode, 'flappy', 'lastFreeFlappyAt', settings);
+  const session = await GameSession.create({
+    game: 'flappy',
+    user: user._id,
+    telegramId: user.telegramId,
+    mode,
+    maxFood: settings.flappyMaxPipes,
+    pointsPerFood: settings.flappyPointsPerPipe,
+    durationSec: FLAPPY_MAX_MINUTES * 60,
+    startedAt: now,
+  });
+  return { sessionId: String(session._id), mode, maxPipes: session.maxFood, pointsPerPipe: session.pointsPerFood };
+}
+
+/**
+ * Ends a Flying round: every pipe flown through is worth pointsPerPipe, capped at the round's
+ * maximum and at how many pipes could have come by in the time played.
+ */
+export async function finishFlappyRound(user: HydratedDocument<IUser>, params: { sessionId: string; pipes: number }) {
+  const session = await playingRound(user, params.sessionId, 'flappy');
+  const now = new Date();
+  const elapsedMs = now.getTime() - session.startedAt.getTime();
+  const tooLate = elapsedMs > session.durationSec * 1000 + FINISH_GRACE_MS;
+  let pipes = Math.max(0, Math.floor(Number(params.pipes) || 0));
+  pipes = Math.min(pipes, session.maxFood, Math.floor(elapsedMs / MIN_MS_PER_PIPE));
+  const reward = tooLate ? 0 : round3(pipes * session.pointsPerFood);
+
+  const updated = await GameSession.updateOne(
+    { _id: session._id, status: 'playing' },
+    { $set: { status: tooLate ? 'abandoned' : 'finished', food: pipes, reward, finishedAt: now } }
+  );
+  if (updated.modifiedCount !== 1) throw new AppError('Round already finished', 409, 'GAME_FINISHED');
+  await addPoints(user._id, reward);
+  if (tooLate) logger.warn({ telegramId: user.telegramId, sessionId: session._id }, 'flappy round finished too late');
+  return { reward, pipes, tooLate };
+}
+
+/** The Timer's targets: between 3.00 and 9.99 seconds, in whole hundredths. */
+export function makeTimerTargets(tries: number, rnd = Math.random) {
+  return Array.from({ length: tries }, () => 3000 + 10 * Math.floor(rnd() * 700));
+}
+
+/**
+ * What one stop of the Timer earns, as a share of an exact stop. Exact = the clock showed the
+ * target itself (same hundredth); within 0.05s = 40%; within 0.10s = 15%. A try with the clock
+ * hidden counts double. The page shows the same.
+ */
+export function timerTryShare(stopMs: number, targetMs: number, blind: boolean) {
+  if (!Number.isFinite(stopMs) || stopMs <= 0) return 0;
+  const shownExact = Math.floor(stopMs / 10) * 10 === targetMs;
+  const off = Math.abs(stopMs - targetMs);
+  const share = shownExact ? 1 : off <= 50 ? 0.4 : off <= 100 ? 0.15 : 0;
+  return share * (blind ? 2 : 1);
+}
+
+/** The Timer: a free round on the shared cooldown, or one per ad watched. */
+export async function startTimerRound(user: HydratedDocument<IUser>, adminRole: string | null, mode: 'free' | 'ad') {
+  const settings = await getSettings();
+  assertAllowed(settings, adminRole);
+  const now = await openRound(user, mode, 'timer', 'lastFreeTimerAt', settings);
+  const tries = Math.max(1, Math.min(10, Math.floor(settings.timerTries)));
+  const targets = makeTimerTargets(tries);
+  const blind = targets.map((_, i) => i >= tries - Math.min(TIMER_BLIND_TRIES, tries));
+  const session = await GameSession.create({
+    game: 'timer',
+    user: user._id,
+    telegramId: user.telegramId,
+    mode,
+    maxFood: tries,
+    pointsPerFood: settings.timerPointsPerfect,
+    durationSec: TIMER_MAX_MINUTES * 60,
+    targets,
+    blind,
+    startedAt: now,
+  });
+  return { sessionId: String(session._id), mode, targets, blind, pointsPerfect: session.pointsPerFood };
+}
+
+/**
+ * Ends a Timer round. Each stop is scored against its target. The stops can't add up to more
+ * time than the round really took (the clock on the page runs while ours does).
+ */
+export async function finishTimerRound(user: HydratedDocument<IUser>, params: { sessionId: string; stops: unknown }) {
+  const session = await playingRound(user, params.sessionId, 'timer');
+  const now = new Date();
+  const elapsedMs = now.getTime() - session.startedAt.getTime();
+  const tooLate = elapsedMs > session.durationSec * 1000 + FINISH_GRACE_MS;
+  const targets = session.targets ?? [];
+  const blind = session.blind ?? [];
+  const stops = (Array.isArray(params.stops) ? params.stops : [])
+    .slice(0, targets.length)
+    .map((v) => Math.max(0, Math.min(60000, Math.round(Number(v) || 0))));
+  const total = stops.reduce((a, b) => a + b, 0);
+  const impossible = total > elapsedMs + TIMER_CLOCK_SLACK_MS;
+  const shares = stops.map((stop, i) => timerTryShare(stop, targets[i], Boolean(blind[i])));
+  const reward = tooLate || impossible ? 0 : round3(shares.reduce((a, b) => a + b, 0) * session.pointsPerFood);
+  const scored = shares.filter((x) => x > 0).length;
+
+  const updated = await GameSession.updateOne(
+    { _id: session._id, status: 'playing' },
+    { $set: { status: tooLate || impossible ? 'abandoned' : 'finished', food: scored, stops, reward, finishedAt: now } }
+  );
+  if (updated.modifiedCount !== 1) throw new AppError('Round already finished', 409, 'GAME_FINISHED');
+  await addPoints(user._id, reward);
+  if (tooLate || impossible) logger.warn({ telegramId: user.telegramId, sessionId: session._id, total, elapsedMs }, 'timer round not paid');
+  return {
+    reward,
+    tries: stops.map((stop, i) => ({ stop, target: targets[i], blind: Boolean(blind[i]), share: shares[i] })),
+    tooLate: tooLate || impossible,
+  };
+}
+
 /** One-time move of the ziggurat rate to 0.01 per brick (later admin changes are kept). */
 export async function applyZigguratRateV2() {
   const res = await Settings.updateOne(
@@ -275,6 +453,10 @@ const EDITABLE = [
   'snakeFreeCooldownHours',
   'zigguratPointsPerFloor',
   'zigguratMaxFloors',
+  'flappyPointsPerPipe',
+  'flappyMaxPipes',
+  'timerPointsPerfect',
+  'timerTries',
 ] as const;
 
 export async function getGamesAdminSettings() {
@@ -318,11 +500,13 @@ export async function updateGamesAdminSettings(input: Record<string, unknown>) {
       settings.adsgramInterstitialBlockId = id;
     } else {
       const n = Number(value);
-      const integer = key === 'snakeFreeMaxFood' || key === 'snakeAdMaxFood' || key === 'snakeDurationSec' || key === 'zigguratMaxFloors';
+      const integer =
+        key === 'snakeFreeMaxFood' || key === 'snakeAdMaxFood' || key === 'snakeDurationSec' || key === 'zigguratMaxFloors' || key === 'flappyMaxPipes' || key === 'timerTries';
       if (!Number.isFinite(n) || n < 0 || (integer && (!Number.isInteger(n) || n < 1))) {
         throw new AppError(`قيمة غير صالحة: ${key}`, 422, 'VALIDATION_ERROR');
       }
       if (key === 'snakeDurationSec' && n < 10) throw new AppError('مدة الجولة لازم 10 ثواني على الأقل', 422, 'VALIDATION_ERROR');
+      if (key === 'timerTries' && n > 10) throw new AppError('محاولات المؤقت لازم من 1 لحد 10', 422, 'VALIDATION_ERROR');
       (settings as unknown as Record<string, number>)[key] = n;
     }
   }

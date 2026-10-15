@@ -32,6 +32,9 @@ export interface IUser extends Document {
   lastFreeGameAt?: Date | null;
   // Ziggurat game: when the last free round was started (same cooldown as the snake).
   lastFreeZigguratAt?: Date | null;
+  // Flying and Timer games: when their last free rounds were started (same cooldown).
+  lastFreeFlappyAt?: Date | null;
+  lastFreeTimerAt?: Date | null;
   // Wheel spins bought with an ad: the (Baghdad) day they were counted on and how many.
   adSpinDay?: string | null;
   adSpinCount?: number;
@@ -97,6 +100,8 @@ const userSchema = new Schema<IUser>(
     contestJoinedAt: { type: Date, default: null },
     lastFreeGameAt: { type: Date, default: null },
     lastFreeZigguratAt: { type: Date, default: null },
+    lastFreeFlappyAt: { type: Date, default: null },
+    lastFreeTimerAt: { type: Date, default: null },
     adSpinDay: { type: String, default: null },
     adSpinCount: { type: Number, default: 0 },
     exchangeAdPassAt: { type: Date, default: null },

@@ -89,7 +89,7 @@ export interface InventoryItem {
   prizeName: string;
   icon: string;
   imageUrl: string | null;
-  source: 'wheel' | 'referral' | 'store' | 'daily';
+  source: 'wheel' | 'referral' | 'store' | 'daily' | 'suggestion';
   wonAt: string;
   expiresAt: string | null;
   status: 'active' | 'claim_requested' | 'approved' | 'delivered' | 'rejected' | 'expired';
@@ -244,7 +244,26 @@ export interface GamesResponse {
     freeReadyAt: string;
   };
   ziggurat: { pointsPerFloor: number; maxFloors: number; freeReady: boolean; freeReadyAt: string };
+  flappy: { pointsPerPipe: number; maxPipes: number; freeReady: boolean; freeReadyAt: string };
+  timer: { pointsPerfect: number; tries: number; blindTries: number; freeReady: boolean; freeReadyAt: string };
   adTask: { reward: number; adsPerSpin: number | null };
+}
+
+export interface FlappyRound {
+  ok: true;
+  sessionId: string;
+  mode: 'free' | 'ad';
+  maxPipes: number;
+  pointsPerPipe: number;
+}
+
+export interface TimerRound {
+  ok: true;
+  sessionId: string;
+  mode: 'free' | 'ad';
+  targets: number[];
+  blind: boolean[];
+  pointsPerfect: number;
 }
 
 export interface ZigguratRound {

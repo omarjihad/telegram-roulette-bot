@@ -13,7 +13,8 @@ export interface IUserPrize extends Document {
   telegramId: number;
   prize: Types.ObjectId;
   prizeNameSnapshot: string;
-  source: 'wheel' | 'referral' | 'store' | 'daily';
+  // referral = from a gift link; suggestion = a reward for an accepted feature suggestion.
+  source: 'wheel' | 'referral' | 'store' | 'daily' | 'suggestion';
   wonAt: Date;
   expiresAt: Date | null; // null = no expiry (used for referral bonuses)
   status: UserPrizeStatus;
@@ -34,7 +35,7 @@ const userPrizeSchema = new Schema<IUserPrize>(
     telegramId: { type: Number, required: true, index: true },
     prize: { type: Schema.Types.ObjectId, ref: 'Prize', required: true },
     prizeNameSnapshot: { type: String, required: true },
-    source: { type: String, enum: ['wheel', 'referral', 'store', 'daily'], default: 'wheel' },
+    source: { type: String, enum: ['wheel', 'referral', 'store', 'daily', 'suggestion'], default: 'wheel' },
     wonAt: { type: Date, required: true, default: () => new Date() },
     expiresAt: { type: Date, default: null, index: true },
     status: {

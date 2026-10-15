@@ -6,6 +6,7 @@ import { showRewardedAd } from '../services/adsgram';
 import { adErrorMessage } from '../components/AdTaskCard';
 
 interface AdminPrize {
+  _id?: string;
   key: string;
   name: string;
   icon: string;
@@ -35,7 +36,7 @@ interface Withdrawal {
   status?: string;
 }
 
-type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games' | 'exchange' | 'proofs';
+type AdminTab = 'prizes' | 'withdrawals' | 'forcedChats' | 'tasks' | 'bans' | 'developers' | 'broadcast' | 'stats' | 'settings' | 'demo' | 'people' | 'delivery' | 'gifts' | 'race' | 'games' | 'exchange' | 'proofs' | 'suggestions';
 
 export function AdminPage({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<AdminTab>('prizes');
@@ -51,7 +52,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', background: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-          {(['prizes', 'withdrawals', 'race', 'games', 'exchange', 'proofs', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
+          {(['prizes', 'withdrawals', 'suggestions', 'race', 'games', 'exchange', 'proofs', 'forcedChats', 'tasks', 'bans', 'developers', 'broadcast', 'stats', 'settings', 'demo', 'people', 'delivery', 'gifts'] as AdminTab[]).map((t) => (
             <button
               key={t}
               className={`pill`}
@@ -82,6 +83,8 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
                 ? 'حساب التسليم'
                 : t === 'gifts'
                 ? 'روابط الهدايا'
+                : t === 'suggestions'
+                ? '💡 الاقتراحات'
                 : t === 'race'
                 ? '🏆 السباق'
                 : t === 'games'
@@ -108,6 +111,7 @@ export function AdminPage({ onClose }: { onClose: () => void }) {
         {tab === 'people' && <PeopleLookupTab />}
         {tab === 'delivery' && <DeliveryAccountTab />}
         {tab === 'gifts' && <GiftLinksTab />}
+        {tab === 'suggestions' && <SuggestionsAdminTab />}
         {tab === 'race' && <RaceAdminTab />}
         {tab === 'games' && <GamesAdminTab />}
         {tab === 'exchange' && <ExchangeAdminTab />}
@@ -525,6 +529,10 @@ interface GamesAdminSettings {
   snakeFreeCooldownHours: number;
   zigguratPointsPerFloor: number;
   zigguratMaxFloors: number;
+  flappyPointsPerPipe: number;
+  flappyMaxPipes: number;
+  timerPointsPerfect: number;
+  timerTries: number;
   rewardUrlConfigured: boolean;
   last24h: { ads: number; adsConfirmed?: number; rounds: number };
   lastConfirmedAt?: string | null;
@@ -536,9 +544,13 @@ const GAME_FIELDS: Array<{ key: keyof GamesAdminSettings; label: string; hint: s
   { key: 'snakeFreeMaxFood', label: '🎁 عدد التفاح بالجولة المجانية', hint: 'مثال: 7', step: '1' },
   { key: 'snakeAdMaxFood', label: '📺 عدد التفاح بجولة الإعلان', hint: 'مثال: 4 أو 5', step: '1' },
   { key: 'snakeDurationSec', label: '⏱️ مدة الجولة (ثانية)', hint: 'مثال: 30', step: '1' },
-  { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة) — الحية والزقورة', hint: 'مثال: 12', step: '0.5' },
+  { key: 'snakeFreeCooldownHours', label: '⏳ الجولة المجانية كل (ساعة) — لكل الألعاب', hint: 'مثال: 12 (كل لعبة إلها جولتها المجانية)', step: '0.5' },
   { key: 'zigguratPointsPerFloor', label: '🏛️ نقاط كل طابوقة بالزقورة', hint: 'مثال: 0.01', step: '0.01' },
   { key: 'zigguratMaxFloors', label: '🏛️ أعلى عدد طوابق ينحسب بالجولة', hint: 'مثال: 100', step: '1' },
+  { key: 'flappyPointsPerPipe', label: '🐦 نقاط كل عمود بلعبة طيران', hint: 'مثال: 0.02', step: '0.01' },
+  { key: 'flappyMaxPipes', label: '🐦 أعلى عدد أعمدة ينحسب بالجولة', hint: 'مثال: 50', step: '1' },
+  { key: 'timerPointsPerfect', label: '⏱️ نقاط التوقيف بالضبط بالمؤقت', hint: 'القريب ياخذ جزء منها، والمخفية دبل. مثال: 0.1', step: '0.01' },
+  { key: 'timerTries', label: '⏱️ عدد المحاولات بجولة المؤقت', hint: 'من 1 لحد 10، آخر محاولتين الساعة تختفي. مثال: 5', step: '1' },
 ];
 
 interface ExchangeAdminSettings {
@@ -863,7 +875,7 @@ function GamesAdminTab() {
         <h3 className="card-title">{settings.gamesPublic ? '🟢 الألعاب متاحة للجميع' : '🧪 وضع الاختبار'}</h3>
         <p className="card-sub">
           {settings.gamesPublic
-            ? 'لعبة الحية ومهمة الإعلان شغالة لكل المستخدمين.'
+            ? 'الألعاب (الحية، الزقورة، طيران، المؤقت) ومهمة الإعلان شغالة لكل المستخدمين.'
             : 'المستخدمين يشوفون "قريباً"، والألعاب تشتغل للمطورين بس حتى تختبرها.'}
         </p>
         <button
@@ -950,6 +962,134 @@ function GamesAdminTab() {
           ℹ️ Adsgram ما يحسب مشاهدات المنصات التجريبية (Test). البلوكات لازم تكون من منصة عادية حالتها Active بعد المراجعة.
         </p>
       </div>
+    </div>
+  );
+}
+
+interface AdminSuggestion {
+  seq: number;
+  text: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  reward: { type: 'none' | 'points' | 'daily_spin' | 'prize'; points?: number | null; prizeName?: string | null } | null;
+  note: string | null;
+  createdAt: string;
+  telegramId: number;
+  name: string;
+  username: string | null;
+  decidedByName: string | null;
+}
+
+const suggestionReward = (r: AdminSuggestion['reward']) =>
+  !r || r.type === 'none' ? 'بدون جائزة' : r.type === 'points' ? `${r.points} نقطة 💎` : r.type === 'daily_spin' ? 'فرة يومية 🎡' : `جائزة: ${r.prizeName}`;
+
+/** One waiting suggestion: pick the reward (or none) and accept, or reject. */
+function SuggestionDecision({ s, prizes, onDone }: { s: AdminSuggestion; prizes: AdminPrize[]; onDone: () => void }) {
+  const [type, setType] = useState<'none' | 'points' | 'daily_spin' | 'prize'>('none');
+  const [points, setPoints] = useState('1');
+  const [prizeId, setPrizeId] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const active = prizes.filter((p) => p.isActive && p._id);
+
+  async function decide(accept: boolean) {
+    if (!accept && !window.confirm(`رفض الاقتراح #${s.seq}؟`)) return;
+    const reward = type === 'points' ? { type, points: Number(points) } : type === 'prize' ? { type, prizeId: prizeId || active[0]?._id } : { type };
+    setBusy(true);
+    try {
+      await api.post(`/admin/suggestions/${s.seq}/decide`, { accept, reward, note: note.trim() || undefined });
+      onDone();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'تعذر الحفظ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <select className="input" value={type} onChange={(e) => setType(e.target.value as typeof type)} style={{ width: '100%' }}>
+        <option value="none">بدون جائزة</option>
+        <option value="points">💎 نقاط</option>
+        <option value="daily_spin">🎡 فرة يومية إضافية</option>
+        <option value="prize">🎁 جائزة من المخزون</option>
+      </select>
+      {type === 'points' && (
+        <input className="input" type="number" min="0.01" step="0.1" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="عدد النقاط" style={{ width: '100%', marginTop: 8 }} />
+      )}
+      {type === 'prize' && (
+        <select className="input" value={prizeId || active[0]?._id || ''} onChange={(e) => setPrizeId(e.target.value)} style={{ width: '100%', marginTop: 8 }}>
+          {active.map((p) => <option key={p._id} value={p._id}>{p.icon} {p.name}{p.isUnlimited ? '' : ` (${p.stock})`}</option>)}
+        </select>
+      )}
+      {type === 'prize' && <p className="card-sub" style={{ margin: '6px 0 0' }}>تنضاف لحقيبته، ويسحبها بعد مهام الاستلام خلال 24 ساعة (مثل جوائز روابط الهدايا).</p>}
+      <input className="input" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="رسالة لصاحب الاقتراح (اختياري)" style={{ width: '100%', marginTop: 8 }} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={() => void decide(true)}>✅ قبول</button>
+        <button className="btn btn-secondary" disabled={busy} onClick={() => void decide(false)}>❌ رفض</button>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionsAdminTab() {
+  const [filter, setFilter] = useState<'pending' | 'all'>('pending');
+  const [items, setItems] = useState<AdminSuggestion[] | null>(null);
+  const [prizes, setPrizes] = useState<AdminPrize[]>([]);
+
+  async function load(f = filter) {
+    const [res, prizeRes] = await Promise.all([
+      api.get<{ ok: true; items: AdminSuggestion[] }>(`/admin/suggestions${f === 'pending' ? '?status=pending' : ''}`),
+      prizes.length ? Promise.resolve(null) : api.get<{ ok: true; prizes: AdminPrize[] }>('/admin/prizes'),
+    ]);
+    setItems(res.items);
+    if (prizeRes) setPrizes(prizeRes.prizes);
+  }
+  useEffect(() => {
+    load().catch(() => setItems([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!items) return <LoadingScreen />;
+  return (
+    <div>
+      <div className="card">
+        <h3 className="card-title">💡 اقتراحات المستخدمين</h3>
+        <p className="card-sub">
+          كل اقتراح جديد يوصلكم بالبوت ويا أزرار القبول والرفض. اللي يقبله يختار الجائزة: بدون، نقاط، فرة يومية، أو جائزة من المخزون. صاحب الاقتراح توصله رسالة بالحالتين.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['pending', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              className={filter === f ? 'btn btn-primary' : 'btn btn-secondary'}
+              onClick={() => { setFilter(f); void load(f).catch(() => undefined); }}
+            >
+              {f === 'pending' ? '⏳ تنتظر الرد' : '📋 الكل'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {items.length === 0 && <div className="card"><p className="card-sub" style={{ margin: 0 }}>ماكو اقتراحات {filter === 'pending' ? 'تنتظر الرد' : 'بعد'}.</p></div>}
+      {items.map((s) => (
+        <div className="card" key={s.seq}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+            <strong>#{s.seq} · {s.name}{s.username ? ` (@${s.username})` : ''}</strong>
+            <span className={`status-badge ${s.status === 'pending' ? 'status-pending' : s.status === 'accepted' ? 'status-approved' : 'status-rejected'}`}>
+              {s.status === 'pending' ? 'ينتظر' : s.status === 'accepted' ? 'مقبول' : 'مرفوض'}
+            </span>
+          </div>
+          <div className="card-sub" style={{ margin: '4px 0 0', direction: 'ltr', textAlign: 'right' }}>{s.telegramId} · {new Date(s.createdAt).toLocaleString('ar-IQ')}</div>
+          <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', lineHeight: 1.7 }}>{s.text}</p>
+          {s.status === 'pending' ? (
+            <SuggestionDecision s={s} prizes={prizes} onDone={() => void load().catch(() => undefined)} />
+          ) : (
+            <p className="card-sub" style={{ margin: '8px 0 0' }}>
+              {s.status === 'accepted' ? `✅ قبله ${s.decidedByName ?? ''} · ${suggestionReward(s.reward)}` : `❌ رفضه ${s.decidedByName ?? ''}`}
+              {s.note ? ` · 📝 ${s.note}` : ''}
+            </p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

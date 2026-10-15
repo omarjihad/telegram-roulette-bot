@@ -8,7 +8,19 @@ import { listMyInventory, claimPrize, shareCard, postClaimAdStep, postClaimShare
 import { getMyReferrals, postClaimReferralMilestone } from '../controllers/referral.controller';
 import { listMyNotifications, markRead } from '../controllers/notification.controller';
 import { getContest, postJoinContest } from '../controllers/contest.controller';
-import { getGames, postAdTaskClaim, postSnakeFinish, postSnakeStart, postZigguratFinish, postZigguratStart } from '../controllers/games.controller';
+import {
+  getGames,
+  postAdTaskClaim,
+  postFlappyFinish,
+  postFlappyStart,
+  postSnakeFinish,
+  postSnakeStart,
+  postTimerFinish,
+  postTimerStart,
+  postZigguratFinish,
+  postZigguratStart,
+} from '../controllers/games.controller';
+import { getMySuggestions, postSuggestion } from '../controllers/suggestion.controller';
 import { getDailyLogin, postDailyLogin } from '../controllers/dailyLogin.controller';
 import { getMyTasks, postClaimTask } from '../controllers/task.controller';
 import {
@@ -92,6 +104,14 @@ router.post('/games/snake/start', postSnakeStart);
 router.post('/games/snake/finish', postSnakeFinish);
 router.post('/games/ziggurat/start', postZigguratStart);
 router.post('/games/ziggurat/finish', postZigguratFinish);
+router.post('/games/flappy/start', postFlappyStart);
+router.post('/games/flappy/finish', postFlappyFinish);
+router.post('/games/timer/start', postTimerStart);
+router.post('/games/timer/finish', postTimerFinish);
+
+// Feature suggestions
+router.get('/suggestions', getMySuggestions);
+router.post('/suggestions', purchaseLimiter, postSuggestion);
 // MF Battle (the online game's lobby, hosted on Cloudflare): developers, or everyone once opened.
 router.get('/battle', getBattle);
 router.post('/battle/skins/:id/buy', purchaseLimiter, postBattleBuySkin);

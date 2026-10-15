@@ -328,6 +328,8 @@ export function InventoryPage() {
                   <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                     {item.source === 'referral'
                       ? tr('🎁 هدية من رابط', '🎁 Gift link')
+                      : item.source === 'suggestion'
+                      ? tr('💡 جائزة اقتراح', '💡 Suggestion reward')
                       : item.source === 'store'
                       ? tr('🏪 من المتجر', '🏪 From the store')
                       : tr('🎰 من الفرة المجانية', '🎰 From the free spin')}

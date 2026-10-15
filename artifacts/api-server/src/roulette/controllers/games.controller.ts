@@ -11,6 +11,10 @@ import {
   startSnakeRound,
   startZigguratRound,
   finishZigguratRound,
+  startFlappyRound,
+  finishFlappyRound,
+  startTimerRound,
+  finishTimerRound,
   updateGamesAdminSettings,
 } from '../services/games.service';
 
@@ -42,6 +46,28 @@ export const postZigguratStart = asyncHandler(async (req: Request, res: Response
 export const postZigguratFinish = asyncHandler(async (req: Request, res: Response) => {
   const { sessionId, floors } = req.body as { sessionId?: string; floors?: number };
   res.json({ ok: true, ...(await finishZigguratRound(req.dbUser!, { sessionId: String(sessionId ?? ''), floors: Number(floors) })) });
+});
+
+export const postFlappyStart = asyncHandler(async (req: Request, res: Response) => {
+  const mode = (req.body as { mode?: string }).mode;
+  if (mode !== 'free' && mode !== 'ad') throw new AppError('mode must be free or ad', 422, 'VALIDATION_ERROR');
+  res.json({ ok: true, ...(await startFlappyRound(req.dbUser!, req.adminRole ?? null, mode)) });
+});
+
+export const postFlappyFinish = asyncHandler(async (req: Request, res: Response) => {
+  const { sessionId, pipes } = req.body as { sessionId?: string; pipes?: number };
+  res.json({ ok: true, ...(await finishFlappyRound(req.dbUser!, { sessionId: String(sessionId ?? ''), pipes: Number(pipes) })) });
+});
+
+export const postTimerStart = asyncHandler(async (req: Request, res: Response) => {
+  const mode = (req.body as { mode?: string }).mode;
+  if (mode !== 'free' && mode !== 'ad') throw new AppError('mode must be free or ad', 422, 'VALIDATION_ERROR');
+  res.json({ ok: true, ...(await startTimerRound(req.dbUser!, req.adminRole ?? null, mode)) });
+});
+
+export const postTimerFinish = asyncHandler(async (req: Request, res: Response) => {
+  const { sessionId, stops } = req.body as { sessionId?: string; stops?: unknown };
+  res.json({ ok: true, ...(await finishTimerRound(req.dbUser!, { sessionId: String(sessionId ?? ''), stops })) });
 });
 
 /** Adsgram Reward URL, e.g. https://<domain>/api/adsgram/reward?userid=[userId]&key=<ADSGRAM_REWARD_KEY> */

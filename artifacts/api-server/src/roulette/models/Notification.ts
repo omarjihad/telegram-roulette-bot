@@ -9,6 +9,7 @@ export type NotificationType =
   | 'wheel_ready'
   | 'referral_progress'
   | 'referral_reward'
+  | 'suggestion_decided'
   | 'system_announcement';
 
 export interface INotification extends Document {
@@ -36,6 +37,7 @@ const notificationSchema = new Schema<INotification>(
         'wheel_ready',
         'referral_progress',
         'referral_reward',
+        'suggestion_decided',
         'system_announcement',
       ],
       required: true,

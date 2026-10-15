@@ -11,6 +11,7 @@ import { registerExchangeActions } from './exchangeActions';
 import { attachExchangeBot } from '../services/exchange.service';
 import { registerMediationActions } from './mediationActions';
 import { registerGiveawayActions } from './giveawayActions';
+import { registerSuggestionActions } from './suggestionActions';
 import { recordSharedCard } from '../services/claimTask.service';
 import { attachMediationBot } from '../services/mediation.service';
 
@@ -37,6 +38,7 @@ export function createBot(enablePolling = false): TelegramBot {
   registerExchangeActions(bot);
   registerMediationActions(bot);
   registerGiveawayActions(bot);
+  registerSuggestionActions(bot);
   // A shared prize card reached a chat (needs inline feedback on in @BotFather).
   bot.on('chosen_inline_result', (result) => {
     logger.info({ resultId: result.result_id, from: result.from.id, hasInlineId: Boolean(result.inline_message_id) }, 'chosen_inline_result');

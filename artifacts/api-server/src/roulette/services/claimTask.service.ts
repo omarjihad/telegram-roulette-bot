@@ -18,10 +18,10 @@ export const NO_DEADLINE = new Date('2100-01-01T00:00:00Z');
 
 /**
  * Prizes that go through the claim steps (ad, share, invites) before they can be withdrawn:
- * wheel, daily-login, and gift-link prizes (source 'referral'). Store purchases don't.
+ * wheel, daily-login, gift-link (source 'referral') and suggestion prizes. Store purchases don't.
  */
 export function needsClaimTask(source: IUserPrize['source']) {
-  return source === 'wheel' || source === 'daily' || source === 'referral';
+  return source === 'wheel' || source === 'daily' || source === 'referral' || source === 'suggestion';
 }
 
 type TaskLike = Pick<IClaimTask, 'steps' | 'adWatchedAt' | 'shareRequired' | 'sharedInlineIds' | 'shareConfirmedIds' | 'creditedCount' | 'requiredCount'> &
